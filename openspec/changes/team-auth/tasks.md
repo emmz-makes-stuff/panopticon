@@ -9,10 +9,10 @@
 
 ## 2. Email and magic-link sign-in
 
-- [ ] 2.1 Add `IEmailSender` with `ResendEmailSender` (`Resend` SDK pinned in `Directory.Packages.props`), the Development-only `LoggingEmailSender`, and a test `CapturingEmailSender`, with start-up validation of `Resend:ApiKey`, `Email:From` and `PublicUrl` outside Development (D9); verify the "Missing key in production" and "Local development" scenarios as tests
-- [ ] 2.2 Implement `POST /api/auth/sign-in` (always 202; link stored hashed; an email with a `/sign-in/confirm#<secret>` link only for active members; send failures logged without the link) and the D7 per-email and per-IP limits; verify "Member asks for a link", "Stranger asks for a link", "Delivery fails" and "Repeated requests" as integration tests
-- [ ] 2.3 Implement `POST /api/auth/confirm` (single use, 15-minute expiry, active member only) and the `Session` scheme (D4: hashed session cookie, HttpOnly, SameSite=Lax, Secure outside Development, a 7-day sliding expiry written at most once a minute); verify "Link used twice", "Expired link", "Link for a removed member", "Scanner opens the link" (a GET spends nothing), "Active use" and "Idle for a week" with `ManualClock`
-- [ ] 2.4 Add `GET /api/session` and `POST /api/auth/sign-out`, plus the D6 `X-Panopticon-Request` endpoint filter for every state-changing session endpoint; verify "Sign out" (an old cookie is refused) and "Forged request" (a missing header gets refused) as tests
+- [x] 2.1 Add `IEmailSender` with `ResendEmailSender` (`Resend` SDK pinned in `Directory.Packages.props`), the Development-only `LoggingEmailSender`, and a test `CapturingEmailSender`, with start-up validation of `Resend:ApiKey`, `Email:From` and `PublicUrl` outside Development (D9); verify the "Missing key in production" and "Local development" scenarios as tests
+- [x] 2.2 Implement `POST /api/auth/sign-in` (always 202; link stored hashed; an email with a `/sign-in/confirm#<secret>` link only for active members; send failures logged without the link) and the D7 per-email and per-IP limits; verify "Member asks for a link", "Stranger asks for a link", "Delivery fails" and "Repeated requests" as integration tests
+- [x] 2.3 Implement `POST /api/auth/confirm` (single use, 15-minute expiry, active member only) and the `Session` scheme (D4: hashed session cookie, HttpOnly, SameSite=Lax, Secure outside Development, a 7-day sliding expiry written at most once a minute); verify "Link used twice", "Expired link", "Link for a removed member", "Scanner opens the link" (a GET spends nothing), "Active use" and "Idle for a week" with `ManualClock`
+- [x] 2.4 Add `GET /api/session` and `POST /api/auth/sign-out`, plus the D6 `X-Panopticon-Request` endpoint filter for every state-changing session endpoint; verify "Sign out" (an old cookie is refused) and "Forged request" (a missing header gets refused) as tests
 
 ## 3. Dashboard requires sign-in
 

@@ -88,9 +88,12 @@ docker run --rm --network panopticon_default --env-file local/container.env -p 1
 
 Then open <http://localhost:7481>. Publishing on `127.0.0.1` keeps the dashboard to this machine, which matters
 while it has no sign-in and the token is public. `compose.yaml` binds its ports the same way.
-`local/container.env` holds the compose values, with the service names as hosts:
+`local/container.env` holds the compose values, with the service names as hosts. It runs the container as Development (a
+local run: sign-in links are logged, and the bootstrap token works):
 
 ```sh
+ASPNETCORE_ENVIRONMENT=Development
+Urls=http://+:8080
 ConnectionStrings__Panopticon=Host=postgres;Port=5432;Database=panopticon;Username=panopticon;Password=panopticon
 Panopticon__PublicUrl=http://localhost:7481
 Panopticon__InitialMembers=dev@localhost.test
