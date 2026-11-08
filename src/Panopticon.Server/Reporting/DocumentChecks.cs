@@ -85,16 +85,7 @@ internal static partial class DocumentChecks
 
     private static void CheckPath(string path)
     {
-        var problem = path switch
-        {
-            "" => "is empty",
-            { Length: > DocumentLimits.MaxPathLength } => $"is longer than {DocumentLimits.MaxPathLength} characters",
-            _ when path.Contains('\\', StringComparison.Ordinal) => "contains '\\'",
-            _ when path.StartsWith('/') || Path.IsPathRooted(path) || path.Contains(':', StringComparison.Ordinal) => "is rooted",
-            _ => SegmentProblem(path),
-        };
-
-        if (problem is not null)
+        if (DocumentLimits.PathProblem(path) is { } problem)
         {
             throw new McpException($"Document path '{path}' {problem}; it must be a plain relative path inside the change's folder.");
         }
@@ -105,29 +96,6 @@ internal static partial class DocumentChecks
         }
     }
 
-    private static string? SegmentProblem(string path)
-    {
-        foreach (var segment in path.Split('/'))
-        {
-            switch (segment)
-            {
-                case "":
-                    return "has an empty segment";
-                case "." or "..":
-                    return $"has a '{segment}' segment";
-                default:
-                    if (segment.Any(char.IsControl))
-                    {
-                        return "contains a control character";
-                    }
-
-                    break;
-            }
-        }
-
-        return null;
-    }
-
-    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}-(?<change>.+)$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[0-9]{4}-[0-9]{2}-[0-9]{2}-(?<change>.+)$", RegexOptions.CultureInvariant)]
     private static partial Regex ArchiveFolder();
 }

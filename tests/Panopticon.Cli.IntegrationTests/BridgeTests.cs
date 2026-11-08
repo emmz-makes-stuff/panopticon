@@ -295,16 +295,22 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
     [Fact]
     public async Task Server_tool_error_comes_back_as_a_tool_error()
     {
-        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        // The bridge now applies the server's own document checks before sending (change-documents-and-history), so a
+        // real server no longer refuses anything the bridge sends; a fake one stands in for a server that does.
         using var repo = TempGitRepo.Create();
-        // A tasks.md over the server's size limit makes the server's own tool fail.
-        repo.WriteTasks("walking-skeleton", "## 1. Big\n" + new string('x', 2 * 1024 * 1024));
-        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, token: await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root),
+            () => new HttpClient(new FakeMcpServer(structuredContent: "{}", toolError: "Document 'x.md' appears more than once.")),
+            "claude-code",
+            Ct);
 
         var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
 
         Assert.True(result.IsError);
-        Assert.StartsWith("The Panopticon server refused the report:", BridgeHarness.Text(result), StringComparison.Ordinal);
+        var text = BridgeHarness.Text(result);
+        Assert.StartsWith("The Panopticon server refused the report:", text, StringComparison.Ordinal);
+        Assert.Contains("appears more than once", text, StringComparison.Ordinal);
     }
 
     // --- Forwarding: a malformed server result is a readable, logged tool error ---
@@ -332,7 +338,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
     /// Just enough of a Streamable HTTP MCP server, answering in plain JSON: <c>initialize</c>, notifications, and a
     /// <c>tools/call</c> whose structured content is the given JSON.
     /// </summary>
-    private sealed class FakeMcpServer(string structuredContent) : HttpMessageHandler
+    private sealed class FakeMcpServer(string structuredContent, string? toolError = null) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -354,6 +360,9 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
                 "initialize" => $$$"""
                     "result":{"protocolVersion":{{{message.GetProperty("params").GetProperty("protocolVersion").GetRawText()}}},
                      "capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1.0.0"}}
+                    """,
+                "tools/call" when toolError is not null => $$"""
+                    "result":{"content":[{"type":"text","text":{{JsonSerializer.Serialize(toolError)}}}],"isError":true}
                     """,
                 "tools/call" => $$"""
                     "result":{"content":[{"type":"text","text":"ok"}],"structuredContent":{{structuredContent}}}

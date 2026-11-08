@@ -20,10 +20,10 @@
 
 ## 4. Bridge: the whole folder and archives
 
-- [ ] 4.1 Read the whole change folder in `ChangeDocuments` (D2: `.md`, `.yaml` and `.yml`, recursive, `/` paths in ordinal order, links skipped, UTF-8, the size limits) and send it from `ProgressReporter`. Verify the "Whole folder forwarded", "Other files skipped", "Link out of the folder" (Unix), "One file too large" and "Folder too large" scenarios as `Panopticon.Cli.Tests`, and that "Change exists", "Change missing" and "Path traversal" still pass.
-- [ ] 4.2 Find an archived folder when the change's folder is missing (D3: `archive/<YYYY-MM-DD>-<change>`, latest wins) and report it with `archive` set. Verify "Report after archive" and "Archived twice under one name" as tests, and an end-to-end `BridgeTests` case where the server then lists the change in history.
-- [ ] 4.3 Add the `ArchiveWatcher` hosted service (D4: a registry of reported changes with their client name, a `FileSystemWatcher` with a 1 s debounce and rescan on error, failures logged to stderr). Verify "Archive while the bridge runs", "Unreported change archived" and "Server down at archive time" as `BridgeTests` using a temp git repo, and that `make aot` publishes with no new warnings.
-- [ ] 4.4 Document in `docs/cli.md` what the bridge sends (folder rules and limits) and how archives are detected (both ways, and the watcher only covering changes reported in this session). Verify the doc against the tests' behaviour by rereading the scenarios.
+- [x] 4.1 Read the whole change folder in `ChangeDocuments` (D2: `.md`, `.yaml` and `.yml`, recursive, `/` paths in ordinal order, links skipped, UTF-8, the size limits) and send it from `ProgressReporter`. Verify the "Whole folder forwarded", "Other files skipped", "Link out of the folder" (Unix), "One file too large" and "Folder too large" scenarios as `Panopticon.Cli.Tests`, and that "Change exists", "Change missing" and "Path traversal" still pass.
+- [x] 4.2 Find an archived folder when the change's folder is missing (D3: `archive/<YYYY-MM-DD>-<change>`, latest wins) and report it with `archive` set. Verify "Report after archive" and "Archived twice under one name" as tests, and an end-to-end `BridgeTests` case where the server then lists the change in history.
+- [x] 4.3 Add the `ArchiveWatcher` hosted service (D4: a registry of reported changes with their client name, a `FileSystemWatcher` with a 1 s debounce and rescan on error, failures logged to stderr). Verify "Archive while the bridge runs", "Unreported change archived" and "Server down at archive time" as `BridgeTests` using a temp git repo, and that `make aot` publishes with no new warnings.
+- [x] 4.4 Document in `docs/cli.md` what the bridge sends (folder rules and limits) and how archives are detected (both ways, and the watcher only covering changes reported in this session). Verify the doc against the tests' behaviour by rereading the scenarios.
 
 ## 5. Web: the change page, history and cards
 

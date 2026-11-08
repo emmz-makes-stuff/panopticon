@@ -23,6 +23,55 @@ public static class DocumentLimits
     /// <summary>The extensions synced: Markdown and YAML, compared without regard to case.</summary>
     public static IReadOnlyList<string> Extensions { get; } = [".md", ".yaml", ".yml"];
 
+    /// <summary>
+    /// Why <paramref name="path"/> isn't a plain relative path inside a change's folder ('/' separators, no rooted or
+    /// drive paths, no empty, '.' or '..' segments, no '\' or control characters, at most
+    /// <see cref="MaxPathLength"/> characters), or null when it is. The bridge and the server apply the same rules.
+    /// </summary>
+    public static string? PathProblem(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        if (path.Length == 0)
+        {
+            return "is empty";
+        }
+
+        if (path.Length > MaxPathLength)
+        {
+            return $"is longer than {MaxPathLength} characters";
+        }
+
+        if (path.Contains('\\', StringComparison.Ordinal))
+        {
+            return "contains '\\'";
+        }
+
+        if (path[0] == '/' || Path.IsPathRooted(path) || (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':'))
+        {
+            return "is rooted";
+        }
+
+        foreach (var segment in path.Split('/'))
+        {
+            if (segment.Length == 0)
+            {
+                return "has an empty segment";
+            }
+
+            if (segment is "." or "..")
+            {
+                return $"has a '{segment}' segment";
+            }
+
+            if (segment.Any(char.IsControl))
+            {
+                return "contains a control character";
+            }
+        }
+
+        return null;
+    }
+
     public static bool HasSyncedExtension(string path) =>
         Extensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 

@@ -11,7 +11,7 @@ namespace Panopticon.Cli.Bridge;
 internal sealed class BridgeTools
 {
     [McpServerTool(Name = ContractsAssembly.ReportProgressToolName, Destructive = false, Idempotent = false, OpenWorld = true)]
-    [Description("Report progress on an OpenSpec change in this repo to the Panopticon dashboard. The bridge reads the change's tasks.md and the repo identity itself. Returns the computed overall and current-section progress.")]
+    [Description("Report progress on an OpenSpec change in this repo to the Panopticon dashboard. The bridge reads the change's folder (its Markdown and YAML files, tasks.md included) and the repo identity itself, and notices when the change has been archived. Returns the computed overall and current-section progress.")]
     public static async Task<CallToolResult> ReportProgressAsync(
         McpServer server,
         ProgressReporter reporter,

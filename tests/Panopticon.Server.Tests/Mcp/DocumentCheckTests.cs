@@ -83,6 +83,7 @@ public class DocumentCheckTests(PostgresFixture postgres, S3Fixture s3)
             new("specs/cli-bridge/spec.md", new string('a', DocumentLimits.MaxDocumentBytes)),
             new(".openspec.yaml", "schema: spec-driven\n"),
             new("devlog/20261108-1515-section-1-done.MD", "# Done\n"),
+            new("notes/a:b.md", "A colon is a legal file name character on Unix.\n"),
         ];
 
         var result = await client.CallToolAsync("report_progress", (_report with { Documents = documents }).ToToolArguments(), cancellationToken: ct);

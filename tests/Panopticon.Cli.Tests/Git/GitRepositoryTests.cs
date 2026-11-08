@@ -19,7 +19,7 @@ public class GitRepositoryTests
 
         // The root may be reported through a resolved symlink (macOS /var → /private/var), so check by content.
         Assert.True(File.Exists(Path.Combine(root, "openspec", "changes", "walking-skeleton", "tasks.md")));
-        Assert.Equal("## 1. Setup\n- [ ] 1.1 Do it\n", await ChangeDocuments.ReadTasksAsync(root, "walking-skeleton", Ct));
+        Assert.Equal("## 1. Setup\n- [ ] 1.1 Do it\n", (await ChangeDocuments.ReadAsync(root, "walking-skeleton", Ct)).Tasks);
     }
 
     [Fact]

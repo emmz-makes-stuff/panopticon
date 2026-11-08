@@ -8,10 +8,49 @@ The agent only names the change. The bridge supplies the rest from the local wor
 
 - **The repo identity**, from the `origin` remote. Any host works (GitHub, GitLab subgroups, Azure DevOps over
   HTTPS or SSH). Credentials in the URL are dropped and never sent or logged.
-- **The change's documents**: the current `openspec/changes/<change>/tasks.md` from the repo root, which is
-  the git top-level of the bridge's working directory.
+- **The change's documents**: every Markdown and YAML file in `openspec/changes/<change>/` under the repo
+  root, which is the git top-level of the bridge's working directory. See [What the bridge sends](#what-the-bridge-sends).
 - **The agent**: the MCP client name the agent gave when it connected (for example `claude-code`), plus this
   machine's name.
+
+## What the bridge sends
+
+On every report, the bridge reads the change's folder as it is at that moment and sends all of it, so the
+dashboard's change page always shows the latest proposal, design, tasks, spec deltas and devlog notes.
+
+- **Which files:** every file ending `.md`, `.yaml` or `.yml` (in any case), in the folder and its subfolders:
+  `proposal.md`, `design.md`, `tasks.md`, `specs/**`, `devlog/*.md`, `.openspec.yaml`, and any others. Each is
+  sent under its path relative to the folder, with `/` separators. Other files, such as images, are skipped, and the
+  report still succeeds. `tasks.md` is required.
+- **Links:** symbolic links and other reparse points, to files or folders, are skipped, so nothing outside the
+  change's folder is read.
+- **Text:** files are read as UTF-8. A byte order mark is dropped. A file that isn't valid UTF-8 fails the report,
+  naming the file.
+- **Paths:** the server's path rules are checked first: at most 512 characters, and no control characters. A path
+  that breaks them fails the report, naming the file.
+- **Limits:** at most 256 KB (262,144 bytes) for any file except `tasks.md`, 1 MiB for `tasks.md`, and 4 MB
+  (4,194,304 bytes) in total. A report over a limit fails with an error naming the file and its size, or the
+  total, and **nothing is sent**. The server checks the same limits again.
+
+## Archives
+
+When `/opsx:archive` moves a change to `openspec/changes/archive/<YYYY-MM-DD>-<change>/`, Panopticon moves it from
+the live dashboard to the history. The bridge notices an archive in two ways, and both send the same archived
+report: the archive folder's documents, marked with the folder's name.
+
+- **Reporting after an archive.** When a report names a change with no folder under `openspec/changes/`, the
+  bridge looks in `archive/` for `<YYYY-MM-DD>-<change>`, matching the name exactly, and uses the latest date if
+  there are several. If there's none, the error names both places it looked.
+- **The watcher.** While `panopticon mcp` runs, it watches `openspec/changes/` for the changes **it has reported on
+  in this session**. When one of their folders moves to `archive/`, the bridge sends the archived report itself
+  about a second later, as the agent that last reported that change. The agent doesn't need to do anything.
+  - Changes this bridge never reported on are left alone. So are archives made while no bridge was running, until
+    something reports that change name again (the first way).
+  - A failure, such as an unreachable server, is logged to stderr, and the bridge keeps serving. The agent's next
+    `report_progress` for that change reports it archived instead.
+
+Reporting an archived change again changes nothing: the server keeps it as it was when it was archived. A new
+change later created with the same name starts a fresh card.
 
 ## Install
 
@@ -121,8 +160,11 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
 
 - **"No git repository was found"**: the agent started the bridge outside the repo.
 - **"no 'origin' remote"**: add a remote. The repo identity comes from it.
-- **"No change '…' was found: looked for the folder '…'"**: the change name doesn't match a folder under
-  `openspec/changes/`.
+- **"No change '…' was found: looked for the folder '…', and for an archived '…'"**: the change name doesn't match
+  a folder under `openspec/changes/`, or an archived one under `openspec/changes/archive/`.
+- **"'…' is … bytes; the limit is …"** or **"The change's documents total …"**: a document, or the whole folder, is
+  over the size limits above. Nothing was sent. Move large files out of the change's folder.
+- **"'…' isn't valid UTF-8"** or **"'…' can't be sent: its path …"**: rename the file, or re-save it as UTF-8.
 - **"Couldn't reach the Panopticon server at …"**: check `PANOPTICON_SERVER_URL`, and that the server is up.
 - **"isn't configured: … not set"**: run `panopticon login`, or set the variables it names.
 - **"saved login is for …, not PANOPTICON_SERVER_URL"**: the environment points at another server. Log in to
