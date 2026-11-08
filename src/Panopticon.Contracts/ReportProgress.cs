@@ -12,13 +12,22 @@ public sealed record RepoRef(string Host, string Owner, string Name);
 /// <summary>The reporting agent: its MCP client name, and the machine it runs on.</summary>
 public sealed record AgentRef(string Client, string Machine);
 
+/// <summary>One synced file of the change's folder: its path relative to that folder, with '/' separators.</summary>
+public sealed record ChangeDocument(string Path, string Content);
+
 /// <summary>Arguments of the server's <c>report_progress</c> tool.</summary>
+/// <remarks>
+/// <see cref="Documents"/> and <see cref="Archive"/> are optional (change-documents-and-history D1): a CLI from before
+/// them leaves them out, and an older server, which binds only its named parameters, ignores them.
+/// </remarks>
 public sealed record ReportProgressArguments(
     RepoRef Repo,
     string Change,
     AgentRef Agent,
     string TasksMarkdown,
-    int? Section = null)
+    int? Section = null,
+    IReadOnlyList<ChangeDocument>? Documents = null,
+    string? Archive = null)
 {
     /// <summary>The tool's argument names, as they appear on the wire.</summary>
     public static class Names
@@ -28,6 +37,8 @@ public sealed record ReportProgressArguments(
         public const string Agent = "agent";
         public const string TasksMarkdown = "tasksMarkdown";
         public const string Section = "section";
+        public const string Documents = "documents";
+        public const string Archive = "archive";
     }
 
     /// <summary>The argument dictionary an MCP client sends, built without reflection (AOT-safe).</summary>
@@ -45,6 +56,16 @@ public sealed record ReportProgressArguments(
         if (Section is { } section)
         {
             arguments[Names.Section] = JsonSerializer.SerializeToElement(section, context.Int32);
+        }
+
+        if (Documents is { } documents)
+        {
+            arguments[Names.Documents] = JsonSerializer.SerializeToElement(documents, context.IReadOnlyListChangeDocument);
+        }
+
+        if (Archive is { } archive)
+        {
+            arguments[Names.Archive] = JsonSerializer.SerializeToElement(archive, context.String);
         }
 
         return arguments;
@@ -74,6 +95,8 @@ public sealed record ReportProgressResult(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(RepoRef))]
 [JsonSerializable(typeof(AgentRef))]
+[JsonSerializable(typeof(ChangeDocument))]
+[JsonSerializable(typeof(IReadOnlyList<ChangeDocument>))]
 [JsonSerializable(typeof(ReportProgressArguments))]
 [JsonSerializable(typeof(ReportProgressResult))]
 [JsonSerializable(typeof(DeviceStartRequest))]

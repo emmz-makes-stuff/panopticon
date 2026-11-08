@@ -9,6 +9,8 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<ChangeAgent> ChangeAgents => Set<ChangeAgent>();
     public DbSet<ReportEvent> ReportEvents => Set<ReportEvent>();
+    public DbSet<ReportDocument> ReportDocuments => Set<ReportDocument>();
+    public DbSet<LatestDocument> ChangeDocuments => Set<LatestDocument>();
     public DbSet<Member> Members => Set<Member>();
     public DbSet<SignInLink> SignInLinks => Set<SignInLink>();
     public DbSet<Session> Sessions => Set<Session>();
@@ -25,7 +27,10 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
 
         modelBuilder.Entity<Change>(change =>
         {
-            change.HasIndex(c => new { c.RepoId, c.NameKey }).IsUnique();
+            // change-documents-and-history D5: a name is unique among active changes only, so a name reused after an
+            // archive gets a fresh row; an archive folder is unique per repo, which makes an archived report idempotent.
+            change.HasIndex(c => new { c.RepoId, c.NameKey }).IsUnique().HasFilter("archived_at IS NULL");
+            change.HasIndex(c => new { c.RepoId, c.ArchiveFolder }).IsUnique().HasFilter("archive_folder IS NOT NULL");
             change.HasIndex(c => c.LastReportedAt);
             change.OwnsOne(c => c.Snapshot, snapshot => snapshot.ToJson());
             change.HasMany(c => c.Agents).WithOne().HasForeignKey(a => a.ChangeId);
@@ -93,6 +98,24 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
             reportEvent.HasIndex(e => new { e.ChangeId, e.ReceivedAt });
             reportEvent.HasOne<Change>().WithMany().HasForeignKey(e => e.ChangeId);
             reportEvent.HasOne<Agent>().WithMany().HasForeignKey(e => e.AgentId);
+        });
+
+        modelBuilder.Entity<ReportDocument>(document =>
+        {
+            document.ToTable("report_documents");
+            document.HasKey(d => new { d.ReportEventId, d.Path });
+            document.Property(d => d.Path).HasMaxLength(512);
+            document.Property(d => d.Sha256).HasMaxLength(64).IsFixedLength();
+            document.HasOne<ReportEvent>().WithMany().HasForeignKey(d => d.ReportEventId);
+        });
+
+        modelBuilder.Entity<LatestDocument>(document =>
+        {
+            document.ToTable("change_documents");
+            document.HasKey(d => new { d.ChangeId, d.Path });
+            document.Property(d => d.Path).HasMaxLength(512);
+            document.Property(d => d.Sha256).HasMaxLength(64).IsFixedLength();
+            document.HasOne<Change>().WithMany().HasForeignKey(d => d.ChangeId);
         });
     }
 }

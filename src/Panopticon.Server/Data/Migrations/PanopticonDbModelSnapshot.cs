@@ -119,6 +119,14 @@ namespace Panopticon.Server.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ArchiveFolder")
+                        .HasColumnType("text")
+                        .HasColumnName("archive_folder");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
                     b.Property<DateTimeOffset>("LastReportedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_reported_at");
@@ -143,9 +151,15 @@ namespace Panopticon.Server.Data.Migrations
                     b.HasIndex("LastReportedAt")
                         .HasDatabaseName("ix_changes_last_reported_at");
 
+                    b.HasIndex("RepoId", "ArchiveFolder")
+                        .IsUnique()
+                        .HasDatabaseName("ix_changes_repo_id_archive_folder")
+                        .HasFilter("archive_folder IS NOT NULL");
+
                     b.HasIndex("RepoId", "NameKey")
                         .IsUnique()
-                        .HasDatabaseName("ix_changes_repo_id_name_key");
+                        .HasDatabaseName("ix_changes_repo_id_name_key")
+                        .HasFilter("archived_at IS NULL");
 
                     b.ToTable("changes", (string)null);
                 });
@@ -250,6 +264,38 @@ namespace Panopticon.Server.Data.Migrations
                     b.ToTable("device_logins", (string)null);
                 });
 
+            modelBuilder.Entity("Panopticon.Server.Data.LatestDocument", b =>
+                {
+                    b.Property<Guid>("ChangeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("change_id");
+
+                    b.Property<string>("Path")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("path");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("sha256")
+                        .IsFixedLength();
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("ChangeId", "Path")
+                        .HasName("pk_change_documents");
+
+                    b.ToTable("change_documents", (string)null);
+                });
+
             modelBuilder.Entity("Panopticon.Server.Data.Member", b =>
                 {
                     b.Property<Guid>("Id")
@@ -345,6 +391,34 @@ namespace Panopticon.Server.Data.Migrations
                         .HasDatabaseName("ix_repos_host_key_owner_key_name_key");
 
                     b.ToTable("repos", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ReportDocument", b =>
+                {
+                    b.Property<long>("ReportEventId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("report_event_id");
+
+                    b.Property<string>("Path")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("path");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("sha256")
+                        .IsFixedLength();
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_bytes");
+
+                    b.HasKey("ReportEventId", "Path")
+                        .HasName("pk_report_documents");
+
+                    b.ToTable("report_documents", (string)null);
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.ReportEvent", b =>
@@ -573,12 +647,32 @@ namespace Panopticon.Server.Data.Migrations
                         .HasConstraintName("fk_device_logins_api_tokens_token_id");
                 });
 
+            modelBuilder.Entity("Panopticon.Server.Data.LatestDocument", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Change", null)
+                        .WithMany()
+                        .HasForeignKey("ChangeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_change_documents_changes_change_id");
+                });
+
             modelBuilder.Entity("Panopticon.Server.Data.Member", b =>
                 {
                     b.HasOne("Panopticon.Server.Data.Member", null)
                         .WithMany()
                         .HasForeignKey("InvitedByMemberId")
                         .HasConstraintName("fk_members_members_invited_by_member_id");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ReportDocument", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.ReportEvent", null)
+                        .WithMany()
+                        .HasForeignKey("ReportEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_report_documents_report_events_report_event_id");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.ReportEvent", b =>

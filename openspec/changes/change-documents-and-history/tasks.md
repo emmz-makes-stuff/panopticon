@@ -2,8 +2,8 @@
 
 ## 1. Wire contract and the data model
 
-- [ ] 1.1 Add the optional `documents` (`[{path, content}]`) and `archive` fields to `ReportProgressArguments`, `ToToolArguments` and `ContractsJsonContext` (D1). Verify with `ContractsTests` that a report without them serializes exactly as before, and that one with them round-trips.
-- [ ] 1.2 Add the D5 migration: `changes.archived_at` and `archive_folder`, the partial `(repo_id, name_key) WHERE archived_at IS NULL` index, the `(repo_id, archive_folder)` index, and the `report_documents` and `change_documents` tables. Verify a Testcontainers `MigrationTests` case applies it to an empty database and to one with team-auth data, and that two active same-name changes are still refused.
+- [x] 1.1 Add the optional `documents` (`[{path, content}]`) and `archive` fields to `ReportProgressArguments`, `ToToolArguments` and `ContractsJsonContext` (D1). Verify with `ContractsTests` that a report without them serializes exactly as before, and that one with them round-trips.
+- [x] 1.2 Add the D5 migration: `changes.archived_at` and `archive_folder`, the partial `(repo_id, name_key) WHERE archived_at IS NULL` index, the `(repo_id, archive_folder)` index, and the `report_documents` and `change_documents` tables. Verify a Testcontainers `MigrationTests` case applies it to an empty database and to one with team-auth data, and that two active same-name changes are still refused.
 
 ## 2. Server: recording documents and archives
 
