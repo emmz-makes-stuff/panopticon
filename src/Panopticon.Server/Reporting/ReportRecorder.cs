@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Panopticon.Server.Data;
@@ -21,17 +22,41 @@ public sealed record ReportInput(
     string ChangeName,
     AgentIdentity Agent,
     int? ReportedSection,
-    string TasksMarkdown);
+    string TasksMarkdown)
+{
+    /// <summary>
+    /// The checked documents (change-documents-and-history D6). Null means just <c>tasks.md</c>, as from an older CLI.
+    /// </summary>
+    public IReadOnlyList<Contracts.ChangeDocument>? Documents { get; init; }
+
+    /// <summary>The archive folder's name when this is the change's archived report (D7).</summary>
+    public string? Archive { get; init; }
+}
+
+/// <summary>What a report did to the change's archive state (change-documents-and-history D7).</summary>
+public enum ArchiveOutcome
+{
+    /// <summary>An ordinary report on an active change.</summary>
+    None,
+
+    /// <summary>This report archived the change.</summary>
+    Archived,
+
+    /// <summary>The change was already archived under that folder: nothing was recorded.</summary>
+    AlreadyArchived,
+}
 
 /// <summary>The outcome of recording a report: the change and its newly computed progress.</summary>
 public sealed record RecordedReport(
     Guid ChangeId,
     ProgressSnapshot Snapshot,
-    DateTimeOffset ReceivedAt);
+    DateTimeOffset ReceivedAt,
+    ArchiveOutcome Archive = ArchiveOutcome.None);
 
 /// <summary>
-/// Records a report: stores <c>tasks.md</c>, upserts repo / change / agent, updates the change's
-/// progress snapshot and the agent's last-report time, and appends a report event.
+/// Records a report: stores its documents, upserts repo / change / agent, updates the change's progress snapshot,
+/// latest documents and the agent's last-report time, appends a report event with its manifest, and archives the
+/// change when the report says so.
 /// </summary>
 public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, TimeProvider clock)
 {
@@ -57,7 +82,18 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         };
 
         // Content-addressed and idempotent: storing before the database write is safe even if that write fails.
+        // An older CLI sends no documents, so its manifest holds just the tasks (spec: Report from an older CLI).
         var tasksSha256 = await documents.PutAsync(report.TasksMarkdown, cancellationToken);
+        var manifest = new List<StoredDocument>();
+        foreach (var document in report.Documents ?? [new Contracts.ChangeDocument(Contracts.DocumentLimits.TasksPath, report.TasksMarkdown)])
+        {
+            // tasks.md is already stored above; DocumentChecks guarantees its listed content is tasksMarkdown.
+            var sha256 = document.Path == Contracts.DocumentLimits.TasksPath
+                ? tasksSha256
+                : await documents.PutAsync(document.Content, cancellationToken);
+            manifest.Add(new StoredDocument(document.Path, sha256, Encoding.UTF8.GetByteCount(document.Content)));
+        }
+
         var receivedAt = clock.GetUtcNow();
 
         for (var attempt = 1; ; attempt++)
@@ -66,9 +102,9 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             {
                 // One transaction, so the change row locked in FindOrAddChangeAsync stays locked until the write.
                 await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-                var changeId = await UpsertAsync(report, snapshot, tasksSha256, receivedAt, cancellationToken);
+                var recorded = await UpsertAsync(report, snapshot, tasksSha256, manifest, receivedAt, cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return new RecordedReport(changeId, snapshot, receivedAt);
+                return recorded;
             }
             catch (DbUpdateException ex) when (attempt < MaxAttempts && IsUniqueViolation(ex))
             {
@@ -78,23 +114,52 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         }
     }
 
-    private async Task<Guid> UpsertAsync(
+    private async Task<RecordedReport> UpsertAsync(
         ReportInput report,
         ProgressSnapshot snapshot,
         string tasksSha256,
+        IReadOnlyList<StoredDocument> manifest,
         DateTimeOffset receivedAt,
         CancellationToken cancellationToken)
     {
         var repo = await FindOrAddRepoAsync(report.Repo, cancellationToken);
+
+        // D7.1: a change already archived under this folder is final. A second archived report (the watcher and the
+        // agent both sending it) changes nothing, not even a new event, and returns the final progress.
+        if (report.Archive is { } folder
+            && await db.Changes.AsNoTracking().SingleOrDefaultAsync(c => c.RepoId == repo.Id && c.ArchiveFolder == folder, cancellationToken)
+                is { } archived)
+        {
+            return new RecordedReport(archived.Id, archived.Snapshot, receivedAt, ArchiveOutcome.AlreadyArchived);
+        }
+
         var change = await FindOrAddChangeAsync(repo, report.ChangeName, snapshot, cancellationToken);
         var agent = await FindOrAddAgentAsync(report.Agent, cancellationToken);
 
         // Only a newer report moves the change on: a slower, older report that commits last must not roll the
-        // snapshot or the times back. Every report is still kept as an event below.
+        // snapshot, the latest documents or the times back. Every report is still kept as an event below.
         if (receivedAt >= change.LastReportedAt)
         {
             change.Snapshot = snapshot;
             change.LastReportedAt = receivedAt;
+
+            // Replaced whole, under the change-row lock taken in FindOrAddChangeAsync (D5).
+            await db.ChangeDocuments.Where(d => d.ChangeId == change.Id).ExecuteDeleteAsync(cancellationToken);
+            db.ChangeDocuments.AddRange(manifest.Select(d => new LatestDocument
+            {
+                ChangeId = change.Id,
+                Path = d.Path,
+                Sha256 = d.Sha256,
+                SizeBytes = d.SizeBytes,
+                UpdatedAt = receivedAt,
+            }));
+        }
+
+        // D7.2: the archived report is the change's final state, recorded like any other report first.
+        if (report.Archive is not null)
+        {
+            change.ArchivedAt = receivedAt;
+            change.ArchiveFolder = report.Archive;
         }
 
         var changeAgent = await db.ChangeAgents.FindAsync([change.Id, agent.Id], cancellationToken);
@@ -107,18 +172,35 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             changeAgent.LastReportedAt = receivedAt;
         }
 
-        db.ReportEvents.Add(new ReportEvent
+        var reportEvent = new ReportEvent
         {
             ChangeId = change.Id,
             AgentId = agent.Id,
             ReportedSection = report.ReportedSection,
             TasksSha256 = tasksSha256,
             ReceivedAt = receivedAt,
-        });
+        };
+        db.ReportEvents.Add(reportEvent);
 
+        // The event's id comes from the database, so its manifest is written after it, in the same transaction.
         await db.SaveChangesAsync(cancellationToken);
-        return change.Id;
+        db.ReportDocuments.AddRange(manifest.Select(d => new ReportDocument
+        {
+            ReportEventId = reportEvent.Id,
+            Path = d.Path,
+            Sha256 = d.Sha256,
+            SizeBytes = d.SizeBytes,
+        }));
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new RecordedReport(
+            change.Id,
+            snapshot,
+            receivedAt,
+            report.Archive is null ? ArchiveOutcome.None : ArchiveOutcome.Archived);
     }
+
+    private sealed record StoredDocument(string Path, string Sha256, int SizeBytes);
 
     private async Task<Repo> FindOrAddRepoAsync(RepoIdentity identity, CancellationToken cancellationToken)
     {
@@ -152,10 +234,11 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         CancellationToken cancellationToken)
     {
         // FOR UPDATE: concurrent reports on one change take turns, so the only-if-newer check in UpsertAsync
-        // compares against the committed state rather than a stale read.
+        // compares against the committed state rather than a stale read. Only active changes take part in identity
+        // (D5): a name reused after an archive gets a fresh row.
         var nameKey = Key(name);
         var change = await db.Changes
-            .FromSql($"SELECT * FROM changes WHERE repo_id = {repo.Id} AND name_key = {nameKey} FOR UPDATE")
+            .FromSql($"SELECT * FROM changes WHERE repo_id = {repo.Id} AND name_key = {nameKey} AND archived_at IS NULL FOR UPDATE")
             .SingleOrDefaultAsync(cancellationToken);
         if (change is not null)
         {

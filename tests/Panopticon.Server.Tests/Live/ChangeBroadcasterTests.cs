@@ -40,7 +40,23 @@ public class ChangeBroadcasterTests
         }
 
         Assert.True(slow.Reader.TryRead(out var oldestKept));
-        Assert.Equal(5, oldestKept.Overall.Done);
+        Assert.Equal(5, Assert.IsType<ChangeEvent.Updated>(oldestKept).Card.Overall.Done);
+    }
+
+    [Fact]
+    public void An_archived_change_reaches_every_subscriber()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        using var first = broadcaster.Subscribe();
+        using var second = broadcaster.Subscribe();
+        var changeId = Guid.NewGuid();
+
+        broadcaster.PublishArchived(changeId);
+
+        Assert.True(first.Reader.TryRead(out var a));
+        Assert.True(second.Reader.TryRead(out var b));
+        Assert.Equal(new ChangeEvent.Archived(changeId), a);
+        Assert.Equal(a, b);
     }
 
     [Fact]

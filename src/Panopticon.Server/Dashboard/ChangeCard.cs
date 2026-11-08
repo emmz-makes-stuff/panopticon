@@ -26,10 +26,13 @@ public sealed record CardProgress(int Done, int Total);
 /// <summary>Builds cards from the database: for the read API, and for live updates after a report.</summary>
 public sealed class ChangeCards(PanopticonDb db)
 {
-    /// <summary>All changes, most recently reported first.</summary>
+    /// <summary>All active changes, most recently reported first; archived ones are in the history instead.</summary>
     public async Task<IReadOnlyList<ChangeCard>> ListAsync(CancellationToken cancellationToken)
     {
-        var changes = await Query().OrderByDescending(c => c.LastReportedAt).ToListAsync(cancellationToken);
+        var changes = await Query()
+            .Where(c => c.ArchivedAt == null)
+            .OrderByDescending(c => c.LastReportedAt)
+            .ToListAsync(cancellationToken);
         return changes.ConvertAll(ToCard);
     }
 

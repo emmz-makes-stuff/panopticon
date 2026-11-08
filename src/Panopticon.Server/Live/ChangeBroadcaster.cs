@@ -3,6 +3,20 @@ using Panopticon.Server.Dashboard;
 
 namespace Panopticon.Server.Live;
 
+/// <summary>What the live stream carries (change-documents-and-history D10): an updated card, or an archived change.</summary>
+public abstract record ChangeEvent
+{
+    private ChangeEvent()
+    {
+    }
+
+    /// <summary>A report moved an active change on; sent as <c>change-updated</c> with the card.</summary>
+    public sealed record Updated(ChangeCard Card) : ChangeEvent;
+
+    /// <summary>The change was archived and leaves the live view; sent as <c>change-archived</c>.</summary>
+    public sealed record Archived(Guid ChangeId) : ChangeEvent;
+}
+
 /// <summary>
 /// Fans change updates out to live subscribers, in process (design D9; one instance in this change).
 /// Each subscriber has a bounded queue; a slow one drops its oldest updates rather than blocking reports.
@@ -12,7 +26,7 @@ public sealed class ChangeBroadcaster
     public const int SubscriberCapacity = 64;
 
     private readonly Lock _gate = new();
-    private readonly List<Channel<ChangeCard>> _subscribers = [];
+    private readonly List<Channel<ChangeEvent>> _subscribers = [];
 
     public int SubscriberCount
     {
@@ -27,7 +41,7 @@ public sealed class ChangeBroadcaster
 
     public Subscription Subscribe()
     {
-        var channel = Channel.CreateBounded<ChangeCard>(new BoundedChannelOptions(SubscriberCapacity)
+        var channel = Channel.CreateBounded<ChangeEvent>(new BoundedChannelOptions(SubscriberCapacity)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
@@ -44,16 +58,23 @@ public sealed class ChangeBroadcaster
     public void Publish(ChangeCard card)
     {
         ArgumentNullException.ThrowIfNull(card);
+        Publish(new ChangeEvent.Updated(card));
+    }
+
+    public void PublishArchived(Guid changeId) => Publish(new ChangeEvent.Archived(changeId));
+
+    private void Publish(ChangeEvent change)
+    {
         lock (_gate)
         {
             foreach (var subscriber in _subscribers)
             {
-                subscriber.Writer.TryWrite(card);
+                subscriber.Writer.TryWrite(change);
             }
         }
     }
 
-    private void Remove(Channel<ChangeCard> channel)
+    private void Remove(Channel<ChangeEvent> channel)
     {
         lock (_gate)
         {
@@ -63,9 +84,9 @@ public sealed class ChangeBroadcaster
         channel.Writer.TryComplete();
     }
 
-    public sealed class Subscription(ChangeBroadcaster owner, Channel<ChangeCard> channel) : IDisposable
+    public sealed class Subscription(ChangeBroadcaster owner, Channel<ChangeEvent> channel) : IDisposable
     {
-        public ChannelReader<ChangeCard> Reader => channel.Reader;
+        public ChannelReader<ChangeEvent> Reader => channel.Reader;
 
         public void Dispose() => owner.Remove(channel);
     }

@@ -157,6 +157,68 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("walking-skeleton", data.RootElement.GetProperty("change").GetString());
     }
 
+    // change-documents-and-history: Archived card leaves (D10).
+    [Fact]
+    public async Task Events_stream_a_change_archived_event_after_an_archived_report()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        var broadcaster = factory.Services.GetRequiredService<ChangeBroadcaster>();
+        await using var mcp = await factory.CreateMcpClientAsync(cancellationToken: ct);
+        var report = Report("emmz", "panopticon", "team-auth", "## 1. A\n- [x] a");
+        var first = await mcp.CallToolAsync("report_progress", report.ToToolArguments(), cancellationToken: ct);
+        var changeId = first.StructuredContent!.Value.GetProperty("changeId").GetString();
+
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        var responseTask = http.GetAsync(DashboardEndpoints.EventsPath, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        while (broadcaster.SubscriberCount == 0)
+        {
+            await Task.Delay(20, timeout.Token);
+        }
+
+        await mcp.CallToolAsync("report_progress", (report with { Archive = "2026-11-08-team-auth" }).ToToolArguments(), cancellationToken: ct);
+
+        using var response = await responseTask;
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(timeout.Token));
+        var lines = new List<string>();
+        while (await reader.ReadLineAsync(timeout.Token) is { } line)
+        {
+            if (line.Length == 0 && lines.Count > 0)
+            {
+                break;
+            }
+
+            lines.Add(line);
+        }
+
+        Assert.Contains("event: change-archived", lines);
+        var data = JsonDocument.Parse(lines.Single(l => l.StartsWith("data: ", StringComparison.Ordinal))["data: ".Length..]);
+        Assert.Equal(changeId, data.RootElement.GetProperty("changeId").GetString());
+    }
+
+    // change-documents-and-history: "Archived change has no card".
+    [Fact]
+    public async Task Changes_leaves_out_archived_changes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        await using (var mcp = await factory.CreateMcpClientAsync(cancellationToken: ct))
+        {
+            var skeleton = Report("emmz", "panopticon", "walking-skeleton", "## 1. A\n- [x] a");
+            await mcp.CallToolAsync("report_progress", skeleton.ToToolArguments(), cancellationToken: ct);
+            await mcp.CallToolAsync("report_progress", (skeleton with { Archive = "2026-11-07-walking-skeleton" }).ToToolArguments(), cancellationToken: ct);
+            await mcp.CallToolAsync("report_progress", Report("emmz", "panopticon", "team-auth", "## 1. A\n- [ ] a").ToToolArguments(), cancellationToken: ct);
+        }
+
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
+        var cards = await http.GetFromJsonAsync<JsonElement>(DashboardEndpoints.ChangesPath, ct);
+
+        var card = Assert.Single(cards.EnumerateArray());
+        Assert.Equal("team-auth", card.GetProperty("change").GetString());
+    }
+
     [Fact]
     public async Task Events_send_headers_at_once_without_waiting_for_a_report()
     {
