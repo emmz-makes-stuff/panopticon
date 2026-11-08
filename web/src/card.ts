@@ -1,6 +1,7 @@
 import { agentName, relativeTime } from "./format";
 import { renderProgressBar } from "./progressBar";
 import type { ChangeCard } from "./types";
+import { changeHref } from "./links";
 
 /** One change's card (spec live-dashboard, "Card content" and "Two progress bars"). All text goes in as text. */
 export function renderCard(card: ChangeCard, now: Date): HTMLElement {
@@ -17,7 +18,13 @@ export function renderCard(card: ChangeCard, now: Date): HTMLElement {
   time.title = new Date(card.lastReportedAt).toLocaleString();
   repoLine.append(time);
 
-  const change = element("h2", "card-change", card.change);
+  // The change name is the card's link to its page (change-documents-and-history D11): an ordinary link, so a keyboard,
+  // a screen reader and "open in new tab" all work. Wrapping the whole card would put the bars inside the link.
+  const change = element("h2", "card-change");
+  const link = element("a", "card-link", card.change);
+  link.href = changeHref(card.changeId);
+  link.dataset["route"] = "";
+  change.append(link);
 
   const section = card.currentSection;
   const sectionBar = section

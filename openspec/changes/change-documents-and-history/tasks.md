@@ -27,10 +27,10 @@
 
 ## 5. Web: the change page, history and cards
 
-- [ ] 5.1 Add API helpers and types for the change header, a document and history pages, and handle `change-archived` in `live.ts` by removing the card. Verify Vitest tests for "Archive while watching" with the fake `EventSource`, and the helpers' 401 handling.
-- [ ] 5.2 Add the `/changes/<id>` view (D11): header with the archived note, the document list as route links with `?doc=`, the rendered document, a not-found state, and a live subscription for that change (refetch on `change-updated`, the archived note on `change-archived`). Verify Vitest tests for "Open an active change" (order and default document), selecting a document, "Unknown change", "Report while reading", "Archived while reading", and "Signed out" (returns to the same page after sign-in).
-- [ ] 5.3 Add the `/history` view (rows linking to the change page, "Show more" paging, an empty state) and the History link in the header. Make each card's change name a route link to its page. Verify Vitest tests for "Two archived changes", "Nothing archived yet", paging, "Go to history" and "Open from a card", and that the card's link works by keyboard.
-- [ ] 5.4 Style both pages and the card link with the `frontend-design` skill within `web/DESIGN.md` (two columns at desktop width, stacked at 375 px, rendered-Markdown typography, light and dark), and verify `make web-build`, `make web-lint` and `make web-format` pass.
+- [x] 5.1 Add API helpers and types for the change header, a document and history pages, and handle `change-archived` in `live.ts` by removing the card. Verify Vitest tests for "Archive while watching" with the fake `EventSource`, and the helpers' 401 handling.
+- [x] 5.2 Add the `/changes/<id>` view (D11): header with the archived note, the document list as route links with `?doc=`, the rendered document, a not-found state, and a live subscription for that change (refetch on `change-updated`, the archived note on `change-archived`). Verify Vitest tests for "Open an active change" (order and default document), selecting a document, "Unknown change", "Report while reading", "Archived while reading", and "Signed out" (returns to the same page after sign-in).
+- [x] 5.3 Add the `/history` view (rows linking to the change page, "Show more" paging, an empty state) and the History link in the header. Make each card's change name a route link to its page. Verify Vitest tests for "Two archived changes", "Nothing archived yet", paging, "Go to history" and "Open from a card", and that the card's link works by keyboard.
+- [x] 5.4 Style both pages and the card link with the `frontend-design` skill within `web/DESIGN.md` (two columns at desktop width, stacked at 375 px, rendered-Markdown typography, light and dark), and verify `make web-build`, `make web-lint` and `make web-format` pass.
 
 ## 6. Integration and human verification
 

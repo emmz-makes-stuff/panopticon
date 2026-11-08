@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, createApi, REQUEST_HEADER } from "./api";
+import {
+  ApiError,
+  createApi,
+  fetchChange,
+  fetchDocument,
+  fetchHistory,
+  REQUEST_HEADER,
+} from "./api";
 import { fakeServer } from "./testing";
 
 // Design D18: one wrapper for every /api call, the D6 header, and 401 → signed out.
@@ -70,5 +77,62 @@ describe("createApi", () => {
     const api = createApi({ fetch: () => Promise.resolve(new Response("oops", { status: 500 })) });
 
     await expect(api.get("/api/changes")).rejects.toThrow("GET /api/changes answered 500");
+  });
+});
+
+// change-documents-and-history D9: the change page and history helpers.
+describe("change page and history helpers", () => {
+  it("ask for the change, a document by its encoded path, and history pages", async () => {
+    const urls: string[] = [];
+    const api = createApi({
+      fetch: (input) => {
+        urls.push(input);
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      },
+    });
+
+    await fetchChange(api, "c1");
+    await fetchDocument(api, "c1", "specs/cli bridge/spec#1.md");
+    await fetchHistory(api);
+    await fetchHistory(api, "2026-11-08T12:00:00.0000000+00:00");
+
+    expect(urls).toEqual([
+      "/api/changes/c1",
+      "/api/changes/c1/documents/specs/cli%20bridge/spec%231.md",
+      "/api/history",
+      "/api/history?before=2026-11-08T12%3A00%3A00.0000000%2B00%3A00",
+    ]);
+  });
+
+  it("send a 401 to the signed-out signal, like every other call", async () => {
+    const onSignedOut = vi.fn();
+    const api = createApi({
+      fetch: fakeServer()
+        .on("GET", "/api/changes/c1", { status: 401 })
+        .on("GET", "/api/changes/c1/documents/design.md", { status: 401 })
+        .on("GET", "/api/history", { status: 401 }),
+      onSignedOut,
+    });
+
+    for (const call of [
+      fetchChange(api, "c1"),
+      fetchDocument(api, "c1", "design.md"),
+      fetchHistory(api),
+    ]) {
+      const failure = await call.catch((error: unknown) => error);
+      expect((failure as ApiError).status).toBe(401);
+    }
+
+    expect(onSignedOut).toHaveBeenCalledTimes(3);
+  });
+
+  it("reject an unknown change with a 404 ApiError, without signing out", async () => {
+    const onSignedOut = vi.fn();
+    const api = createApi({ fetch: fakeServer(), onSignedOut });
+
+    const failure = (await fetchChange(api, "nope").catch((error: unknown) => error)) as ApiError;
+
+    expect(failure.status).toBe(404);
+    expect(onSignedOut).not.toHaveBeenCalled();
   });
 });

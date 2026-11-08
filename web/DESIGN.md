@@ -137,6 +137,50 @@ Email [               ]  Display name (optional) [        ]  [Invite]
   "Sign in to a PANOPTICON?" (the server can't say whose link it is before the confirm). One "Sign in"
   button. A used or expired link explains which, with a "Send me a new link" link.
 
+## Pages: a change, and the history
+
+A change's page is where you read; the history is where finished changes go. Both stay quiet, in the tools'
+voice, with one exception that belongs to the lit-cells idea.
+
+```
+Back to the dashboard
+github.com emmz/panopticon
+team-auth                                   (Gabarito 700, 31px: the loudest text)
+Last report 2m ago
+Section 6: CLI bridge   ▮▮▮▮▯        4/5 (80%)
+Whole change            ▮▮▮▮▮▮▮▮▯▯▯ 22/30 (73%)
+claude-code@vm-1 Emmz
+──────────────────────────────────────────────────────────────
+Change            ┃ # Design
+┃ Proposal        ┃ Rendered Markdown, about 70 characters a line …
+  Design          ┃
+  Tasks           ┃ ■ 1.1 Done          (a lit cell)
+Specs             ┃ □ 1.2 Not yet       (an unlit cell)
+  cli-bridge      ┃
+Devlog            ┃
+  section 1 done · 2026-11-08 18:43
+```
+
+- **Header:** a small muted back link (to the dashboard, or to the history when archived), the repo, then
+  the change name in Gabarito 700 at 31px. Below it, "Last report 2m ago" or "Archived 8 Nov 2026", the
+  card's bars (just the whole-change bar once archived), and the agent pills.
+- **Two columns from 56rem:** a 15rem document list, sticky, beside the article. Below 56rem the list
+  stacks above it, with the usual 16px gutters.
+- **The document list:** sentence-case group labels (Change, Specs, Devlog, Other files) in small 600
+  `--ink-muted`, never caps. Plain `--ink` links with no underline. The current document has a 3px `--ink`
+  rule at its left and 600 weight (not teal: teal is progress). Devlog titles are a step smaller.
+- **The article:** at most 44rem wide (about 70 characters), line-height 1.6. Headings in Gabarito, tables
+  with hairlines that scroll sideways on a phone, and code on `--paper` in the system monospace.
+- **Task lists are lit cells.** In a rendered document, a ticked task's checkbox is a solid `--lit` cell
+  and an unticked one an unlit cell (`--rule`, with an `--ink-muted` inset outline, stronger than a bar's
+  so a lone cell still reads). That's the one bold thing on the page, and it's the bars' own vocabulary.
+- **Archived while open:** a status line with a 3px `--ink-muted` rule says so, and the documents stay.
+- **History:** rows between hairlines, like Members. The change name (Gabarito 700, 20px) is the link,
+  then the repo and "Archived 8 Nov 2026" in small muted text, then the agent pills. "Show more" is an
+  outlined button. Empty: "No changes have been archived yet", and a muted line on where they come from.
+- **Cards:** the change name is the card's link. It keeps its look (no link colour or underline), and the
+  focus ring shows it.
+
 ## Accessibility floor
 
 - Each bar is `role="progressbar"` with `aria-label` (e.g. "Section 6 progress") and `aria-valuenow`,
