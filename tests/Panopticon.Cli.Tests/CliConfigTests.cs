@@ -42,6 +42,43 @@ public sealed class CliConfigTests : IDisposable
     }
 
     [Fact]
+    public void A_saved_token_is_not_used_for_another_server()
+    {
+        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com/", "pnp_saved"));
+
+        var settings = Resolve(new() { [BridgeSettings.ServerUrlVariable] = "https://other.example.com" });
+
+        Assert.Null(settings.Token);
+        Assert.Equal("https://p.example.com/", settings.SavedLoginServer);
+        var error = Assert.Throws<BridgeException>(() => settings.RequireServer());
+        Assert.Contains("saved login is for https://p.example.com/", error.Message, StringComparison.Ordinal);
+        Assert.Contains("panopticon login --server https://other.example.com", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("pnp_saved", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://p.example.com")]
+    [InlineData("https://P.Example.com/")]
+    [InlineData("https://p.example.com/mcp")]
+    [InlineData("https://p.example.com:443/mcp/")]
+    public void A_saved_token_is_used_when_the_environment_names_the_saved_server(string serverUrl)
+    {
+        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com/", "pnp_saved"));
+
+        var settings = Resolve(new() { [BridgeSettings.ServerUrlVariable] = serverUrl });
+
+        Assert.Equal("pnp_saved", settings.Token);
+        Assert.Null(settings.SavedLoginServer);
+    }
+
+    [Theory]
+    [InlineData("http://p.example.com/")]
+    [InlineData("https://p.example.com:8443/")]
+    [InlineData("https://p.example.com/team-b/")]
+    public void A_different_scheme_port_or_path_is_another_server(string serverUrl) =>
+        Assert.False(BridgeSettings.SameServer("https://p.example.com/", serverUrl));
+
+    [Fact]
     public void A_blank_variable_counts_as_unset()
     {
         new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));

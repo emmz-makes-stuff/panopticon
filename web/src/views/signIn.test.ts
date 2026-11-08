@@ -118,18 +118,54 @@ describe("/sign-in/confirm", () => {
     expect(savedReturn(local)).toBeNull();
   });
 
-  it("ignores a return path that isn't on this site", async () => {
+  it.each(["//evil.example/", "/\\evil.example/", "https://evil.example/"])(
+    "ignores a return path that isn't on this site (%s)",
+    async (path) => {
+      const server = signedOut()
+        .on("POST", "/api/auth/confirm", { status: 200, body: MEMBER })
+        .on("GET", "/api/changes", { status: 200, body: [card()] });
+      const { root, nav } = await startTestShell("/sign-in/confirm#the-secret", server, {
+        local: { [RETURN_TO_KEY]: saved(path) },
+      });
+
+      q<HTMLButtonElement>(root, ".page button").click();
+      await until(() => nav.path() === "/");
+
+      expect([nav.location.origin, nav.path()]).toEqual(["https://panopticon.test", "/"]);
+    },
+  );
+
+  it("keeps a same-site return path's query", async () => {
     const server = signedOut()
       .on("POST", "/api/auth/confirm", { status: 200, body: MEMBER })
-      .on("GET", "/api/changes", { status: 200, body: [card()] });
+      .on("GET", "/api/device/BCDF-GHJK", {
+        status: 200,
+        body: { userCode: "BCDF-GHJK", machineName: "vm-1", state: "pending" },
+      });
     const { root, nav } = await startTestShell("/sign-in/confirm#the-secret", server, {
-      local: { [RETURN_TO_KEY]: saved("//evil.example/") },
+      local: { [RETURN_TO_KEY]: saved("/device?code=BCDF-GHJK") },
     });
 
     q<HTMLButtonElement>(root, ".page button").click();
-    await until(() => nav.path() === "/");
+    await until(() => nav.path() === "/device?code=BCDF-GHJK");
 
-    expect(nav.path()).toBe("/");
+    expect(nav.path()).toBe("/device?code=BCDF-GHJK");
+  });
+
+  it("says what the server said when confirming fails with something other than a refused link", async () => {
+    const server = signedOut().on("POST", "/api/auth/confirm", {
+      status: 429,
+      body: { detail: "Too many requests. Try again in a few minutes." },
+    });
+    const { root } = await startTestShell("/sign-in/confirm#s", server);
+
+    q<HTMLButtonElement>(root, ".page button").click();
+    await until(() => !!root.querySelector(".page .form-error")?.textContent);
+
+    expect(root.querySelector(".page .form-error")?.textContent).toBe(
+      "Too many requests. Try again in a few minutes.",
+    );
+    expect(q<HTMLButtonElement>(root, ".page button").disabled).toBe(false);
   });
 
   it("goes to the cards when there's nowhere to return to", async () => {
@@ -163,6 +199,35 @@ describe("/sign-in/confirm", () => {
       "Send me a new link",
       "/sign-in",
     ]);
+  });
+
+  it("blocked storage still lets you ask for a link and sign in", async () => {
+    const blocked = {
+      getItem: (): string | null => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      },
+      setItem: () => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      },
+      removeItem: () => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      },
+    };
+    const server = signedOut()
+      .on("POST", "/api/auth/sign-in", { status: 202, body: {} })
+      .on("POST", "/api/auth/confirm", { status: 200, body: MEMBER })
+      .on("GET", "/api/changes", { status: 200, body: [card()] });
+
+    const asking = await startTestShell("/members", server, { storage: blocked });
+    expect(asking.heading()).toBe("Sign in");
+    await submit(asking.root, "emmz@example.com");
+    await until(() => asking.heading() === "Check your email");
+
+    const confirming = await startTestShell("/sign-in/confirm#s", server, { storage: blocked });
+    expect(confirming.heading()).toBe("Sign in to a PANOPTICON?");
+    q<HTMLButtonElement>(confirming.root, ".page button").click();
+    await until(() => confirming.nav.path() === "/");
+    expect(confirming.root.querySelector(".account-name")?.textContent).toBe("Emmz");
   });
 
   it("a link with no secret says so and offers a new one", async () => {

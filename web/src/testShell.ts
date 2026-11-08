@@ -15,6 +15,8 @@ export interface TestShellOptions {
   confirm?: (message: string) => boolean;
   /** What localStorage holds at start. */
   local?: Record<string, string>;
+  /** Replaces localStorage altogether, e.g. with one that throws, as blocked site data does. */
+  storage?: StorageLike;
 }
 
 /** Starts the app at `url` against a fake server, with fake navigation, storage and EventSource. */
@@ -31,7 +33,7 @@ export async function startTestShell(
   const shell = await startShell(root, {
     fetch: server,
     createEventSource: (eventsUrl) => new FakeEventSource(eventsUrl),
-    local,
+    local: options.storage ?? local,
     history: nav.history,
     location: nav.location,
     events,

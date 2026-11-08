@@ -184,7 +184,10 @@ tokens. ADR-0002 decides .NET 10 and vanilla TypeScript. ADR-0003 decides Postgr
   - On Unix the file mode is 0600 and the directory is 0700, set before writing. On Windows the default user
     profile ACLs are relied on.
   - JSON is source-generated, for AOT.
-  - `BridgeSettings` resolves each value from its environment variable, then the file. A missing or
+  - `BridgeSettings` resolves each value from its environment variable, then the file. The saved token is used
+    only when the server in use is the saved server, compared on scheme, host, port and base path, ignoring case,
+    a trailing `/` and `/mcp`. Otherwise it would be sent to a server that never issued it (found in the
+    whole-change review). A missing or
     unreadable file means "not set". An unreadable file is logged once to stderr without its content.
 - **D15. `panopticon login [--server <url>]`.**
   - The server comes from the flag, then `PANOPTICON_SERVER_URL`, then the saved config. With none of them,

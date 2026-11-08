@@ -60,6 +60,10 @@ Environment variables override the saved login, value by value:
 | `PANOPTICON_SERVER_URL` | The server's base URL, e.g. `https://panopticon.example.com`. A URL already ending in `/mcp` is used as-is. |
 | `PANOPTICON_TOKEN` | The API token for the server. |
 
+The saved token belongs to the saved server. If `PANOPTICON_SERVER_URL` names a different server and
+`PANOPTICON_TOKEN` is unset, the bridge doesn't send the saved token there. Each report fails instead, saying to
+run `panopticon login --server <that server>`.
+
 If neither source has a value, the bridge still starts. Each `report_progress` call then fails with an error
 naming the missing variable and saying to run `panopticon login`. If the saved file can't be read, the bridge
 treats it as missing and says so once on stderr, without its content.
@@ -121,6 +125,8 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
   `openspec/changes/`.
 - **"Couldn't reach the Panopticon server at …"**: check `PANOPTICON_SERVER_URL`, and that the server is up.
 - **"isn't configured: … not set"**: run `panopticon login`, or set the variables it names.
+- **"saved login is for …, not PANOPTICON_SERVER_URL"**: the environment points at another server. Log in to
+  that server with `panopticon login --server <url>`, or remove `PANOPTICON_SERVER_URL`.
 - **"rejected the saved login's token"**: the token was revoked, or its member was removed. Run
   `panopticon login` for a new one.
 - **"rejected the token from PANOPTICON_TOKEN"**: the variable is wrong, and it takes precedence over the saved

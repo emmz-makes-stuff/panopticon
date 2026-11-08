@@ -58,6 +58,21 @@
 - [x] 9.1 Extend the container end-to-end check: start with an initial member, sign in through captured or logged links, run `panopticon login` and approve, report through `panopticon mcp`, and see the card with the member's name; verify the check passes
 - [x] 9.2 Update the README (configuration settings, the first sign-in, `panopticon login`), and write the human verification recipe in a devlog note (real Resend delivery with a verified domain; the dashboard look and the new pages in a real browser; Claude Code reporting through a `panopticon login` token end to end); stop for Emmz to run it
 
+## 10. Review fixes: bridge, CLI and web
+
+- [x] 10.1 Use the saved server and token as a pair: `BridgeSettings` uses the saved token only when the server in use is the saved server (compared on the normalized root URL); otherwise the token counts as missing, and the error says to run `panopticon login --server <that server>`. Update the cli-bridge "Configuration" requirement with a scenario ("Environment server with a login saved for another server"), D14, and `docs/cli.md`; verify with `CliConfigTests`/`BridgeTests`
+- [x] 10.2 Reword the cli-bridge "Token rejected" scenario: the error names where the token came from, and says to correct or remove `PANOPTICON_TOKEN` for an environment token, or to run `panopticon login` for a saved one; `make validate` green
+- [x] 10.3 `panopticon login`: a failed config write after approval prints a clear error (the path and the reason, and that the issued token should be revoked on Tokens) and exits 1; a transient network error while polling is retried at the next interval instead of ending the login (until the code expires); verify with `LoginTests`
+- [x] 10.4 Web: `takeReturnPath` accepts only a path whose `new URL(path, origin).origin` is the page's origin (so `/\host` is refused); every `localStorage` access in the shell and the sign-in views is guarded, so blocked storage still lets you sign in; the confirm page shows the server's message for any `ApiError` other than 400, and "Couldn't reach the server" only for network failures; remove the duplicate doc comment above `Teardown` in `router.ts`; verify with Vitest tests for each
+
+## 11. Review fixes: server
+
+- [ ] 11.1 Removal keeps at least one active member: inside the removal transaction, lock the active member rows (`SELECT … FOR UPDATE`), and refuse (409) unless the remover is still active and another active member remains after the removal; verify with a test of two concurrent mutual removals, where exactly one succeeds
+- [ ] 11.2 Sign-in requests take the same path for members and strangers: the request handler only validates, rate-limits and queues a job; the background job looks up the member, stores the link and sends the email; verify that a stranger's and a member's request do the same work on the request path, and that the existing sign-in tests still pass
+- [ ] 11.3 `InitialMembers` swallows only a unique violation (`PostgresException` `UniqueViolation`), as `InviteAsync` does, and lets any other database error fail start-up; verify with a test
+- [ ] 11.4 Remove the unused `PublicUrlOptions.Link`, leaving `SignInEndpoints.LinkRoot` as the one way to build public URLs
+- [ ] 11.5 Purge old auth rows: an hourly background job deletes sessions, sign-in links and device logins that expired more than a day ago (spent links included); record it in design.md as D19; verify with a test using a fake `TimeProvider`
+
 ## Workflow follow-up
 
 - Run the whole-change review and offer `/code-review` before archiving.

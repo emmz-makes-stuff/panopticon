@@ -125,7 +125,12 @@ export function confirmView(env: Env): View {
             }
 
             confirm.disabled = false;
-            error.show("Couldn't reach the server. Try again.");
+            // The server answered (too many requests, a server error): say what it said. Otherwise it's the network.
+            error.show(
+              failure instanceof ApiError
+                ? failure.message
+                : "Couldn't reach the server. Try again.",
+            );
           },
         );
       },

@@ -163,7 +163,13 @@ export function fakeServer(): FakeServer {
 export function fakeNavigation(url: string) {
   let current = new URL(url, "https://panopticon.test");
   const set = (next: string) => {
-    current = new URL(next, current);
+    const url = new URL(next, current);
+    if (url.origin !== current.origin) {
+      // As the browser does: history can only move within the page's origin.
+      throw new DOMException(`Cannot move history to ${url.origin}`, "SecurityError");
+    }
+
+    current = url;
   };
   const location = {
     get pathname() {

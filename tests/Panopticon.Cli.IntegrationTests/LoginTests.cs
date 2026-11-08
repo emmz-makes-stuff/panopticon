@@ -50,7 +50,8 @@ public sealed partial class LoginTests(PostgresFixture postgres, S3Fixture s3) :
         string[] args,
         Func<string, Task>? onFirstWait = null,
         Dictionary<string, string?>? environment = null,
-        CancellationToken? cancellationToken = null)
+        CancellationToken? cancellationToken = null,
+        Func<HttpClient>? createHttpClient = null)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
@@ -68,7 +69,7 @@ public sealed partial class LoginTests(PostgresFixture postgres, S3Fixture s3) :
         }
 
         var command = new LoginCommand(
-            server.CreateClient,
+            createHttpClient ?? server.CreateClient,
             name => environment?.GetValueOrDefault(name),
             Config,
             "vm-1",
@@ -222,6 +223,87 @@ public sealed partial class LoginTests(PostgresFixture postgres, S3Fixture s3) :
 
         Assert.Equal(LoginCommand.Cancelled, run.ExitCode);
         Assert.False(File.Exists(Config.Path));
+    }
+
+    [Fact]
+    public async Task A_failed_save_after_approval_says_so_and_to_revoke_the_token()
+    {
+        var (server, clock) = await ServerAsync();
+        await using var _ = server;
+        using var browser = await server.CreateSignedInClientAsync(cancellationToken: Ct);
+
+        // A file where the config directory should be: creating the directory fails.
+        await File.WriteAllTextAsync(Path.Combine(_configRoot, "panopticon"), "not a directory", Ct);
+
+        var run = await LoginAsync(server, clock, ["--server", ServerUrl], Decide(browser, "approve"));
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Contains("approved, but saving it to", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains("Revoke the new token for vm-1 on the Tokens page", run.Stderr, StringComparison.Ordinal);
+        await using var db = server.NewDb();
+        Assert.Equal(1, await db.ApiTokens.CountAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_dropped_connection_while_polling_is_retried()
+    {
+        var (server, clock) = await ServerAsync();
+        await using var _ = server;
+        using var browser = await server.CreateSignedInClientAsync(cancellationToken: Ct);
+        var flaky = new FailFirstPollHandler(server.Server.CreateHandler());
+
+        var run = await LoginAsync(
+            server,
+            clock,
+            ["--server", ServerUrl],
+            Decide(browser, "approve"),
+            createHttpClient: () => new HttpClient(flaky, disposeHandler: false));
+
+        Assert.Equal(0, run.ExitCode);
+        Assert.True(flaky.Failed);
+        Assert.Contains("Lost contact", run.Stderr, StringComparison.Ordinal);
+        Assert.NotNull(Config.Read(new StringWriter())?.Token);
+    }
+
+    [Fact]
+    public async Task Losing_the_server_for_good_ends_when_the_code_would_have_expired()
+    {
+        var (server, clock) = await ServerAsync();
+        await using var _ = server;
+        var down = new DownAfterStartHandler(server.Server.CreateHandler());
+        var started = clock.GetUtcNow();
+
+        var run = await LoginAsync(server, clock, ["--server", ServerUrl], createHttpClient: () => new HttpClient(down, disposeHandler: false));
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Contains("code has expired", run.Stderr, StringComparison.Ordinal);
+        Assert.True(clock.GetUtcNow() - started >= DeviceEndpoints.Lifetime);
+    }
+
+    /// <summary>Fails the first poll with a connection error, then passes everything through.</summary>
+    private sealed class FailFirstPollHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
+    {
+        public bool Failed { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (!Failed && request.RequestUri!.AbsolutePath.EndsWith("/poll", StringComparison.Ordinal))
+            {
+                Failed = true;
+                throw new HttpRequestException("Connection reset.");
+            }
+
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
+
+    /// <summary>Lets the login start, then fails every poll with a connection error.</summary>
+    private sealed class DownAfterStartHandler(HttpMessageHandler inner) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            request.RequestUri!.AbsolutePath.EndsWith("/poll", StringComparison.Ordinal)
+                ? throw new HttpRequestException("Connection refused.")
+                : base.SendAsync(request, cancellationToken);
     }
 
     [Fact]

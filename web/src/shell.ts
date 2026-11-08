@@ -2,7 +2,7 @@ import { ApiError, createApi, type Api, type FetchLike, type SessionMember } fro
 import { PRODUCT_NAME } from "./app";
 import type { EventSourceFactory } from "./live";
 import { el, routeLink } from "./dom";
-import { saveReturnPath, takeReturnPath } from "./returnPath";
+import { safeStorage, saveReturnPath, takeReturnPath } from "./returnPath";
 import {
   createRouter,
   type HistoryLike,
@@ -163,7 +163,9 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     signedIn(next) {
       member = next;
       renderAccount();
-      void router?.navigate(takeReturnPath(env.local, env.now()) ?? "/", { replace: true });
+      void router?.navigate(takeReturnPath(env.local, env.now(), location.origin) ?? "/", {
+        replace: true,
+      });
     },
     renamed(displayName) {
       if (member) {
@@ -172,7 +174,8 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
       }
     },
     statusSlot,
-    local: deps.local ?? window.localStorage,
+    // Blocked storage (site data off) must not break sign-in: reads give null and writes are dropped.
+    local: safeStorage(() => deps.local ?? window.localStorage),
     location,
     history,
     now: deps.now ?? (() => new Date()),

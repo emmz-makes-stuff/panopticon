@@ -93,11 +93,39 @@ internal sealed class LoginCommand(
         await stdout.WriteLineAsync($"and check that it shows the code {start.UserCode}. Waiting for approval...");
 
         var interval = TimeSpan.FromSeconds(Math.Max(1, start.IntervalSeconds));
+        var lifetime = TimeSpan.FromSeconds(Math.Max(1, start.ExpiresInSeconds));
+        var waited = TimeSpan.Zero;
+        var lostContact = false;
         var pollUri = new Uri(root, "api/device/poll");
         while (true)
         {
             await delay(interval, cancellationToken);
-            using var response = await PostAsync(http, pollUri, new DevicePollRequest(start.DeviceSecret), ContractsJsonContext.Default.DevicePollRequest, cancellationToken);
+            waited += interval;
+
+            HttpResponseMessage pollResponse;
+            try
+            {
+                pollResponse = await PostAsync(http, pollUri, new DevicePollRequest(start.DeviceSecret), ContractsJsonContext.Default.DevicePollRequest, cancellationToken);
+            }
+            catch (Exception ex) when (IsTransient(ex, cancellationToken))
+            {
+                // A dropped connection or a timeout mid-login: keep trying until the code would have expired anyway.
+                if (waited >= lifetime)
+                {
+                    await stderr.WriteLineAsync($"Lost contact with the server at {display}, and the code has expired. Run 'panopticon login' again.");
+                    return 1;
+                }
+
+                if (!lostContact)
+                {
+                    lostContact = true;
+                    await stderr.WriteLineAsync($"Lost contact with the server at {display}. Still trying...");
+                }
+
+                continue;
+            }
+
+            using var response = pollResponse;
             if (!response.IsSuccessStatusCode)
             {
                 await stderr.WriteLineAsync($"The server at {display} refused the login: {await ProblemAsync(response, cancellationToken)}");
@@ -120,7 +148,19 @@ internal sealed class LoginCommand(
                     await stderr.WriteLineAsync("The code expired before anyone approved it. Run 'panopticon login' again.");
                     return 1;
                 case DevicePollStatus.Approved when poll.Token is { Length: > 0 } token:
-                    config.Write(new SavedLogin(root.ToString(), token));
+                    try
+                    {
+                        config.Write(new SavedLogin(root.ToString(), token));
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // The server hands a token over once, so it's lost now: say how to clean it up.
+                        await stderr.WriteLineAsync(
+                            $"The login was approved, but saving it to {config.Path} failed: {ex.Message} "
+                            + $"Revoke the new token for {machineName} on the Tokens page, fix the problem, and run 'panopticon login' again.");
+                        return 1;
+                    }
+
                     var who = poll.Member is { } member ? $"{member.DisplayName} ({member.Email})" : "your member";
                     await stdout.WriteLineAsync($"Logged in to {display} as {who}. Saved to {config.Path}.");
                     return 0;
@@ -130,6 +170,11 @@ internal sealed class LoginCommand(
             }
         }
     }
+
+    /// <summary>A network failure or an HTTP timeout, not the user cancelling.</summary>
+    private static bool IsTransient(Exception exception, CancellationToken cancellationToken) =>
+        exception is HttpRequestException
+        || (exception is TaskCanceledException && !cancellationToken.IsCancellationRequested);
 
     private string? ResolveServer(string? serverArgument)
     {

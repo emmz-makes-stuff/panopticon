@@ -28,8 +28,10 @@ export function saveReturnPath(storage: StorageLike, path: string, now: Date): v
 /**
  * The saved path, removed as it's read so it's used once. Null when there's none, it has expired, or it isn't a path
  * on this site (an open redirect otherwise: anything that can write localStorage could aim the post-sign-in hop).
+ * "On this site" is decided the way the browser will resolve it, against `origin`, so `//host` and `/\host` (which
+ * browsers read as `//host`) are both refused.
  */
-export function takeReturnPath(storage: StorageLike, now: Date): string | null {
+export function takeReturnPath(storage: StorageLike, now: Date, origin: string): string | null {
   let raw: string | null;
   try {
     raw = storage.getItem(RETURN_TO_KEY);
@@ -43,7 +45,57 @@ export function takeReturnPath(storage: StorageLike, now: Date): string | null {
     return null;
   }
 
-  return saved.path.startsWith("/") && !saved.path.startsWith("//") ? saved.path : null;
+  return sameSitePath(saved.path, origin);
+}
+
+function sameSitePath(path: string, origin: string): string | null {
+  if (!path.startsWith("/")) {
+    return null;
+  }
+
+  try {
+    const url = new URL(path, origin);
+    return url.origin === origin ? url.pathname + url.search + url.hash : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A storage that never throws: reads of blocked or unavailable storage give null, and writes are dropped. Sign-in
+ * then still works; it just can't remember the address or the return path.
+ */
+export function safeStorage(open: () => StorageLike): StorageLike {
+  let storage: StorageLike | null;
+  try {
+    storage = open();
+  } catch {
+    storage = null;
+  }
+
+  return {
+    getItem(key) {
+      try {
+        return storage?.getItem(key) ?? null;
+      } catch {
+        return null;
+      }
+    },
+    setItem(key, value) {
+      try {
+        storage?.setItem(key, value);
+      } catch {
+        // Blocked or full: nothing to remember it in.
+      }
+    },
+    removeItem(key) {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        // As setItem.
+      }
+    },
+  };
 }
 
 function parse(raw: string | null): Saved | null {

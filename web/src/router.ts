@@ -10,10 +10,10 @@ export interface ViewContext {
   navigate(path: string, options?: { replace?: boolean }): void;
 }
 
-/** A view renders into `ctx.root`, and may return a teardown that runs when the router leaves it. */
 /** What a view may return: a teardown, run when the router leaves it. */
 export type Teardown = () => void;
 
+/** A view renders into `ctx.root`, and may return a teardown. */
 export type View = (ctx: ViewContext) => Teardown | undefined | Promise<Teardown | undefined>;
 
 /** The parts of `window.history` and `window.location` the router uses, so tests can supply fakes. */
