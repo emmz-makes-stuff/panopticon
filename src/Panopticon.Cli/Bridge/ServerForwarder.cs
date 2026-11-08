@@ -111,7 +111,7 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
             {
                 case HttpRequestException { StatusCode: HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden } http:
                     return $"The Panopticon server at {server} rejected the token ({(int)http.StatusCode!}). "
-                        + $"Check {BridgeSettings.TokenVariable}.";
+                        + "Run 'panopticon login' to get a new token.";
                 case HttpRequestException { StatusCode: { } status }:
                     return $"The Panopticon server at {server} answered {(int)status} {status}.";
                 case HttpRequestException http:

@@ -39,10 +39,10 @@
 
 ## 7. CLI login and configuration
 
-- [ ] 7.1 Add the D14 config file (path per OS, atomic write, mode 0600 and directory 0700 on Unix, source-generated JSON), and make `BridgeSettings` take each value from its environment variable, then the file; verify unit tests for "Saved login", "Environment overrides the saved login" and an unreadable file
-- [ ] 7.2 Update the bridge's messages ("Missing token" naming `panopticon login`, and "Token rejected" saying to run `panopticon login`), and verify the updated bridge tests
-- [ ] 7.3 Implement `panopticon login [--server <url>]` (D15: start, print the code and URL, poll with back-off, save on approval, exit 1 on denied or expired, 130 on cancel), and verify in-process tests against the test server for "Login on a VM", "Approve" (the CLI saves the token and prints the member), "Deny" and "Nobody approves" (with a short expiry), plus "Saved for the bridge" (file mode included)
-- [ ] 7.4 Add `login` to `panopticon --help` and confirm it works in the Native AOT binary (a published-binary test of `login` against an unreachable server, which fails cleanly with no trimming warnings), and update `docs/cli.md` (login, the config file, precedence) and verify every documented command runs as written
+- [x] 7.1 Add the D14 config file (path per OS, atomic write, mode 0600 and directory 0700 on Unix, source-generated JSON), and make `BridgeSettings` take each value from its environment variable, then the file; verify unit tests for "Saved login", "Environment overrides the saved login" and an unreadable file
+- [x] 7.2 Update the bridge's messages ("Missing token" naming `panopticon login`, and "Token rejected" saying to run `panopticon login`), and verify the updated bridge tests
+- [x] 7.3 Implement `panopticon login [--server <url>]` (D15: start, print the code and URL, poll with back-off, save on approval, exit 1 on denied or expired, 130 on cancel), and verify in-process tests against the test server for "Login on a VM", "Approve" (the CLI saves the token and prints the member), "Deny" and "Nobody approves" (with a short expiry), plus "Saved for the bridge" (file mode included)
+- [x] 7.4 Add `login` to `panopticon --help` and confirm it works in the Native AOT binary (a published-binary test of `login` against an unreachable server, which fails cleanly with no trimming warnings), and update `docs/cli.md` (login, the config file, precedence) and verify every documented command runs as written
 
 ## 8. Web: sign-in, pages and the card
 

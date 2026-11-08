@@ -62,6 +62,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         Assert.True(result.IsError);
         Assert.Contains("PANOPTICON_TOKEN", BridgeHarness.Text(result), StringComparison.Ordinal);
+        Assert.Contains("panopticon login", BridgeHarness.Text(result), StringComparison.Ordinal);
         Assert.DoesNotContain("PANOPTICON_SERVER_URL", BridgeHarness.Text(result), StringComparison.Ordinal);
 
         // Still serving.
@@ -256,6 +257,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.True(result.IsError);
         var text = BridgeHarness.Text(result);
         Assert.Contains("rejected the token", text, StringComparison.Ordinal);
+        Assert.Contains("panopticon login", text, StringComparison.Ordinal);
         Assert.DoesNotContain("not-the-right-token", text, StringComparison.Ordinal);
         Assert.DoesNotContain("not-the-right-token", bridge.Log, StringComparison.Ordinal);
 

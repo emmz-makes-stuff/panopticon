@@ -1,3 +1,5 @@
+using Panopticon.Cli.Config;
+
 namespace Panopticon.Cli.Bridge;
 
 /// <summary>The bridge's configuration, read once at start-up (spec cli-bridge, "Configuration").</summary>
@@ -6,11 +8,35 @@ internal sealed record BridgeSettings(string? ServerUrl, string? Token, string W
     public const string ServerUrlVariable = "PANOPTICON_SERVER_URL";
     public const string TokenVariable = "PANOPTICON_TOKEN";
 
-    public static BridgeSettings FromEnvironment() => new(
-        Environment.GetEnvironmentVariable(ServerUrlVariable),
-        Environment.GetEnvironmentVariable(TokenVariable),
-        Environment.CurrentDirectory,
-        Environment.MachineName);
+    public static BridgeSettings FromEnvironment(TextWriter stderr) =>
+        Resolve(Environment.GetEnvironmentVariable, CliConfigFile.ForCurrentUser(), stderr, Environment.CurrentDirectory, Environment.MachineName);
+
+    /// <summary>
+    /// Each value from its environment variable, then from the login <c>panopticon login</c> saved (design D14). The
+    /// file is read only when a variable is unset, so a fully configured environment never touches it.
+    /// </summary>
+    public static BridgeSettings Resolve(
+        Func<string, string?> getEnvironmentVariable,
+        CliConfigFile config,
+        TextWriter stderr,
+        string workingDirectory,
+        string machineName)
+    {
+        ArgumentNullException.ThrowIfNull(getEnvironmentVariable);
+        ArgumentNullException.ThrowIfNull(config);
+        var serverUrl = NonBlank(getEnvironmentVariable(ServerUrlVariable));
+        var token = NonBlank(getEnvironmentVariable(TokenVariable));
+        if (serverUrl is null || token is null)
+        {
+            var saved = config.Read(stderr);
+            serverUrl ??= NonBlank(saved?.ServerUrl);
+            token ??= NonBlank(saved?.Token);
+        }
+
+        return new BridgeSettings(serverUrl, token, workingDirectory, machineName);
+    }
+
+    private static string? NonBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     /// <summary>
     /// The server's online MCP endpoint and the token to send, or an error naming every missing variable.
@@ -32,7 +58,7 @@ internal sealed record BridgeSettings(string? ServerUrl, string? Token, string W
         if (missing.Count > 0)
         {
             throw new BridgeException(
-                $"The bridge isn't configured: set {string.Join(" and ", missing)} in the agent's MCP server environment.");
+                $"The bridge isn't configured: {string.Join(" and ", missing)} {(missing.Count == 1 ? "is" : "are")} not set. Run 'panopticon login' on this machine, or set {(missing.Count == 1 ? "it" : "them")} in the agent's MCP server environment.");
         }
 
         if (!Uri.TryCreate(ServerUrl!.Trim(), UriKind.Absolute, out var url)
