@@ -24,7 +24,8 @@ paraphrase them.
 - `make aot`: a Native AOT publish of the CLI to `artifacts/cli`.
 - `make web-build`, `make web-test`, `make web-format`, `make web-lint`: the `web/` npm scripts (`tsc` +
   `vite build`, `vitest run`, `prettier --check`, `eslint`). Each runs `npm --prefix web ci` first.
-- `make validate`: `openspec validate --strict` for every active change.
+- `make validate`: `openspec validate --strict` for every active change, or for the main specs when there
+  is no active change.
 - `make gates`: all of the above.
 
 `make deps` is separate: it checks that every tool and login in `docs/dependencies.md` is present.

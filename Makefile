@@ -41,11 +41,13 @@ web-format: web-install
 web-lint: web-install
 	@npm --prefix web run lint; code=$$?; echo "WEB_LINT_EXIT:$$code"; exit $$code
 
-# Validates every active change. No active change is a failure, not a silent pass.
+# Validates every active change. With none (e.g. right after an archive) it says so and validates the main specs
+# instead, so the gate still checks something rather than passing silently.
 validate:
 	@fail=0; \
 	if [ -z "$(CHANGES)" ]; then \
-		echo "no active change found under openspec/changes/"; fail=1; \
+		echo "no active change under openspec/changes/: validating the main specs"; \
+		openspec validate --specs --strict || fail=1; \
 	else \
 		for c in $(CHANGES); do openspec validate $$c --strict || fail=1; done; \
 	fi; \
