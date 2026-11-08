@@ -262,8 +262,12 @@ public class MemberEndpointTests(PostgresFixture postgres, S3Fixture s3)
         using var requested = await factory.CreateBrowserClient()
             .PostApiAsync(SignInEndpoints.SignInPath, new { email = "sam@example.com" }, Ct);
 
-        // The handler decides before it answers whether to queue an email, so nothing can arrive later.
+        // Jobs run in the order they're queued: once a later member's email has arrived, Sam's would have too.
         Assert.Equal(HttpStatusCode.Accepted, requested.StatusCode);
+        var before = factory.Emails.To(PanopticonFactory.MemberEmail).Count;
+        (await factory.CreateBrowserClient()
+            .PostApiAsync(SignInEndpoints.SignInPath, new { email = PanopticonFactory.MemberEmail }, Ct)).Dispose();
+        await factory.Emails.WaitForAsync(PanopticonFactory.MemberEmail, before + 1, Ct);
         Assert.Empty(factory.Emails.To("sam@example.com"));
         await using var db = factory.NewDb();
         Assert.Equal(0, await db.SignInLinks.CountAsync(l => l.MemberId == sam.Id, Ct));
@@ -282,6 +286,33 @@ public class MemberEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains("can't remove yourself", await DetailAsync(removed), StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.OK, (await http.GetAsync(SessionEndpoints.SessionPath, Ct)).StatusCode);
         Assert.Single(await ListAsync(http));
+    }
+
+    // Two members removing each other at the same moment: exactly one removal wins, so somebody can still sign in.
+    // Repeated on fresh servers, since one round may not overlap.
+    [Fact]
+    public async Task Two_members_removing_each_other_at_once_leave_one_active()
+    {
+        for (var round = 0; round < 5; round++)
+        {
+            await using var factory = await FactoryAsync();
+            using var mine = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+            var me = (await mine.GetFromJsonAsync<JsonElement>(SessionEndpoints.SessionPath, Ct)).GetProperty("id").GetGuid();
+            var sam = (await (await InviteAsync(mine, "sam@example.com")).Content.ReadFromJsonAsync<MemberView>(Ct))!;
+            using var sams = await factory.CreateSignedInClientAsync("sam@example.com", Ct);
+
+            var results = await Task.WhenAll(RemoveAsync(mine, sam.Id), RemoveAsync(sams, me));
+
+            var statuses = results.Select(r => r.StatusCode).Order().ToList();
+            Assert.Equal(HttpStatusCode.NoContent, statuses[0]);
+            Assert.Contains(statuses[1], new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Conflict });
+            await using var db = factory.NewDb();
+            Assert.Equal(1, await db.Members.CountAsync(m => m.RemovedAt == null, Ct));
+            foreach (var result in results)
+            {
+                result.Dispose();
+            }
+        }
     }
 
     [Fact]

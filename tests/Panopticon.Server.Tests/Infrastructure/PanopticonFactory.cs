@@ -58,6 +58,9 @@ public sealed class PanopticonFactory(
     /// <summary>Replace the real email sender with <see cref="Emails"/>.</summary>
     public bool CaptureEmail { get; init; } = true;
 
+    /// <summary>Extra service registrations, applied after the server's own.</summary>
+    public Action<IServiceCollection>? ExtraServices { get; init; }
+
     /// <summary>Extra configuration settings, applied last.</summary>
     public IReadOnlyDictionary<string, string> Settings { get; init; } = new Dictionary<string, string>();
 
@@ -229,6 +232,11 @@ public sealed class PanopticonFactory(
         if (CaptureEmail)
         {
             builder.ConfigureTestServices(services => services.AddSingleton<IEmailSender>(Emails));
+        }
+
+        if (ExtraServices is not null)
+        {
+            builder.ConfigureTestServices(ExtraServices);
         }
     }
 }

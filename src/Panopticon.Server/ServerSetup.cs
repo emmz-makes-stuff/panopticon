@@ -98,6 +98,8 @@ public static class ServerSetup
         services.AddSingleton<AuthLimits>();
         services.AddSingleton<EmailOutbox>();
         services.AddHostedService(sp => sp.GetRequiredService<EmailOutbox>());
+        services.AddSingleton<AuthCleanup>();
+        services.AddHostedService(sp => sp.GetRequiredService<AuthCleanup>());
 
         // Reporting and live updates.
         services.AddScoped<ReportRecorder>();

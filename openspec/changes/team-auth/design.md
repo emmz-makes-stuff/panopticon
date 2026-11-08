@@ -118,8 +118,10 @@ tokens. ADR-0002 decides .NET 10 and vanilla TypeScript. ADR-0003 decides Postgr
 ### Sign-in flow
 
 - **D8. Endpoints.**
-  - `POST /api/auth/sign-in {email}` always answers 202. When the address is an active member, and within the
-    limit, it stores a link and sends the email.
+  - `POST /api/auth/sign-in {email}` always answers 202. Within the limit, it queues a background job, whoever
+    the address belongs to. When the address is an active member, the job stores a link and sends the email. The
+    request path does the same work for members and strangers, so its timing reveals nothing (found in the
+    whole-change review).
   - The email links to `{PublicUrl}/sign-in/confirm#{secret}`. The secret goes in the URL fragment, so it
     isn't sent in requests, server logs or `Referer`.
   - That SPA page shows "Sign in as …?" and a button. The button posts `POST /api/auth/confirm {secret}`,
@@ -234,6 +236,17 @@ tokens. ADR-0002 decides .NET 10 and vanilla TypeScript. ADR-0003 decides Postgr
     and turns a 401 into a "signed out" event, which the router handles.
   - `connectLive` doesn't open the stream until the session is known. When an `EventSource` error happens, a
     `GET /api/session` check tells "signed out" apart from "offline".
+
+### Housekeeping
+
+- **D19. Purging expired auth rows** (added after the whole-change review).
+  - `AuthCleanup`, a hosted service, runs once soon after start-up and then every hour.
+  - It deletes sessions, sign-in links (spent ones included) and device logins whose `expires_at` is more than a
+    day in the past. The day's grace keeps recent rows around for diagnosing a failed sign-in.
+  - API tokens and members are never purged: revoked tokens and removed members are the record of who reported.
+  - A failed purge is logged at Warning and tried again on the next tick.
+  - One instance per deployment (the Non-Goals), so no lock is needed. Two instances would only both delete the same
+    rows.
 
 ### Gates
 

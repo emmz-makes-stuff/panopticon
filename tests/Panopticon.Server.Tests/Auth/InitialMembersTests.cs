@@ -90,6 +90,25 @@ public class InitialMembersTests(PostgresFixture postgres, S3Fixture s3)
         Assert.ThrowsAny<InvalidOperationException>(() => factory.CreateClient());
     }
 
+    // Only a unique violation means "another instance seeded it first". Any other database error fails start-up as
+    // itself, not as the misleading "Nobody can sign in".
+    [Fact]
+    public async Task A_database_error_while_seeding_fails_start_up_as_that_error()
+    {
+        var connectionString = await postgres.CreateDatabaseAsync(Ct);
+        await using (var db = PostgresFixture.CreateDb(connectionString))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE members ADD CONSTRAINT test_refuse_seed CHECK (email_key <> 'emmz@example.com')",
+                Ct);
+        }
+
+        await using var factory = await FactoryAsync("emmz@example.com", connectionString);
+
+        var error = Assert.ThrowsAny<DbUpdateException>(() => factory.CreateClient());
+        Assert.Contains("test_refuse_seed", error.InnerException?.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task An_invalid_initial_member_fails_start_up_naming_it()
     {

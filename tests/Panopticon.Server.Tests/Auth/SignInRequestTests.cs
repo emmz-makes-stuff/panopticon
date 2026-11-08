@@ -1,6 +1,11 @@
+using System.Data.Common;
 using System.Net;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Server.Auth;
+using Panopticon.Server.Data;
 using Panopticon.Server.Tests.Infrastructure;
 
 namespace Panopticon.Server.Tests.Auth;
@@ -58,6 +63,75 @@ public class SignInRequestTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Empty(factory.Emails.To("stranger@example.com"));
         await using var db = factory.NewDb();
         Assert.Equal(1, await db.SignInLinks.CountAsync(Ct));
+    }
+
+    // "Requesting a sign-in link": the response is the same whether or not an email goes out, in its timing too. The
+    // request path does no database work for anyone; the background job looks the address up.
+    [Fact]
+    public async Task The_request_path_does_the_same_work_for_members_and_strangers()
+    {
+        var counter = new RequestCommandCounter(SignInEndpoints.SignInPath);
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(Ct), await s3.CreateBucketAsync(Ct))
+        {
+            ExtraServices = services =>
+            {
+                services.AddHttpContextAccessor();
+                services.ConfigureDbContext<PanopticonDb>((sp, options) =>
+                    options.AddInterceptors(new CountingInterceptor(sp.GetRequiredService<IHttpContextAccessor>(), counter)));
+            },
+        };
+        using var http = factory.CreateClient();
+
+        (await RequestLinkAsync(http, Member)).Dispose();
+        (await RequestLinkAsync(http, "stranger@example.com")).Dispose();
+        await factory.Emails.WaitForAsync(Member, cancellationToken: Ct);
+
+        Assert.Equal(0, counter.Count);
+        await using var db = factory.NewDb();
+        Assert.Equal(1, await db.SignInLinks.CountAsync(Ct));
+    }
+
+    /// <summary>Counts database commands issued while handling a request to one path.</summary>
+    private sealed class RequestCommandCounter(string path)
+    {
+        private int _count;
+
+        public string Path { get; } = path;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public void Add() => Interlocked.Increment(ref _count);
+    }
+
+    private sealed class CountingInterceptor(IHttpContextAccessor accessor, RequestCommandCounter counter) : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Count();
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Count();
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void Count()
+        {
+            if (accessor.HttpContext?.Request.Path == counter.Path)
+            {
+                counter.Add();
+            }
+        }
     }
 
     [Fact]

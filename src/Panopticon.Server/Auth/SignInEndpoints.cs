@@ -29,7 +29,7 @@ public static class SignInEndpoints
 
     public static IEndpointRouteBuilder MapSignIn(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost(SignInPath, RequestLinkAsync);
+        endpoints.MapPost(SignInPath, RequestLink);
         endpoints.MapPost(ConfirmPath, ConfirmAsync);
         return endpoints;
     }
@@ -93,19 +93,17 @@ public static class SignInEndpoints
         extensions: new Dictionary<string, object?> { ["reason"] = reason });
 
     /// <summary>
-    /// Always 202 for a valid address, member or not; the email (if any) goes out in the background. Over the limit
-    /// is a 429 whoever the address belongs to.
+    /// Always 202 for a valid address, member or not. Over the limit is a 429 whoever the address belongs to. The
+    /// request path does the same work for everyone: it queues a <see cref="SignInLinkJob"/>, which looks the address
+    /// up, stores the link and sends the email in the background, so response times say nothing about membership.
     /// </summary>
-    internal static async Task<IResult> RequestLinkAsync(
+    internal static IResult RequestLink(
         SignInRequest request,
         HttpContext context,
-        PanopticonDb db,
         AuthLimits limits,
         EmailOutbox emails,
         IOptions<PublicUrlOptions> publicUrl,
-        IHostEnvironment environment,
-        TimeProvider time,
-        CancellationToken cancellationToken)
+        IHostEnvironment environment)
     {
         if (!MemberEmail.IsValid(request.Email))
         {
@@ -118,24 +116,7 @@ public static class SignInEndpoints
             return Problem(HttpStatusCode.TooManyRequests, "Too many sign-in requests. Try again in a few minutes.");
         }
 
-        var member = await db.Members.SingleOrDefaultAsync(m => m.EmailKey == key && m.RemovedAt == null, cancellationToken);
-        if (member is not null)
-        {
-            var secret = Secrets.NewSecret();
-            var now = time.GetUtcNow();
-            db.SignInLinks.Add(new SignInLink
-            {
-                MemberId = member.Id,
-                SecretHash = Secrets.Hash(secret),
-                CreatedAt = now,
-                ExpiresAt = now + LinkLifetime,
-            });
-            await db.SaveChangesAsync(cancellationToken);
-
-            var link = $"{LinkRoot(publicUrl.Value, context, environment)}sign-in/confirm#{secret}";
-            emails.Enqueue(SignInEmail.Create(member.Email, link));
-        }
-
+        emails.Enqueue(new SignInLinkJob(key, LinkRoot(publicUrl.Value, context, environment)));
         return TypedResults.Accepted((string?)null, new { message = "Check your email for a sign-in link." });
     }
 
@@ -149,6 +130,39 @@ public static class SignInEndpoints
             : environment.IsDevelopment()
                 ? new Uri($"{context.Request.Scheme}://{context.Request.Host}/")
                 : throw new InvalidOperationException($"{PublicUrlOptions.ConfigKey} is not configured.");
+}
+
+/// <summary>
+/// A sign-in link for an email key, made in the background (design D8). When the key belongs to an active member, it
+/// stores a link (only its hash) and returns the email; otherwise there's nothing to send.
+/// </summary>
+public sealed record SignInLinkJob(string EmailKey, Uri LinkRoot) : IEmailJob
+{
+    public string Description => SignInEmail.Subject;
+
+    public async Task<OutgoingEmail?> PrepareAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        var db = services.GetRequiredService<PanopticonDb>();
+        var member = await db.Members.AsNoTracking()
+            .SingleOrDefaultAsync(m => m.EmailKey == EmailKey && m.RemovedAt == null, cancellationToken);
+        if (member is null)
+        {
+            return null;
+        }
+
+        var secret = Secrets.NewSecret();
+        var now = services.GetRequiredService<TimeProvider>().GetUtcNow();
+        db.SignInLinks.Add(new SignInLink
+        {
+            MemberId = member.Id,
+            SecretHash = Secrets.Hash(secret),
+            CreatedAt = now,
+            ExpiresAt = now + SignInEndpoints.LinkLifetime,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return SignInEmail.Create(member.Email, $"{LinkRoot}sign-in/confirm#{secret}");
+    }
 }
 
 /// <summary>The sign-in email: plain words, the link, and no tracking.</summary>

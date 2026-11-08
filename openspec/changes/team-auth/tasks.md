@@ -67,11 +67,11 @@
 
 ## 11. Review fixes: server
 
-- [ ] 11.1 Removal keeps at least one active member: inside the removal transaction, lock the active member rows (`SELECT … FOR UPDATE`), and refuse (409) unless the remover is still active and another active member remains after the removal; verify with a test of two concurrent mutual removals, where exactly one succeeds
-- [ ] 11.2 Sign-in requests take the same path for members and strangers: the request handler only validates, rate-limits and queues a job; the background job looks up the member, stores the link and sends the email; verify that a stranger's and a member's request do the same work on the request path, and that the existing sign-in tests still pass
-- [ ] 11.3 `InitialMembers` swallows only a unique violation (`PostgresException` `UniqueViolation`), as `InviteAsync` does, and lets any other database error fail start-up; verify with a test
-- [ ] 11.4 Remove the unused `PublicUrlOptions.Link`, leaving `SignInEndpoints.LinkRoot` as the one way to build public URLs
-- [ ] 11.5 Purge old auth rows: an hourly background job deletes sessions, sign-in links and device logins that expired more than a day ago (spent links included); record it in design.md as D19; verify with a test using a fake `TimeProvider`
+- [x] 11.1 Removal keeps at least one active member: inside the removal transaction, lock the active member rows (`SELECT … FOR UPDATE`), and refuse (409) unless the remover is still active and another active member remains after the removal; verify with a test of two concurrent mutual removals, where exactly one succeeds
+- [x] 11.2 Sign-in requests take the same path for members and strangers: the request handler only validates, rate-limits and queues a job; the background job looks up the member, stores the link and sends the email; verify that a stranger's and a member's request do the same work on the request path, and that the existing sign-in tests still pass
+- [x] 11.3 `InitialMembers` swallows only a unique violation (`PostgresException` `UniqueViolation`), as `InviteAsync` does, and lets any other database error fail start-up; verify with a test
+- [x] 11.4 Remove the unused `PublicUrlOptions.Link`, leaving `SignInEndpoints.LinkRoot` as the one way to build public URLs
+- [x] 11.5 Purge old auth rows: an hourly background job deletes sessions, sign-in links and device logins that expired more than a day ago (spent links included); record it in design.md as D19; verify with a test using a fake `TimeProvider`
 
 ## Workflow follow-up
 

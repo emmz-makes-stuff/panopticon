@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Panopticon.Server.Data;
 
 namespace Panopticon.Server.Auth;
@@ -63,7 +64,7 @@ public sealed partial class InitialMembers(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             // Another instance seeded the same address first; what's there now is what counts.
             db.ChangeTracker.Clear();

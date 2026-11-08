@@ -57,14 +57,29 @@ public static class MemberEndpoints
         }
 
         var now = time.GetUtcNow();
+        var remover = user.GetMemberId();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var removed = await db.Members
-            .Where(m => m.Id == id && m.RemovedAt == null)
-            .ExecuteUpdateAsync(m => m.SetProperty(x => x.RemovedAt, now), cancellationToken);
-        if (removed == 0)
+
+        // Lock every active member row (in id order, so two removals can't deadlock). Two members removing each other at
+        // once then take turns: the second sees that its remover has gone, so the team never ends up with nobody.
+        var active = await db.Members
+            .FromSql($"SELECT * FROM members WHERE removed_at IS NULL ORDER BY id FOR UPDATE")
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        if (!active.Any(m => m.Id == id))
         {
             return SignInEndpoints.Problem(HttpStatusCode.NotFound, "There's no such member.");
         }
+
+        if (!active.Any(m => m.Id == remover))
+        {
+            // Removed by someone else a moment ago. Since the remover is active otherwise, at least they remain.
+            return SignInEndpoints.Problem(HttpStatusCode.Conflict, "You've been removed, so you can't remove anyone.");
+        }
+
+        await db.Members
+            .Where(m => m.Id == id)
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.RemovedAt, now), cancellationToken);
 
         await db.Sessions.Where(s => s.MemberId == id).ExecuteDeleteAsync(cancellationToken);
         await db.SignInLinks.Where(l => l.MemberId == id && l.UsedAt == null).ExecuteDeleteAsync(cancellationToken);

@@ -24,15 +24,4 @@ public sealed class PublicUrlOptions
         uri = new Uri(parsed.GetLeftPart(UriPartial.Path).TrimEnd('/') + "/");
         return true;
     }
-
-    /// <summary>An absolute URL for a path under the public URL, e.g. <c>Link("sign-in/confirm")</c>.</summary>
-    public Uri Link(string relativePath)
-    {
-        if (!TryGetUri(out var root))
-        {
-            throw new InvalidOperationException($"{ConfigKey} is not configured.");
-        }
-
-        return new Uri(root, relativePath.TrimStart('/'));
-    }
 }
