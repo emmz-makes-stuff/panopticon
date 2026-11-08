@@ -1,0 +1,204 @@
+using System.Text.Json;
+using Panopticon.Cli.Bridge;
+using Panopticon.Cli.IntegrationTests.Infrastructure;
+using Panopticon.Cli.Tests.Infrastructure;
+using Panopticon.Contracts;
+using Panopticon.Server.Dashboard;
+using Panopticon.Server.Tests.Infrastructure;
+
+[assembly: AssemblyFixture(typeof(PostgresFixture))]
+[assembly: AssemblyFixture(typeof(S3Fixture))]
+
+namespace Panopticon.Cli.IntegrationTests;
+
+// Spec cli-bridge: Stdio MCP server (tool listing), Configuration, Repo root, Agent identity, Forwarding to the server,
+// and the credentials half of "Repo identity from git remote", through the real bridge host and an in-process server.
+public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
+{
+    private const string Tasks = """
+        ## 1. Setup
+        - [x] 1.1 First
+        - [x] 1.2 Second
+        ## 2. Core
+        - [x] 2.1 Third
+        - [ ] 2.2 Fourth
+        """;
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private static BridgeSettings Settings(string workingDirectory, string? serverUrl = "http://localhost/", string? token = PanopticonFactory.Token) =>
+        new(serverUrl, token, workingDirectory, "vm-1");
+
+    // --- Stdio MCP server ---
+
+    [Fact]
+    public async Task Agent_lists_report_progress_with_change_required_and_section_optional()
+    {
+        using var repo = TempGitRepo.Create();
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), () => new HttpClient(), "claude-code", Ct);
+
+        var tools = await bridge.Client.ListToolsAsync(cancellationToken: Ct);
+
+        var tool = Assert.Single(tools);
+        Assert.Equal("report_progress", tool.Name);
+        var schema = tool.ProtocolTool.InputSchema;
+        var properties = schema.GetProperty("properties");
+        Assert.True(properties.TryGetProperty("change", out _));
+        Assert.True(properties.TryGetProperty("section", out _));
+        var required = schema.GetProperty("required").EnumerateArray().Select(e => e.GetString()).ToList();
+        Assert.Equal(["change"], required);
+    }
+
+    // --- Configuration ---
+
+    [Fact]
+    public async Task Missing_token_names_it_and_the_bridge_keeps_serving()
+    {
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, token: null), () => new HttpClient(), "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        Assert.Contains("PANOPTICON_TOKEN", BridgeHarness.Text(result), StringComparison.Ordinal);
+        Assert.DoesNotContain("PANOPTICON_SERVER_URL", BridgeHarness.Text(result), StringComparison.Ordinal);
+
+        // Still serving.
+        Assert.Single(await bridge.Client.ListToolsAsync(cancellationToken: Ct));
+        Assert.True((await bridge.ReportAsync("walking-skeleton", null, Ct)).IsError);
+    }
+
+    [Fact]
+    public async Task Missing_server_url_and_token_names_both()
+    {
+        using var repo = TempGitRepo.Create();
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, serverUrl: " ", token: null), () => new HttpClient(), "claude-code", Ct);
+
+        var text = BridgeHarness.Text(await bridge.ReportAsync("walking-skeleton", null, Ct));
+
+        Assert.Contains("PANOPTICON_SERVER_URL", text, StringComparison.Ordinal);
+        Assert.Contains("PANOPTICON_TOKEN", text, StringComparison.Ordinal);
+    }
+
+    // --- Repo root (through the tool) ---
+
+    [Fact]
+    public async Task Not_a_git_repo_is_a_tool_error()
+    {
+        using var directory = TempGitRepo.CreateEmptyDirectory();
+        await using var bridge = await BridgeHarness.StartAsync(Settings(directory.Root), () => new HttpClient(), "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        Assert.Contains("No git repository was found", BridgeHarness.Text(result), StringComparison.Ordinal);
+    }
+
+    // --- Agent identity + Forwarding: Successful report ---
+
+    [Fact]
+    public async Task Successful_report_from_a_subdirectory_returns_progress_and_identifies_the_agent()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var repo = TempGitRepo.Create("git@github.com:emmz/panopticon.git");
+        repo.WriteTasks("walking-skeleton", Tasks);
+        var subdirectory = repo.CreateSubdirectory(Path.Combine("src", "app"));
+        await using var bridge = await BridgeHarness.StartAsync(Settings(subdirectory), server.CreateClient, "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", 2, Ct);
+
+        Assert.True(result.IsError is not true, BridgeHarness.Text(result));
+        Assert.Equal("Overall 3/4 · section 2 Core 1/2", BridgeHarness.Text(result));
+        var progress = result.StructuredContent!.Value.Deserialize(ContractsJsonContext.Default.ReportProgressResult)!;
+        Assert.Equal(new ProgressCount(3, 4), progress.Overall);
+        Assert.Equal(new SectionSummary(2, "Core", new ProgressCount(1, 2)), progress.CurrentSection);
+
+        await using var db = server.NewDb();
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
+        Assert.Equal("walking-skeleton", card.Change);
+        var agent = Assert.Single(card.Agents);
+        Assert.Equal(("claude-code", "vm-1"), (agent.Client, agent.Machine));
+    }
+
+    [Fact]
+    public async Task Credentials_in_the_remote_are_never_sent_or_logged()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var repo = TempGitRepo.Create("https://user:secret@github.com/emmz/panopticon.git");
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), server.CreateClient, "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError is not true, BridgeHarness.Text(result));
+        await using var db = server.NewDb();
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
+        Assert.DoesNotContain("secret", bridge.Log, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", BridgeHarness.Text(result), StringComparison.Ordinal);
+    }
+
+    // --- Forwarding: Server unreachable ---
+
+    [Fact]
+    public async Task Server_unreachable_names_the_url_and_the_bridge_keeps_serving()
+    {
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("walking-skeleton", Tasks);
+        // Port 9 (discard) on loopback: nothing listens there, so the connection is refused at once.
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root, serverUrl: "http://user:pw@127.0.0.1:9/?x=1"), () => new HttpClient(), "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        var text = BridgeHarness.Text(result);
+        Assert.Contains("http://127.0.0.1:9/mcp", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("pw", text, StringComparison.Ordinal);
+
+        Assert.Single(await bridge.Client.ListToolsAsync(cancellationToken: Ct));
+        Assert.True((await bridge.ReportAsync("walking-skeleton", null, Ct)).IsError);
+    }
+
+    // --- Forwarding: Token rejected ---
+
+    [Fact]
+    public async Task Token_rejected_says_so_without_echoing_the_token()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root, token: "not-the-right-token"), server.CreateClient, "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        var text = BridgeHarness.Text(result);
+        Assert.Contains("rejected the token", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("not-the-right-token", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("not-the-right-token", bridge.Log, StringComparison.Ordinal);
+
+        await using var db = server.NewDb();
+        Assert.Empty(await new ChangeCards(db).ListAsync(Ct));
+    }
+
+    // --- Forwarding: a server-side tool error comes back as a tool error ---
+
+    [Fact]
+    public async Task Server_tool_error_comes_back_as_a_tool_error()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var repo = TempGitRepo.Create();
+        // A tasks.md over the server's size limit makes the server's own tool fail.
+        repo.WriteTasks("walking-skeleton", "## 1. Big\n" + new string('x', 2 * 1024 * 1024));
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), server.CreateClient, "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        Assert.StartsWith("The Panopticon server refused the report:", BridgeHarness.Text(result), StringComparison.Ordinal);
+    }
+}

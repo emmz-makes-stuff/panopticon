@@ -13,8 +13,9 @@ CHANGES := $(notdir $(patsubst %/,%,$(filter-out %/archive/,$(wildcard openspec/
 build:
 	@dotnet build Panopticon.slnx -c Release -warnaserror; code=$$?; echo "BUILD_EXIT:$$code"; exit $$code
 
-# Needs Docker (Testcontainers: Postgres, MinIO).
-test:
+# Needs Docker (Testcontainers: Postgres, SeaweedFS). Runs aot first: the CLI end-to-end tests drive the
+# published binary in artifacts/cli.
+test: aot
 	@dotnet test --solution Panopticon.slnx -c Release; code=$$?; echo "TEST_EXIT:$$code"; exit $$code
 
 format:

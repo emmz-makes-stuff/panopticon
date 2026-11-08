@@ -8,6 +8,7 @@
     <!-- MCP (design D2) -->
     <PackageVersion Include="ModelContextProtocol" Version="2.4.0" />
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
 
     <!-- Markdown (design D8) -->
     <PackageVersion Include="Markdig" Version="1.6.0" />

@@ -10,11 +10,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Panopticon.Contracts\Panopticon.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Panopticon.Cli.Tests" />
+    <InternalsVisibleTo Include="Panopticon.Cli.IntegrationTests" />
   </ItemGroup>
 
 </Project>

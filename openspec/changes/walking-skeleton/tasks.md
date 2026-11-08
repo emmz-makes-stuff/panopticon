@@ -35,11 +35,11 @@
 
 ## 6. CLI bridge
 
-- [ ] 6.1 Implement git-remote parsing into host/owner/repo (SSH, scp-style, HTTPS, Azure DevOps markers, credentials stripped), and verify unit tests for every "Repo identity from git remote" scenario
-- [ ] 6.2 Implement repo-root discovery and the change-document reader with path-traversal refusal, and verify tests using a temp git repo for the Repo root and "Change documents read locally" scenarios
-- [ ] 6.3 Implement `panopticon mcp` (stdio server via `WithTools<T>()`, stderr-only logging, env-var config, client-name + host-name agent identity, forwarding through `HttpClientTransport` with the bearer token, server errors mapped to tool errors), and verify tests for the Configuration, Agent identity and "Forwarding to the server" scenarios against an in-process server
-- [ ] 6.4 Publish the CLI with the aot gate, and verify an end-to-end test that launches the published binary over stdio, lists tools, and reports successfully to a Testcontainers-backed server
-- [ ] 6.5 Document agent configuration (an MCP config snippet for Claude Code plus the env vars) in `docs/cli.md`, and verify the documented snippet works against a local run
+- [x] 6.1 Implement git-remote parsing into host/owner/repo (SSH, scp-style, HTTPS, Azure DevOps markers, credentials stripped), and verify unit tests for every "Repo identity from git remote" scenario
+- [x] 6.2 Implement repo-root discovery and the change-document reader with path-traversal refusal, and verify tests using a temp git repo for the Repo root and "Change documents read locally" scenarios
+- [x] 6.3 Implement `panopticon mcp` (stdio server via `WithTools<T>()`, stderr-only logging, env-var config, client-name + host-name agent identity, forwarding through `HttpClientTransport` with the bearer token, server errors mapped to tool errors), and verify tests for the Configuration, Agent identity and "Forwarding to the server" scenarios against an in-process server
+- [x] 6.4 Publish the CLI with the aot gate, and verify an end-to-end test that launches the published binary over stdio, lists tools, and reports successfully to a Testcontainers-backed server
+- [x] 6.5 Document agent configuration (an MCP config snippet for Claude Code plus the env vars) in `docs/cli.md`, and verify the documented snippet works against a local run
 
 ## 7. Web dashboard
 
