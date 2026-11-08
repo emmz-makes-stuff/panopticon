@@ -10,9 +10,9 @@
 
 ## 2. Task progress parsing
 
-- [ ] 2.1 Implement the `tasks.md` parser in the server (Markdig AST: level-2 sections with number/title, checkbox detection per the `task-progress` rules, overall and per-section counts), and verify unit tests cover every Sections, Task counting and Overall progress scenario
-- [ ] 2.2 Implement current-section selection (reported section if it exists, else first unfinished, else last section with tasks), and verify unit tests cover all four Current section scenarios
-- [ ] 2.3 Enforce the 1 MiB limit and make sure no raw HTML survives parsing, and verify the Untrusted content scenarios as unit tests
+- [x] 2.1 Implement the `tasks.md` parser in the server (Markdig AST: level-2 sections with number/title, checkbox detection per the `task-progress` rules, overall and per-section counts), and verify unit tests cover every Sections, Task counting and Overall progress scenario
+- [x] 2.2 Implement current-section selection (reported section if it exists, else first unfinished, else last section with tasks), and verify unit tests cover all four Current section scenarios
+- [x] 2.3 Enforce the 1 MiB limit and make sure no raw HTML survives parsing, and verify the Untrusted content scenarios as unit tests
 
 ## 3. Persistence
 

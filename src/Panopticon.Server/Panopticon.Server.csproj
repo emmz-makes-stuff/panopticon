@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Markdig" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Panopticon.Server.Tests" />
   </ItemGroup>
 
