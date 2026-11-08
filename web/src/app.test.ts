@@ -44,7 +44,9 @@ describe("mountApp", () => {
     expect(cardsIn(root)).toHaveLength(0);
     expect(text(root, ".empty-state h2")).toBe("No agents have reported yet");
     expect(text(root, ".empty-state pre")).toContain("panopticon mcp");
-    expect(text(root, ".empty-state pre")).toContain("PANOPTICON_SERVER_URL");
+    expect(text(root, ".empty-state pre")).toContain(
+      `panopticon login --server ${location.origin}`,
+    );
   });
 
   it("says when the changes couldn't be loaded", async () => {

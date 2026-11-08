@@ -14,7 +14,71 @@ function query<T extends Element = HTMLElement>(root: ParentNode, selector: stri
 
 const bar = (root: HTMLElement, kind: "section" | "overall") => query(root, `.bar-${kind}`);
 
-// Spec live-dashboard, "Card content".
+// Spec live-dashboard, "Card content" (team-auth: the member on each agent row, design D17).
+describe("renderCard agents and members", () => {
+  it("Card shows identity and agents: the member's display name follows the agent, as its own element", () => {
+    const element = renderCard(
+      card({
+        agents: [
+          {
+            client: "claude-code",
+            machine: "vm-1",
+            lastReportedAt: "2026-11-08T11:57:00Z",
+            member: "Emmz",
+          },
+        ],
+      }),
+      NOW,
+    );
+
+    const row = query(element, ".card-agent");
+    expect(row.textContent).toBe("claude-code@vm-1 Emmz");
+    expect(text(row, ".card-agent-member")).toBe("Emmz");
+  });
+
+  it("Agent without a member: the row shows only the client and machine", () => {
+    const element = renderCard(
+      card({
+        agents: [
+          {
+            client: "claude-code",
+            machine: "vm-1",
+            lastReportedAt: "2026-11-08T11:57:00Z",
+            member: null,
+          },
+          { client: "cursor", machine: "laptop", lastReportedAt: "2026-11-08T11:00:00Z" },
+        ],
+      }),
+      NOW,
+    );
+
+    expect([...element.querySelectorAll(".card-agent")].map((a) => a.textContent)).toEqual([
+      "claude-code@vm-1",
+      "cursor@laptop",
+    ]);
+    expect(element.querySelector(".card-agent-member")).toBeNull();
+  });
+
+  it("shows a member name with markup as text", () => {
+    const element = renderCard(
+      card({
+        agents: [
+          {
+            client: "c",
+            machine: "m",
+            lastReportedAt: "2026-11-08T11:57:00Z",
+            member: "<i>Sam</i>",
+          },
+        ],
+      }),
+      NOW,
+    );
+
+    expect(text(element, ".card-agent-member")).toBe("<i>Sam</i>");
+    expect(element.querySelector(".card-agent i")).toBeNull();
+  });
+});
+
 describe("renderCard content", () => {
   it("shows the repo with its host, the change, the agents and when it last reported", () => {
     const element = renderCard(

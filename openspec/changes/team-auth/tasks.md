@@ -46,11 +46,11 @@
 
 ## 8. Web: sign-in, pages and the card
 
-- [ ] 8.1 Add the D18 router and the `api.ts` wrapper (the D6 header, and 401 → signed out), plus the session-first start-up in `main.ts` and the "signed out vs offline" check in `connectLive`, and verify Vitest tests for routing, the 401 handling and "Session ends while watching"
-- [ ] 8.2 Build the sign-in pages (`/sign-in`: the request form and "check your email"; `/sign-in/confirm`: read the fragment, "Sign in as …?", confirm, and the used and expired messages with a resend), and verify Vitest tests for each state
-- [ ] 8.3 Build the signed-in header (name, Members, Tokens, Sign out), and the members page (list, invite, rename yourself, remove others with a confirmation), with display names rendered as text; verify Vitest tests for each action and for markup in a name staying text
-- [ ] 8.4 Build the device approval page (`/device?code=`: code entry, machine name, approve or deny, never on load, the code kept across sign-in) and the tokens page (list, revoke), and verify Vitest tests for "Not signed in" (the return trip), approve, deny, an invalid code, and revoke
-- [ ] 8.5 Show the member on each card's agent row (D17) and update `web/DESIGN.md` for the new pages and the row, using the `frontend-design` skill; verify the card tests for "Card shows identity and agents" and "Agent without a member"
+- [x] 8.1 Add the D18 router and the `api.ts` wrapper (the D6 header, and 401 → signed out), plus the session-first start-up in `main.ts` and the "signed out vs offline" check in `connectLive`, and verify Vitest tests for routing, the 401 handling and "Session ends while watching"
+- [x] 8.2 Build the sign-in pages (`/sign-in`: the request form and "check your email"; `/sign-in/confirm`: read the fragment, "Sign in as …?", confirm, and the used and expired messages with a resend), and verify Vitest tests for each state
+- [x] 8.3 Build the signed-in header (name, Members, Tokens, Sign out), and the members page (list, invite, rename yourself, remove others with a confirmation), with display names rendered as text; verify Vitest tests for each action and for markup in a name staying text
+- [x] 8.4 Build the device approval page (`/device?code=`: code entry, machine name, approve or deny, never on load, the code kept across sign-in) and the tokens page (list, revoke), and verify Vitest tests for "Not signed in" (the return trip), approve, deny, an invalid code, and revoke
+- [x] 8.5 Show the member on each card's agent row (D17) and update `web/DESIGN.md` for the new pages and the row, using the `frontend-design` skill; verify the card tests for "Card shows identity and agents" and "Agent without a member"
 
 ## 9. Integration and human verification
 

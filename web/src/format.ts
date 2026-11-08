@@ -34,3 +34,13 @@ export function relativeTime(iso: string, now: Date): string {
 
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+/** A calendar date such as "8 Nov 2026" (UTC, so it reads the same wherever the browser is). */
+export function calendarDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}

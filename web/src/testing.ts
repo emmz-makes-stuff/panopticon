@@ -92,3 +92,133 @@ export class FakeEventSource implements EventSourceLike {
 
 /** Lets pending promise callbacks (a refresh's fetch and render) run. */
 export const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** One call the fake server received. */
+export interface ServerCall {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: unknown;
+}
+
+export type ServerAnswer = { status: number; body?: unknown };
+
+export interface FakeServer extends FetchLike {
+  calls: ServerCall[];
+  /** Answers `method path` (path without its query) with a fixed answer, or one computed from the call. */
+  on(
+    method: string,
+    path: string,
+    answer: ServerAnswer | ((call: ServerCall) => ServerAnswer),
+  ): FakeServer;
+  /** The calls to `method path`. */
+  to(method: string, path: string): ServerCall[];
+}
+
+/** A fetch that routes by method and path. Anything not set up answers 404. */
+export function fakeServer(): FakeServer {
+  const routes = new Map<string, ServerAnswer | ((call: ServerCall) => ServerAnswer)>();
+  const server = Object.assign(
+    (input: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const path = input.split("?")[0] ?? input;
+      const call: ServerCall = {
+        method,
+        path,
+        headers: { ...(init?.headers as Record<string, string> | undefined) },
+        body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+      };
+      server.calls.push(call);
+      const route = routes.get(`${method} ${path}`);
+      const answer =
+        typeof route === "function"
+          ? route(call)
+          : (route ?? { status: 404, body: { detail: "Not found." } });
+      return Promise.resolve(
+        new Response(answer.body === undefined ? null : JSON.stringify(answer.body), {
+          status: answer.status,
+        }),
+      );
+    },
+    {
+      calls: [] as ServerCall[],
+      on(
+        method: string,
+        path: string,
+        answer: ServerAnswer | ((call: ServerCall) => ServerAnswer),
+      ) {
+        routes.set(`${method} ${path}`, answer);
+        return server;
+      },
+      to(method: string, path: string) {
+        return server.calls.filter((call) => call.method === method && call.path === path);
+      },
+    },
+  );
+
+  return server;
+}
+
+/** A history and location that move together, starting at `url` (path, query and fragment). */
+export function fakeNavigation(url: string) {
+  let current = new URL(url, "https://panopticon.test");
+  const set = (next: string) => {
+    current = new URL(next, current);
+  };
+  const location = {
+    get pathname() {
+      return current.pathname;
+    },
+    get search() {
+      return current.search;
+    },
+    get hash() {
+      return current.hash;
+    },
+    get origin() {
+      return current.origin;
+    },
+  };
+  const history = {
+    entries: [current.pathname + current.search] as string[],
+    pushState(_data: unknown, _unused: string, next: string) {
+      set(next);
+      history.entries.push(current.pathname + current.search);
+    },
+    replaceState(_data: unknown, _unused: string, next: string) {
+      set(next);
+      history.entries[history.entries.length - 1] = current.pathname + current.search;
+    },
+  };
+  return { location, history, path: () => current.pathname + current.search };
+}
+
+/** An in-memory Storage. */
+export function memoryStorage(initial: Record<string, string> = {}) {
+  const items = new Map(Object.entries(initial));
+  return {
+    items,
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
+    removeItem: (key: string) => void items.delete(key),
+  };
+}
+
+export const MEMBER = { id: "m1", email: "emmz@example.com", displayName: "Emmz" };
+
+/** Waits until `check` passes (or fails after a few event-loop turns), for UI that updates after fetches. */
+export async function until(check: () => boolean, turns = 20): Promise<void> {
+  for (let i = 0; i < turns && !check(); i++) {
+    await settle();
+  }
+}
+
+/** The element matching `selector`; throws (failing the test) when there's none. */
+export function q<T extends Element = HTMLElement>(root: ParentNode, selector: string): T {
+  const found = root.querySelector<T>(selector);
+  if (!found) {
+    throw new Error(`No element matches ${selector}`);
+  }
+
+  return found;
+}

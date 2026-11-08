@@ -16,10 +16,15 @@ export interface EventSourceLike {
 export type EventSourceFactory = (url: string) => EventSourceLike;
 
 export interface LiveOptions {
-  createEventSource?: EventSourceFactory;
+  createEventSource?: EventSourceFactory | undefined;
   /** Delays before reopening after the browser gives up on a connection; the last one repeats. */
-  retryDelaysMs?: readonly number[];
-  setTimer?: (callback: () => void, ms: number) => unknown;
+  retryDelaysMs?: readonly number[] | undefined;
+  setTimer?: ((callback: () => void, ms: number) => unknown) | undefined;
+  /**
+   * Asked after a stream error, to tell "signed out" from "offline" (design D18): resolves false when the session
+   * has ended. The stream then stops for good, with no reconnect. A check that fails counts as still signed in.
+   */
+  checkSignedIn?: (() => Promise<boolean>) | undefined;
 }
 
 /** EventSource.CLOSED: the browser won't retry by itself. */
@@ -64,6 +69,24 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
 
     current.onerror = () => {
       app.setStatus("offline");
+      if (options.checkSignedIn) {
+        // The browser doesn't say why a stream failed: a 401 (the session ended) looks like a dropped connection.
+        void options.checkSignedIn().then(
+          (signedIn) => (signedIn ? retry() : stopFor(current)),
+          () => retry(),
+        );
+        return;
+      }
+
+      retry();
+    };
+
+    function stopFor(failed: EventSourceLike): void {
+      stopped = true;
+      failed.close();
+    }
+
+    function retry(): void {
       if (current.readyState === CLOSED && !stopped) {
         current.close();
         const delay = delays[Math.min(failures, delays.length - 1)] ?? 1000;
@@ -74,7 +97,7 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
           }
         }, delay);
       }
-    };
+    }
   }
 
   open();

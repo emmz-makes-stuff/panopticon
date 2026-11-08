@@ -18,6 +18,8 @@ export interface CardAgent {
   machine: string;
   /** ISO 8601. */
   lastReportedAt: string;
+  /** The display name of the member whose token reported, or null (the Development bootstrap token, or older rows). */
+  member?: string | null;
 }
 
 export interface CardSection {
