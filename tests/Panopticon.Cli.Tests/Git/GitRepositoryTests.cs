@@ -53,4 +53,56 @@ public class GitRepositoryTests
         Assert.Contains("no 'origin' remote", error.Message, StringComparison.Ordinal);
         Assert.Contains("needs a remote", error.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Cancelling_a_call_kills_the_child_process()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses sh.");
+        using var directory = TempGitRepo.CreateEmptyDirectory();
+        var pidFile = Path.Combine(directory.Root, "pid");
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+
+        // A stand-in for a git that hangs: it records its process id, then sleeps.
+        var run = GitRepository.RunProcessAsync("sh", directory.Root, ["-c", $"echo $$ > '{pidFile}'; exec sleep 30"], cancel.Token);
+        var pid = await WaitForPidAsync(pidFile);
+        await cancel.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (IsRunning(pid) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20, Ct);
+        }
+
+        Assert.False(IsRunning(pid), $"Process {pid} is still running after the call was cancelled.");
+    }
+
+    private static async Task<int> WaitForPidAsync(string pidFile)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(pidFile) && int.TryParse((await File.ReadAllTextAsync(pidFile, Ct)).Trim(), out var pid))
+            {
+                return pid;
+            }
+
+            await Task.Delay(20, Ct);
+        }
+
+        throw new TimeoutException("The child process never wrote its id.");
+    }
+
+    private static bool IsRunning(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 }

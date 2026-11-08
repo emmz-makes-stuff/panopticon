@@ -17,7 +17,11 @@ public readonly record struct TaskProgress(int Done, int Total)
 }
 
 /// <summary>One level-2 section of a <c>tasks.md</c>.</summary>
-public sealed record SectionProgress(int Number, string Title, TaskProgress Progress);
+/// <param name="Number">The heading's own number, or its position when it has none.</param>
+/// <param name="Title">The heading text after the number.</param>
+/// <param name="Progress">The section's tasks.</param>
+/// <param name="IsNumbered">Whether the heading gave the number itself (<c>## 2. Core</c>) rather than by position.</param>
+public sealed record SectionProgress(int Number, string Title, TaskProgress Progress, bool IsNumbered);
 
 /// <summary>A parsed <c>tasks.md</c>: its sections in document order, and overall progress.</summary>
 /// <remarks>Overall includes tasks that come before the first section.</remarks>

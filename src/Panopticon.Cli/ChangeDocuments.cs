@@ -20,7 +20,14 @@ internal static class ChangeDocuments
             throw new BridgeException($"Change '{change}' has no {TasksFileName}: looked for '{tasksPath}'.");
         }
 
-        return await File.ReadAllTextAsync(tasksPath, cancellationToken);
+        try
+        {
+            return await File.ReadAllTextAsync(tasksPath, cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new BridgeException($"Couldn't read '{tasksPath}': {exception.Message}", exception);
+        }
     }
 
     /// <summary>

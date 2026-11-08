@@ -4,15 +4,17 @@ namespace Panopticon.Server.Progress;
 public static class CurrentSection
 {
     /// <summary>
-    /// The reported section if it exists; otherwise the first section with an unfinished task;
-    /// otherwise, when everything is done, the last section that has tasks. Null when no section has tasks.
+    /// The reported section if it exists (a heading numbered explicitly before one numbered by position, when both
+    /// have that number); otherwise the first section with an unfinished task; otherwise, when everything is done,
+    /// the last section that has tasks. Null when no section has tasks.
     /// </summary>
     public static SectionProgress? Select(ParsedTasks tasks, int? reportedSection)
     {
         ArgumentNullException.ThrowIfNull(tasks);
 
         if (reportedSection is { } reported
-            && tasks.Sections.FirstOrDefault(s => s.Number == reported) is { } match)
+            && (tasks.Sections.FirstOrDefault(s => s.Number == reported && s.IsNumbered)
+                ?? tasks.Sections.FirstOrDefault(s => s.Number == reported)) is { } match)
         {
             return match;
         }

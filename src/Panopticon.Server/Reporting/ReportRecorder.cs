@@ -61,7 +61,10 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         {
             try
             {
+                // One transaction, so the change row locked in FindOrAddChangeAsync stays locked until the write.
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
                 var changeId = await UpsertAsync(report, snapshot, tasksSha256, receivedAt, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
                 return new RecordedReport(changeId, snapshot, receivedAt);
             }
             catch (DbUpdateException ex) when (attempt < MaxAttempts && IsUniqueViolation(ex))
@@ -83,15 +86,20 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         var change = await FindOrAddChangeAsync(repo, report.ChangeName, snapshot, cancellationToken);
         var agent = await FindOrAddAgentAsync(report.Agent, cancellationToken);
 
-        change.Snapshot = snapshot;
-        change.LastReportedAt = receivedAt;
+        // Only a newer report moves the change on: a slower, older report that commits last must not roll the
+        // snapshot or the times back. Every report is still kept as an event below.
+        if (receivedAt >= change.LastReportedAt)
+        {
+            change.Snapshot = snapshot;
+            change.LastReportedAt = receivedAt;
+        }
 
         var changeAgent = await db.ChangeAgents.FindAsync([change.Id, agent.Id], cancellationToken);
         if (changeAgent is null)
         {
             db.ChangeAgents.Add(new ChangeAgent { ChangeId = change.Id, AgentId = agent.Id, LastReportedAt = receivedAt });
         }
-        else
+        else if (receivedAt > changeAgent.LastReportedAt)
         {
             changeAgent.LastReportedAt = receivedAt;
         }
@@ -140,10 +148,12 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         ProgressSnapshot snapshot,
         CancellationToken cancellationToken)
     {
+        // FOR UPDATE: concurrent reports on one change take turns, so the only-if-newer check in UpsertAsync
+        // compares against the committed state rather than a stale read.
         var nameKey = Key(name);
-        var change = await db.Changes.SingleOrDefaultAsync(
-            c => c.RepoId == repo.Id && c.NameKey == nameKey,
-            cancellationToken);
+        var change = await db.Changes
+            .FromSql($"SELECT * FROM changes WHERE repo_id = {repo.Id} AND name_key = {nameKey} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
         if (change is not null)
         {
             return change;

@@ -64,6 +64,17 @@ public class TasksParserTests
         Assert.Equal("Build the web/ app", Assert.Single(parsed.Sections).Title);
     }
 
+    [Theory]
+    [InlineData("## 2. R&amp;D", "R&D")]
+    [InlineData("## 2. R&D", "R&D")]
+    [InlineData("## 2. &lt;b&gt; tags &#169; &#x41;", "<b> tags © A")]
+    public void Heading_entities_are_decoded_to_their_text(string heading, string title)
+    {
+        var parsed = TasksParser.Parse(heading);
+
+        Assert.Equal(title, Assert.Single(parsed.Sections).Title);
+    }
+
     // --- Requirement: Task counting ---
 
     [Fact]

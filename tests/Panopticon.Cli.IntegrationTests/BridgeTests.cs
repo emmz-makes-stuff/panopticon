@@ -144,6 +144,26 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(0, requests);
     }
 
+    [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public async Task Unreadable_tasks_md_is_a_logged_tool_error_naming_the_file()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes only.");
+        Assert.SkipWhen(Environment.UserName == "root", "root reads files whatever their mode.");
+        using var repo = TempGitRepo.Create();
+        var tasksPath = repo.WriteTasks("walking-skeleton", Tasks);
+        File.SetUnixFileMode(tasksPath, UnixFileMode.None);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), () => new HttpClient(), "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        var text = BridgeHarness.Text(result);
+        Assert.StartsWith("Couldn't read '", text, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine("walking-skeleton", "tasks.md"), text, StringComparison.Ordinal);
+        Assert.Contains("Couldn't read", bridge.Log, StringComparison.Ordinal);
+    }
+
     private sealed class CountingHandler(Action onRequest) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -258,5 +278,71 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         Assert.True(result.IsError);
         Assert.StartsWith("The Panopticon server refused the report:", BridgeHarness.Text(result), StringComparison.Ordinal);
+    }
+
+    // --- Forwarding: a malformed server result is a readable, logged tool error ---
+
+    [Theory]
+    [InlineData("""{"changeId":"c","overall":"not-a-count"}""")]
+    [InlineData("""{"changeId":"c"}""")]
+    public async Task Malformed_structured_result_is_a_logged_tool_error(string structuredContent)
+    {
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root), () => new HttpClient(new FakeMcpServer(structuredContent)), "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        var text = BridgeHarness.Text(result);
+        Assert.StartsWith("The Panopticon server at http://localhost/mcp returned a malformed progress result:", text, StringComparison.Ordinal);
+        Assert.Contains("malformed progress result", bridge.Log, StringComparison.Ordinal);
+        Assert.DoesNotContain(PanopticonFactory.Token, bridge.Log, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Just enough of a Streamable HTTP MCP server, answering in plain JSON: <c>initialize</c>, notifications, and a
+    /// <c>tools/call</c> whose structured content is the given JSON.
+    /// </summary>
+    private sealed class FakeMcpServer(string structuredContent) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Method != HttpMethod.Post || request.Content is null)
+            {
+                return new HttpResponseMessage(System.Net.HttpStatusCode.MethodNotAllowed);
+            }
+
+            using var body = JsonDocument.Parse(await request.Content.ReadAsStringAsync(cancellationToken));
+            var message = body.RootElement;
+            if (!message.TryGetProperty("id", out var id))
+            {
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Accepted);
+            }
+
+            // Anything else (e.g. the SDK's server/discover probe) is "method not found", as from an older server.
+            var member = message.GetProperty("method").GetString() switch
+            {
+                "initialize" => $$$"""
+                    "result":{"protocolVersion":{{{message.GetProperty("params").GetProperty("protocolVersion").GetRawText()}}},
+                     "capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1.0.0"}}
+                    """,
+                "tools/call" => $$"""
+                    "result":{"content":[{"type":"text","text":"ok"}],"structuredContent":{{structuredContent}}}
+                    """,
+                _ => """
+                    "error":{"code":-32601,"message":"Method not found"}
+                    """,
+            };
+
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    $$"""{"jsonrpc":"2.0","id":{{id.GetRawText()}},{{member}}}""",
+                    System.Text.Encoding.UTF8,
+                    "application/json"),
+            };
+        }
     }
 }

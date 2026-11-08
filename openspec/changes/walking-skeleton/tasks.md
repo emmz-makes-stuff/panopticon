@@ -64,15 +64,15 @@
 
 ## 10. Review fixes: code review
 
-- [ ] 10.1 Only overwrite a change's snapshot and `LastReportedAt` (and a change-agent's `LastReportedAt`) when the report is newer, still recording every event, and verify a test where an older report commits last
-- [ ] 10.2 Dispose the `HttpClientTransport` in the bridge's forwarder, including when connecting fails
-- [ ] 10.3 Turn unexpected local and response failures (unreadable `tasks.md`, malformed structured content) into readable `report_progress` tool errors that are logged, and verify tests for both
-- [ ] 10.4 Send an SSE keep-alive on `/api/events` while it's idle, ignored by the dashboard, and verify a test sees it on a quiet stream
-- [ ] 10.5 Keep HTML entities in section titles (`R&amp;D` → `R&D`), and verify a parser test
-- [ ] 10.6 Kill the git child process when a bridge call is cancelled, and verify a test
-- [ ] 10.7 Anchor the SPA fallback so only `api`/`mcp` (bare or with `/…`) are excluded, and verify `/api` is 404 and `/mcp-setup` gets the shell
-- [ ] 10.8 Resolve the bridge's server configuration once per report and pass it to the forwarder
-- [ ] 10.9 When a reported section number matches both a numbered and a position-numbered heading, prefer the explicitly numbered one; update the task-progress spec wording and verify a test
+- [x] 10.1 Only overwrite a change's snapshot and `LastReportedAt` (and a change-agent's `LastReportedAt`) when the report is newer, still recording every event, and verify a test where an older report commits last
+- [x] 10.2 Dispose the `HttpClientTransport` in the bridge's forwarder, including when connecting fails
+- [x] 10.3 Turn unexpected local and response failures (unreadable `tasks.md`, malformed structured content) into readable `report_progress` tool errors that are logged, and verify tests for both
+- [x] 10.4 Send an SSE keep-alive on `/api/events` while it's idle, ignored by the dashboard, and verify a test sees it on a quiet stream
+- [x] 10.5 Keep HTML entities in section titles (`R&amp;D` → `R&D`), and verify a parser test
+- [x] 10.6 Kill the git child process when a bridge call is cancelled, and verify a test
+- [x] 10.7 Anchor the SPA fallback so only `api`/`mcp` (bare or with `/…`) are excluded, and verify `/api` is 404 and `/mcp-setup` gets the shell
+- [x] 10.8 Resolve the bridge's server configuration once per report and pass it to the forwarder
+- [x] 10.9 When a reported section number matches both a numbered and a position-numbered heading, prefer the explicitly numbered one; update the task-progress spec wording and verify a test
 
 ## Workflow follow-up
 

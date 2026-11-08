@@ -53,6 +53,28 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
     }
 
     [Fact]
+    public async Task An_older_report_committing_last_does_not_roll_the_change_back()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+        var older = harness.Clock.GetUtcNow();
+
+        // The newer report (more ticked) commits first; the older one, received earlier but slower, commits last.
+        harness.Clock.Advance(TimeSpan.FromMinutes(5));
+        var newer = harness.Clock.GetUtcNow();
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, ThreeOfFour), ct);
+        harness.Clock.Advance(older - newer);
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour), ct);
+
+        await using var db = harness.NewDb();
+        var change = await db.Changes.SingleAsync(ct);
+        Assert.Equal((3, 4), (change.Snapshot.OverallDone, change.Snapshot.OverallTotal));
+        Assert.Equal(newer, change.LastReportedAt);
+        Assert.Equal(newer, (await db.ChangeAgents.SingleAsync(ct)).LastReportedAt);
+        Assert.Equal(2, await db.ReportEvents.CountAsync(ct));
+    }
+
+    [Fact]
     public async Task Identity_is_case_insensitive()
     {
         var ct = TestContext.Current.CancellationToken;

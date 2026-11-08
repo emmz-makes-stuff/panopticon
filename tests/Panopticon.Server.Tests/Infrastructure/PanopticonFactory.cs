@@ -24,6 +24,9 @@ public sealed class PanopticonFactory(
     /// <summary>A web root to serve instead of the project's wwwroot (which exists only after a web build).</summary>
     public string? WebRoot { get; init; }
 
+    /// <summary>Extra configuration settings, applied last.</summary>
+    public IReadOnlyDictionary<string, string> Settings { get; init; } = new Dictionary<string, string>();
+
     public static async Task<PanopticonFactory> CreateAsync(
         PostgresFixture postgres,
         S3Fixture s3,
@@ -69,6 +72,11 @@ public sealed class PanopticonFactory(
         if (WebRoot is not null)
         {
             builder.UseWebRoot(WebRoot);
+        }
+
+        foreach (var (key, value) in Settings)
+        {
+            builder.UseSetting(key, value);
         }
     }
 }

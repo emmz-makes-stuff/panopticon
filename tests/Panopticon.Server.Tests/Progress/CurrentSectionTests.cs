@@ -24,6 +24,28 @@ public class CurrentSectionTests
         Assert.Equal(3, current?.Number);
     }
 
+    [Theory]
+    [InlineData("## 1. Setup\n- [x] a\n## Notes\n- [ ] n\n## 2. Core\n- [ ] c\n")]
+    [InlineData("## 2. Core\n- [ ] c\n## Notes\n- [ ] n\n")]
+    public void Explicit_number_is_preferred_over_a_position_number(string markdown)
+    {
+        var tasks = TasksParser.Parse(markdown);
+
+        var current = CurrentSection.Select(tasks, reportedSection: 2);
+
+        Assert.Equal((2, "Core", true), (current?.Number, current?.Title, current?.IsNumbered));
+    }
+
+    [Fact]
+    public void Position_numbered_section_is_still_found_by_its_position()
+    {
+        var tasks = TasksParser.Parse("## 1. Setup\n- [x] a\n## Workflow follow-up\n- [ ] w\n");
+
+        var current = CurrentSection.Select(tasks, reportedSection: 2);
+
+        Assert.Equal((2, "Workflow follow-up", false), (current?.Number, current?.Title, current?.IsNumbered));
+    }
+
     [Fact]
     public void Unknown_reported_section_falls_back_to_first_unfinished()
     {

@@ -11,20 +11,29 @@ namespace Panopticon.Cli.Bridge;
 /// Sends a report to the server's online MCP endpoint (design D1) as an MCP client, with the bearer token, and turns
 /// every failure into a <see cref="BridgeException"/> that never echoes the token.
 /// </summary>
-internal sealed class ServerForwarder(BridgeSettings settings, Func<HttpClient> createHttpClient)
+internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
 {
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
 
-    public async Task<ReportProgressResult> ForwardAsync(ReportProgressArguments report, CancellationToken cancellationToken)
+    /// <param name="endpoint">The server's MCP endpoint, from <see cref="BridgeSettings.RequireServer"/>.</param>
+    /// <param name="token">The bearer token, from the same call.</param>
+    /// <param name="report">The report to send.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    public async Task<ReportProgressResult> ForwardAsync(
+        Uri endpoint,
+        string token,
+        ReportProgressArguments report,
+        CancellationToken cancellationToken)
     {
-        var (endpoint, token) = settings.RequireServer();
         var server = BridgeSettings.Display(endpoint);
 
         var http = createHttpClient();
         http.Timeout = RequestTimeout;
 
         // One short-lived client per report: the server endpoint is stateless, and this survives server restarts.
-        var transport = new HttpClientTransport(
+        // The client only disposes the session it connects, so the transport (and the HTTP client it owns) is disposed
+        // here, including when connecting fails.
+        await using var transport = new HttpClientTransport(
             new HttpClientTransportOptions
             {
                 Endpoint = endpoint,
@@ -58,14 +67,40 @@ internal sealed class ServerForwarder(BridgeSettings settings, Func<HttpClient> 
             throw new BridgeException($"The Panopticon server refused the report: {Text(result)}");
         }
 
-        if (result.StructuredContent is not { } structured
-            || structured.Deserialize(ContractsJsonContext.Default.ReportProgressResult) is not { } progress)
+        if (result.StructuredContent is not { } structured || Deserialize(structured, server) is not { } progress)
         {
             throw new BridgeException($"The Panopticon server at {server} returned no progress result.");
         }
 
         return progress;
     }
+
+    private static ReportProgressResult? Deserialize(JsonElement structured, string server)
+    {
+        ReportProgressResult? progress;
+        try
+        {
+            progress = structured.Deserialize(ContractsJsonContext.Default.ReportProgressResult);
+        }
+        catch (JsonException exception)
+        {
+            throw Malformed(server, exception.Message, exception);
+        }
+
+        // Records bind missing members as null; a result without its counts is as unusable as one that won't parse.
+        if (progress is not null
+            && (progress.ChangeId is null
+                || progress.Overall is null
+                || progress.CurrentSection is { Title: null } or { Progress: null }))
+        {
+            throw Malformed(server, "a required member is missing.", null);
+        }
+
+        return progress;
+    }
+
+    private static BridgeException Malformed(string server, string reason, Exception? inner) =>
+        new($"The Panopticon server at {server} returned a malformed progress result: {reason}", inner);
 
     // Maps a transport or protocol failure to a message for the agent; null lets anything unexpected propagate.
     private static string? Describe(Exception exception, string server)

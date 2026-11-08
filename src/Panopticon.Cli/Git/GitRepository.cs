@@ -46,7 +46,24 @@ internal static class GitRepository
         string[] arguments,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo("git")
+        try
+        {
+            return await RunProcessAsync("git", workingDirectory, arguments, cancellationToken);
+        }
+        catch (Win32Exception exception)
+        {
+            throw new BridgeException("git isn't installed or isn't on PATH.", exception);
+        }
+    }
+
+    /// <summary>Runs a process to completion; cancelling kills it (and anything it started) rather than leaving it running.</summary>
+    internal static async Task<GitResult> RunProcessAsync(
+        string fileName,
+        string workingDirectory,
+        string[] arguments,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo(fileName)
         {
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
@@ -65,11 +82,7 @@ internal static class GitRepository
         Process process;
         try
         {
-            process = Process.Start(startInfo) ?? throw new BridgeException("git could not be started.");
-        }
-        catch (Win32Exception exception)
-        {
-            throw new BridgeException("git isn't installed or isn't on PATH.", exception);
+            process = Process.Start(startInfo) ?? throw new BridgeException($"{fileName} could not be started.");
         }
         catch (DirectoryNotFoundException exception)
         {
@@ -81,10 +94,31 @@ internal static class GitRepository
             process.StandardInput.Close();
             var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Kill(process);
+                throw;
+            }
+
             return new GitResult(process.ExitCode, await stdout, await stderr);
         }
     }
 
-    private sealed record GitResult(int ExitCode, string Stdout, string Stderr);
+    private static void Kill(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // It exited on its own in the meantime.
+        }
+    }
+
+    internal sealed record GitResult(int ExitCode, string Stdout, string Stderr);
 }

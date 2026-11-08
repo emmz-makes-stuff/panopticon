@@ -42,6 +42,7 @@ public static partial class TasksParser
         var overall = TaskProgress.Empty;
         string? title = null;
         var number = 0;
+        var isNumbered = false;
         var progress = TaskProgress.Empty;
         var position = 0;
 
@@ -51,11 +52,11 @@ public static partial class TasksParser
             {
                 if (title is not null)
                 {
-                    sections.Add(new SectionProgress(number, title, progress));
+                    sections.Add(new SectionProgress(number, title, progress, isNumbered));
                 }
 
                 position++;
-                (number, title) = ReadHeading(heading, position);
+                (number, title, isNumbered) = ReadHeading(heading, position);
                 progress = TaskProgress.Empty;
                 continue;
             }
@@ -75,7 +76,7 @@ public static partial class TasksParser
 
         if (title is not null)
         {
-            sections.Add(new SectionProgress(number, title, progress));
+            sections.Add(new SectionProgress(number, title, progress, isNumbered));
         }
 
         return new ParsedTasks(sections, overall);
@@ -113,16 +114,16 @@ public static partial class TasksParser
         return match.Groups["mark"].Value.Trim() is "x" or "X";
     }
 
-    private static (int Number, string Title) ReadHeading(HeadingBlock heading, int position)
+    private static (int Number, string Title, bool IsNumbered) ReadHeading(HeadingBlock heading, int position)
     {
         var text = InlineText(heading.Inline).Trim();
         var numbered = NumberedHeadingPattern().Match(text);
         if (numbered.Success && int.TryParse(numbered.Groups["number"].Value, out var number))
         {
-            return (number, numbered.Groups["title"].Value.Trim());
+            return (number, numbered.Groups["title"].Value.Trim(), true);
         }
 
-        return (position, text);
+        return (position, text, false);
     }
 
     private static string InlineText(ContainerInline? inline)
@@ -142,6 +143,10 @@ public static partial class TasksParser
                     break;
                 case CodeInline code:
                     text.Append(code.Content);
+                    break;
+                case HtmlEntityInline entity:
+                    // `R&amp;D` → `R&D`: the decoded character, kept as text (the dashboard renders titles as text).
+                    text.Append(entity.Transcoded.AsSpan());
                     break;
                 case LineBreakInline:
                     text.Append(' ');

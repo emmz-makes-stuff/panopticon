@@ -86,8 +86,9 @@ public static class ServerSetup
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file
         // extension (the built assets) out of the fallback, so UseStaticFiles serves them: an endpoint matched here would
-        // make the static-files middleware stand aside.
-        app.MapFallbackToFile("{*path:nonfile:regex(^(?!api/|mcp).*$)}", "index.html");
+        // make the static-files middleware stand aside. Only the `api` and `mcp` segments themselves are excluded (bare or
+        // with a sub-path), so `/api` is a 404 but a client route like `/mcp-setup` still gets the shell.
+        app.MapFallbackToFile("{*path:nonfile:regex(^(?!(api|mcp)(/|$)).*$)}", "index.html");
 
         return app;
     }

@@ -37,7 +37,7 @@ internal static class BridgeHost
         builder.Logging.AddFilter("Panopticon", LogLevel.Information);
 
         builder.Services.AddSingleton(settings);
-        builder.Services.AddSingleton(new ServerForwarder(settings, createHttpClient));
+        builder.Services.AddSingleton(new ServerForwarder(createHttpClient));
         builder.Services.AddSingleton<ProgressReporter>();
 
         var mcp = builder.Services

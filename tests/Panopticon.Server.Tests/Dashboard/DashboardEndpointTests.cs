@@ -127,7 +127,8 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var broadcaster = new ChangeBroadcaster();
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, cancel.Token).GetAsyncEnumerator(ct);
+        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, DashboardEndpoints.DefaultKeepAlive, cancel.Token)
+            .GetAsyncEnumerator(ct);
         var moving = enumerator.MoveNextAsync();
         Assert.Equal(1, broadcaster.SubscriberCount);
 
@@ -136,6 +137,51 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         await enumerator.DisposeAsync();
 
         Assert.Equal(0, broadcaster.SubscriberCount);
+    }
+
+    [Fact]
+    public async Task A_quiet_stream_pings_and_still_delivers_the_next_change()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var broadcaster = new ChangeBroadcaster();
+        var card = new ChangeCard(
+            Guid.NewGuid(),
+            new CardRepo("github.com", "emmz", "panopticon"),
+            "walking-skeleton",
+            [],
+            null,
+            new CardProgress(0, 1),
+            DateTimeOffset.UnixEpoch);
+
+        await using var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, TimeSpan.FromMilliseconds(50), ct)
+            .GetAsyncEnumerator(ct);
+
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.Equal(DashboardEndpoints.PingEvent, enumerator.Current.EventType);
+        Assert.Null(enumerator.Current.Data);
+
+        broadcaster.Publish(card);
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.Equal(DashboardEndpoints.ChangeUpdatedEvent, enumerator.Current.EventType);
+        Assert.Equal(card, enumerator.Current.Data);
+    }
+
+    [Fact]
+    public async Task Events_send_a_ping_on_a_quiet_stream()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct))
+        {
+            Settings = new Dictionary<string, string> { [DashboardEndpoints.KeepAliveConfigKey] = "00:00:00.100" },
+        };
+        using var http = factory.CreateClient();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
+        using var response = await http.GetAsync(DashboardEndpoints.EventsPath, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(timeout.Token));
+
+        Assert.Equal("event: ping", await reader.ReadLineAsync(timeout.Token));
     }
 
     [Fact]
@@ -151,6 +197,40 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains("<title>Panopticon</title>", await http.GetStringAsync("/changes/some-route", ct), StringComparison.Ordinal);
         using var api = await http.GetAsync("/api/does-not-exist", ct);
         Assert.Equal(HttpStatusCode.NotFound, api.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api")]
+    [InlineData("/api/")]
+    [InlineData("/API/nothing")]
+    [InlineData("/mcp/nothing")]
+    public async Task Api_and_mcp_paths_are_never_the_app_shell(string path)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
+        await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        using var http = factory.CreateClient();
+
+        using var response = await http.GetAsync(path, ct);
+
+        Assert.DoesNotContain("<title>Panopticon</title>", await response.Content.ReadAsStringAsync(ct), StringComparison.Ordinal);
+        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/mcp-setup")]
+    [InlineData("/apis")]
+    [InlineData("/changes/api")]
+    public async Task Client_routes_that_only_start_like_api_or_mcp_get_the_app_shell(string path)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
+        await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        using var http = factory.CreateClient();
+
+        Assert.Contains("<title>Panopticon</title>", await http.GetStringAsync(path, ct), StringComparison.Ordinal);
     }
 
     [Fact]

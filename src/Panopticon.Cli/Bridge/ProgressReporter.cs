@@ -23,8 +23,8 @@ internal sealed partial class ProgressReporter(
     {
         try
         {
-            // Configuration first, so a misconfigured bridge says so before touching the working copy.
-            settings.RequireServer();
+            // Configuration first (and only once), so a misconfigured bridge says so before touching the working copy.
+            var (endpoint, token) = settings.RequireServer();
 
             var root = await GitRepository.FindRootAsync(settings.WorkingDirectory, cancellationToken);
             var repo = ParseRemote(await GitRepository.GetOriginUrlAsync(root, cancellationToken));
@@ -34,6 +34,8 @@ internal sealed partial class ProgressReporter(
                 settings.MachineName);
 
             var result = await forwarder.ForwardAsync(
+                endpoint,
+                token,
                 new ReportProgressArguments(repo, change, agent, tasks, section),
                 cancellationToken);
 
