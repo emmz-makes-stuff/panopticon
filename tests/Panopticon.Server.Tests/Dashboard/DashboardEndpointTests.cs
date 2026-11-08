@@ -19,6 +19,10 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         new AgentRef("claude-code", "vm-1"),
         tasks);
 
+    // Outside Development: there, static web assets would serve the project's built wwwroot instead of this web root.
+    private static PanopticonFactory WebRootFactory(string connectionString, Documents.S3Options s3, string webRoot) =>
+        new(connectionString, s3, bootstrapToken: null) { WebRoot = webRoot, Environment = "Testing" };
+
     [Fact]
     public async Task Changes_lists_one_card_per_change_most_recent_first_without_signing_in()
     {
@@ -190,7 +194,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var ct = TestContext.Current.CancellationToken;
         var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         Assert.Contains("<title>Panopticon</title>", await http.GetStringAsync("/", ct), StringComparison.Ordinal);
@@ -209,7 +213,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var ct = TestContext.Current.CancellationToken;
         var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         using var response = await http.GetAsync(path, ct);
@@ -227,7 +231,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var ct = TestContext.Current.CancellationToken;
         var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         Assert.Contains("<title>Panopticon</title>", await http.GetStringAsync(path, ct), StringComparison.Ordinal);
@@ -242,7 +246,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>shell</title>", ct);
         await File.WriteAllTextAsync(Path.Combine(webRoot, "assets", "index-abc.js"), "console.log(1);", ct);
         await File.WriteAllTextAsync(Path.Combine(webRoot, "assets", "index-abc.css"), "body{}", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         using var script = await http.GetAsync("/assets/index-abc.js", ct);

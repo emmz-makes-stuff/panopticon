@@ -34,6 +34,6 @@ WORKDIR /app
 COPY --from=build /app ./
 USER $APP_UID
 EXPOSE 8080
-# Configuration comes from the environment, e.g. ConnectionStrings__Panopticon, Panopticon__BootstrapToken and
+# Configuration comes from the environment, e.g. ConnectionStrings__Panopticon, Panopticon__InitialMembers and
 # Panopticon__S3__*. Run once with --migrate (applies migrations, then exits) before starting a new version.
 ENTRYPOINT ["dotnet", "Panopticon.Server.dll"]

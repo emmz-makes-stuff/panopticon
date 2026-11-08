@@ -29,9 +29,12 @@ public sealed class Change
     public List<ChangeAgent> Agents { get; } = [];
 }
 
+/// <summary>A member's MCP client on a machine. No member: a Development bootstrap report, or one from before team-auth.</summary>
 public sealed class Agent
 {
     public Guid Id { get; set; }
+    public Guid? MemberId { get; set; }
+    public Member? Member { get; set; }
     public required string ClientName { get; set; }
     public required string MachineName { get; set; }
     public required string ClientNameKey { get; set; }

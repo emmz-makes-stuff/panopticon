@@ -24,9 +24,18 @@ public static class ServerSetup
         var configuration = builder.Configuration;
 
         // Settings, validated when the host starts so a misconfigured server fails naming the setting.
+        // The shared bootstrap token is a Development convenience only (team-auth D5): anywhere else it must not be set.
+        var isDevelopment = builder.Environment.IsDevelopment();
         services.AddOptions<BootstrapTokenOptions>()
             .Configure(o => o.Token = configuration[BootstrapTokenOptions.ConfigKey])
-            .Validate(o => !string.IsNullOrWhiteSpace(o.Token), $"{BootstrapTokenOptions.ConfigKey} is not configured.")
+            .Validate(
+                o => isDevelopment || string.IsNullOrWhiteSpace(o.Token),
+                $"{BootstrapTokenOptions.ConfigKey} is only allowed in the Development environment. Remove it, and use per-user API tokens from `panopticon login`.")
+            .ValidateOnStart();
+
+        services.AddOptions<PublicUrlOptions>()
+            .Configure(o => o.Value = configuration[PublicUrlOptions.ConfigKey])
+            .Validate(o => o.Value is null || o.TryGetUri(out _), $"{PublicUrlOptions.ConfigKey} must be an absolute http or https URL.")
             .ValidateOnStart();
 
         services.AddOptions<S3Options>()
@@ -53,6 +62,9 @@ public static class ServerSetup
             sp.GetRequiredService<IAmazonS3>(),
             sp.GetRequiredService<IOptions<S3Options>>().Value.Bucket!));
         services.AddSingleton(TimeProvider.System);
+
+        // Members (team-auth): the first ones come from configuration.
+        services.AddHostedService<InitialMembers>();
 
         // Reporting and live updates.
         services.AddScoped<ReportRecorder>();

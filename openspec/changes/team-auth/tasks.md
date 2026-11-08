@@ -2,10 +2,10 @@
 
 ## 1. Members and the data model
 
-- [ ] 1.1 Add the D1 tables (`members`, `sign_in_links`, `sessions`, `device_logins`, `api_tokens`) and the D2 change (`agents.member_id` plus the `NULLS NOT DISTINCT` unique index) in one EF Core migration, and verify a Testcontainers test applies it to an empty database and to one with walking-skeleton data
-- [ ] 1.2 Add the D3 secret helper (32-byte base64url secrets, the `pnp_` prefix for API tokens, SHA-256 hashes, user codes from `BCDFGHJKLMNPQRSTVWXZ` formatted `XXXX-XXXX` and normalized ignoring case and the hyphen), and verify unit tests for format, entropy length and normalization
-- [ ] 1.3 Seed `Panopticon:InitialMembers` at start-up (D10: normalized keys, default display name, skip any existing row, removed ones included) and fail start-up when no active member exists, and verify the "Members are identified by email" and "Initial members from configuration" scenarios as integration tests
-- [ ] 1.4 Make `Panopticon:BootstrapToken` optional and fail start-up when it's set outside Development (D5); add `Panopticon:PublicUrl`, then update `appsettings.Development.json` (public URL, the `dev@localhost.test` seed) and `PanopticonFactory` (seeded members, a `Settings` default for `InitialMembers`); verify start-up tests for each setting, and that the existing suite still passes
+- [x] 1.1 Add the D1 tables (`members`, `sign_in_links`, `sessions`, `device_logins`, `api_tokens`) and the D2 change (`agents.member_id` plus the `NULLS NOT DISTINCT` unique index) in one EF Core migration, and verify a Testcontainers test applies it to an empty database and to one with walking-skeleton data
+- [x] 1.2 Add the D3 secret helper (32-byte base64url secrets, the `pnp_` prefix for API tokens, SHA-256 hashes, user codes from `BCDFGHJKLMNPQRSTVWXZ` formatted `XXXX-XXXX` and normalized ignoring case and the hyphen), and verify unit tests for format, entropy length and normalization
+- [x] 1.3 Seed `Panopticon:InitialMembers` at start-up (D10: normalized keys, default display name, skip any existing row, removed ones included) and fail start-up when no active member exists, and verify the "Members are identified by email" and "Initial members from configuration" scenarios as integration tests
+- [x] 1.4 Make `Panopticon:BootstrapToken` optional and fail start-up when it's set outside Development (D5); add `Panopticon:PublicUrl`, then update `appsettings.Development.json` (public URL, the `dev@localhost.test` seed) and `PanopticonFactory` (seeded members, a `Settings` default for `InitialMembers`); verify start-up tests for each setting, and that the existing suite still passes
 
 ## 2. Email and magic-link sign-in
 

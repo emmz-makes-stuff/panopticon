@@ -55,7 +55,9 @@ becomes `__`, e.g. `Panopticon__S3__Bucket`.
 | Setting | Meaning |
 | --- | --- |
 | `ConnectionStrings:Panopticon` | The Postgres connection string. |
-| `Panopticon:BootstrapToken` | The bearer token agents report with. It's required: the server won't start without it. |
+| `Panopticon:InitialMembers` | The first members' email addresses, as a list or one comma-separated value. Each one is added at start-up unless it already has a member record, and the server won't start if there's no active member. |
+| `Panopticon:PublicUrl` | The server's public base URL, used for the links it sends. Development uses `http://localhost:7480`. |
+| `Panopticon:BootstrapToken` | A shared bearer token agents can report with, **in Development only**. The server won't start with it set in any other environment. |
 | `Panopticon:S3:ServiceUrl` | The S3 endpoint for change documents. Leave it unset for AWS itself. |
 | `Panopticon:S3:Region` | The S3 region. The default is `us-east-1`. |
 | `Panopticon:S3:AccessKey`, `Panopticon:S3:SecretKey` | The S3 credentials. |
@@ -90,7 +92,8 @@ while it has no sign-in and the token is public. `compose.yaml` binds its ports 
 
 ```sh
 ConnectionStrings__Panopticon=Host=postgres;Port=5432;Database=panopticon;Username=panopticon;Password=panopticon
-Panopticon__BootstrapToken=dev-bootstrap-token
+Panopticon__PublicUrl=http://localhost:7481
+Panopticon__InitialMembers=dev@localhost.test
 Panopticon__S3__ServiceUrl=http://s3:8333
 Panopticon__S3__AccessKey=panopticon-local
 Panopticon__S3__SecretKey=panopticon-local-secret

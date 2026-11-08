@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Panopticon.Server.Data;
 using Testcontainers.PostgreSql;
@@ -20,7 +22,11 @@ public sealed class PostgresFixture : IAsyncLifetime
     public async ValueTask DisposeAsync() => await _container.DisposeAsync();
 
     /// <summary>Creates an empty, migrated database and returns its connection string.</summary>
-    public async Task<string> CreateDatabaseAsync(CancellationToken cancellationToken = default)
+    public Task<string> CreateDatabaseAsync(CancellationToken cancellationToken = default) =>
+        CreateDatabaseAsync(targetMigration: null, cancellationToken);
+
+    /// <summary>Creates a database migrated up to <paramref name="targetMigration"/> (null: the latest).</summary>
+    public async Task<string> CreateDatabaseAsync(string? targetMigration, CancellationToken cancellationToken)
     {
         var name = "test_" + Guid.NewGuid().ToString("N");
 
@@ -37,7 +43,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         }.ConnectionString;
 
         await using var db = CreateDb(connectionString);
-        await db.Database.MigrateAsync(cancellationToken);
+        await db.GetService<IMigrator>().MigrateAsync(targetMigration, cancellationToken);
 
         return connectionString;
     }

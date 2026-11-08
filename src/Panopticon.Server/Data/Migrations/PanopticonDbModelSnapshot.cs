@@ -49,14 +49,67 @@ namespace Panopticon.Server.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("machine_name_key");
 
+                    b.Property<Guid?>("MemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("member_id");
+
                     b.HasKey("Id")
                         .HasName("pk_agents");
 
-                    b.HasIndex("ClientNameKey", "MachineNameKey")
+                    b.HasIndex("MemberId", "ClientNameKey", "MachineNameKey")
                         .IsUnique()
-                        .HasDatabaseName("ix_agents_client_name_key_machine_name_key");
+                        .HasDatabaseName("ix_agents_member_id_client_name_key_machine_name_key");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("MemberId", "ClientNameKey", "MachineNameKey"), false);
 
                     b.ToTable("agents", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ApiToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("machine_name");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("member_id");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<byte[]>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("secret_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_api_tokens");
+
+                    b.HasIndex("MemberId")
+                        .HasDatabaseName("ix_api_tokens_member_id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_api_tokens_secret_hash");
+
+                    b.ToTable("api_tokens", (string)null);
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Change", b =>
@@ -118,6 +171,133 @@ namespace Panopticon.Server.Data.Migrations
                         .HasDatabaseName("ix_change_agents_agent_id");
 
                     b.ToTable("change_agents", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.DeviceLogin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by_member_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeniedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("denied_at");
+
+                    b.Property<byte[]>("DeviceSecretHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("device_secret_hash");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset?>("LastPolledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_polled_at");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("machine_name");
+
+                    b.Property<DateTimeOffset?>("TokenDeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("token_delivered_at");
+
+                    b.Property<Guid?>("TokenId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("token_id");
+
+                    b.Property<string>("UserCode")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character(8)")
+                        .HasColumnName("user_code")
+                        .IsFixedLength();
+
+                    b.HasKey("Id")
+                        .HasName("pk_device_logins");
+
+                    b.HasIndex("ApprovedByMemberId")
+                        .HasDatabaseName("ix_device_logins_approved_by_member_id");
+
+                    b.HasIndex("DeviceSecretHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_device_logins_device_secret_hash");
+
+                    b.HasIndex("TokenId")
+                        .HasDatabaseName("ix_device_logins_token_id");
+
+                    b.HasIndex("UserCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_device_logins_user_code");
+
+                    b.ToTable("device_logins", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.Member", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("EmailKey")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("email_key");
+
+                    b.Property<Guid?>("InvitedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invited_by_member_id");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_members");
+
+                    b.HasIndex("EmailKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_members_email_key");
+
+                    b.HasIndex("InvitedByMemberId")
+                        .HasDatabaseName("ix_members_invited_by_member_id");
+
+                    b.ToTable("members", (string)null);
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Repo", b =>
@@ -211,6 +391,110 @@ namespace Panopticon.Server.Data.Migrations
                     b.ToTable("report_events", (string)null);
                 });
 
+            modelBuilder.Entity("Panopticon.Server.Data.Session", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("member_id");
+
+                    b.Property<byte[]>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("secret_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sessions");
+
+                    b.HasIndex("MemberId")
+                        .HasDatabaseName("ix_sessions_member_id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sessions_secret_hash");
+
+                    b.ToTable("sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.SignInLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("member_id");
+
+                    b.Property<byte[]>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("secret_hash");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sign_in_links");
+
+                    b.HasIndex("MemberId")
+                        .HasDatabaseName("ix_sign_in_links_member_id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sign_in_links_secret_hash");
+
+                    b.ToTable("sign_in_links", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.Agent", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .HasConstraintName("fk_agents_members_member_id");
+
+                    b.Navigation("Member");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ApiToken", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_api_tokens_members_member_id");
+
+                    b.Navigation("Member");
+                });
+
             modelBuilder.Entity("Panopticon.Server.Data.Change", b =>
                 {
                     b.HasOne("Panopticon.Server.Data.Repo", "Repo")
@@ -276,6 +560,27 @@ namespace Panopticon.Server.Data.Migrations
                     b.Navigation("Agent");
                 });
 
+            modelBuilder.Entity("Panopticon.Server.Data.DeviceLogin", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", null)
+                        .WithMany()
+                        .HasForeignKey("ApprovedByMemberId")
+                        .HasConstraintName("fk_device_logins_members_approved_by_member_id");
+
+                    b.HasOne("Panopticon.Server.Data.ApiToken", null)
+                        .WithMany()
+                        .HasForeignKey("TokenId")
+                        .HasConstraintName("fk_device_logins_api_tokens_token_id");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.Member", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", null)
+                        .WithMany()
+                        .HasForeignKey("InvitedByMemberId")
+                        .HasConstraintName("fk_members_members_invited_by_member_id");
+                });
+
             modelBuilder.Entity("Panopticon.Server.Data.ReportEvent", b =>
                 {
                     b.HasOne("Panopticon.Server.Data.Agent", null)
@@ -291,6 +596,30 @@ namespace Panopticon.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_report_events_changes_change_id");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.Session", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sessions_members_member_id");
+
+                    b.Navigation("Member");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.SignInLink", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sign_in_links_members_member_id");
+
+                    b.Navigation("Member");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Change", b =>

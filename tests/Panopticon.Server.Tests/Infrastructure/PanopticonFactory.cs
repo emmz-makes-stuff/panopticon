@@ -19,10 +19,19 @@ public sealed class PanopticonFactory(
 {
     public const string Token = "test-bootstrap-token";
 
+    /// <summary>The member every test server starts with (Panopticon:InitialMembers), unless Settings say otherwise.</summary>
+    public const string MemberEmail = "member@example.com";
+
     public string ConnectionString { get; } = connectionString;
 
     /// <summary>A web root to serve instead of the project's wwwroot (which exists only after a web build).</summary>
     public string? WebRoot { get; init; }
+
+    /// <summary>
+    /// The host environment. Development until the per-user token work (team-auth 6.3) moves the tests off the
+    /// bootstrap token, which only Development accepts.
+    /// </summary>
+    public string Environment { get; init; } = "Development";
 
     /// <summary>Extra configuration settings, applied last.</summary>
     public IReadOnlyDictionary<string, string> Settings { get; init; } = new Dictionary<string, string>();
@@ -61,7 +70,7 @@ public sealed class PanopticonFactory(
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(Environment);
         builder.UseSetting($"ConnectionStrings:{ServerSetup.ConnectionStringName}", ConnectionString);
         builder.UseSetting($"{S3Options.Section}:ServiceUrl", s3.ServiceUrl);
         builder.UseSetting($"{S3Options.Section}:AccessKey", s3.AccessKey);
@@ -69,6 +78,7 @@ public sealed class PanopticonFactory(
         builder.UseSetting($"{S3Options.Section}:Bucket", s3.Bucket);
         builder.UseSetting($"{S3Options.Section}:ForcePathStyle", "true");
         builder.UseSetting(BootstrapTokenOptions.ConfigKey, bootstrapToken ?? string.Empty);
+        builder.UseSetting(InitialMembers.ConfigKey, MemberEmail);
         if (WebRoot is not null)
         {
             builder.UseWebRoot(WebRoot);
