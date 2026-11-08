@@ -20,13 +20,17 @@ change comes first.
 - **THEN** the dashboard shows an empty state explaining how to connect an agent
 
 ### Requirement: Card content
-Each card SHALL show the repo (host, owner and name), the change name, the agents working on it, the
-current section's number and title, and the time of the last report.
+Each card SHALL show the repo (host, owner and name), the change name, the agents working on it with the
+member each one belongs to, the current section's number and title, and the time of the last report.
 
 #### Scenario: Card shows identity and agents
-- **WHEN** `claude-code@vm-1` reports on `walking-skeleton` in `github.com/emmz/panopticon`
-- **THEN** the card shows `emmz/panopticon` (host shown), `walking-skeleton`, the agent
-  `claude-code@vm-1`, and when it last reported
+- **WHEN** Emmz's `claude-code@vm-1` reports on `walking-skeleton` in `github.com/emmz/panopticon`
+- **THEN** the card shows `emmz/panopticon` (host shown), `walking-skeleton`, the agent `claude-code` on
+  `vm-1` with Emmz's display name, and when it last reported
+
+#### Scenario: Agent without a member
+- **WHEN** an agent reported with the Development bootstrap token, or before this change
+- **THEN** its row shows the client and machine with no member name
 
 ### Requirement: Two progress bars
 Each card SHALL show a progress bar for the current section and a progress bar for the overall change.
@@ -64,11 +68,3 @@ by itself after the live connection drops.
 - **WHEN** the live connection is lost and the server becomes reachable again
 - **THEN** the dashboard reconnects, refreshes all cards to the current state, and shows that it was
   briefly offline while disconnected
-
-### Requirement: Unauthenticated in this change
-In this change, the dashboard and its read API SHALL be readable without signing in. Sign-in arrives in a
-later change, and this change SHALL NOT be deployed to the internet.
-
-#### Scenario: Local viewing
-- **WHEN** someone opens the dashboard on a local run
-- **THEN** it loads without a sign-in prompt
