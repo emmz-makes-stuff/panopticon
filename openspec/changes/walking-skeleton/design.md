@@ -84,15 +84,15 @@ dependencies). The motivation is in proposal.md, the behaviour in `specs/`. On t
 - **D11. Charts: hand-built SVG.** None in this change. Recorded for the metrics change.
 - **D12. Tests: xUnit v3 on Microsoft.Testing.Platform.** `global.json` sets
   `"test": { "runner": "Microsoft.Testing.Platform" }`. Rejected: MSTest, TUnit.
-- **D13. Integration tests: Testcontainers (PostgreSQL, MinIO)** with `WebApplicationFactory`, plus an
+- **D13. Integration tests: Testcontainers (PostgreSQL, SeaweedFS S3 — MinIO no longer publishes images)** with `WebApplicationFactory`, plus an
   in-process MCP client calling the real endpoint. Rejected: fakes only.
 - **D14. GitHub hosts the repo and Releases.**
 - **D15. Shared contracts.** `Panopticon.Contracts` holds the server tool's input/output records and a
   `JsonSerializerContext`, so the server and the AOT CLI agree on the wire format.
 - **D16. MCP endpoint path `/mcp`.** The read API is under `/api` and the UI at `/`.
-- **D17. Local development** uses `compose.yaml` with Postgres 17 and MinIO, plus a bucket-init
+- **D17. Local development** uses `compose.yaml` with Postgres 17 and SeaweedFS (S3 gateway, credentials from `local/seaweedfs-s3.json`), plus an `amazon/aws-cli` bucket-init
   container.
-- **D18. SDK pin.** `global.json` pins `10.0.400` with `rollForward: latestFeature`. All projects target
+- **D18. SDK pin.** `global.json` pins `10.0.403` with `rollForward: latestFeature` (10.0.400 bundled a vulnerable AOT compiler, GHSA-p3jp-9v83-76w9; see devlog). All projects target
   `net10.0`. `Directory.Build.props` sets `Nullable`, `TreatWarningsAsErrors`,
   `AnalysisLevel=latest-recommended` and `EnforceCodeStyleInBuild=true`. `.editorconfig` holds the
   formatting rules.

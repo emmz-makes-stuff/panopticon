@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup>
+    <!-- Tests -->
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.2" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Panopticon.Cli/Panopticon.Cli.csproj" />
+    <Project Path="src/Panopticon.Contracts/Panopticon.Contracts.csproj" />
+    <Project Path="src/Panopticon.Server/Panopticon.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Panopticon.Cli.Tests/Panopticon.Cli.Tests.csproj" />
+    <Project Path="tests/Panopticon.Server.Tests/Panopticon.Server.Tests.csproj" />
+  </Folder>
+</Solution>

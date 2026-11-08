@@ -2,11 +2,11 @@
 
 ## 1. Repo scaffolding and gates
 
-- [ ] 1.1 `git init`, add `.gitignore` (bin/obj, `artifacts/`, `web/node_modules`, `src/Panopticon.Server/wwwroot`) and `.editorconfig`, and verify `git status` shows only the intended files
-- [ ] 1.2 Add `global.json` (SDK `10.0.400`, `rollForward: latestFeature`, test runner `Microsoft.Testing.Platform`) and `Directory.Build.props` (`net10.0`, Nullable, TreatWarningsAsErrors, `AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`), and verify `dotnet --version` in the repo reports 10.0.4xx
-- [ ] 1.3 Create `Panopticon.slnx` with `src/Panopticon.Server`, `src/Panopticon.Cli` (`PublishAot=true`), `src/Panopticon.Contracts`, and xUnit v3 test projects `tests/Panopticon.Server.Tests`, `tests/Panopticon.Cli.Tests`, each with one trivial passing test, and verify the build, test, format and aot gates from design.md all exit 0
-- [ ] 1.4 Create `web/` (Vite + TypeScript, Vitest + happy-dom, ESLint, Prettier) with the `build`/`test`/`format:check`/`lint` scripts from design.md and Vite `outDir` set to `../src/Panopticon.Server/wwwroot`, and verify `npm --prefix web ci` and the four web gates exit 0
-- [ ] 1.5 Add `compose.yaml` (Postgres 17, MinIO, and a bucket-init container) and verify `docker compose config` passes and `docker compose up -d` brings both services healthy
+- [x] 1.1 `git init`, add `.gitignore` (bin/obj, `artifacts/`, `web/node_modules`, `src/Panopticon.Server/wwwroot`) and `.editorconfig`, and verify `git status` shows only the intended files
+- [x] 1.2 Add `global.json` (SDK `10.0.403`, `rollForward: latestFeature`, test runner `Microsoft.Testing.Platform`) and `Directory.Build.props` (`net10.0`, Nullable, TreatWarningsAsErrors, `AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`), and verify `dotnet --version` in the repo reports 10.0.4xx
+- [x] 1.3 Create `Panopticon.slnx` with `src/Panopticon.Server`, `src/Panopticon.Cli` (`PublishAot=true`), `src/Panopticon.Contracts`, and xUnit v3 test projects `tests/Panopticon.Server.Tests`, `tests/Panopticon.Cli.Tests`, each with one trivial passing test, and verify the build, test, format and aot gates from design.md all exit 0
+- [x] 1.4 Create `web/` (Vite + TypeScript, Vitest + happy-dom, ESLint, Prettier) with the `build`/`test`/`format:check`/`lint` scripts from design.md and Vite `outDir` set to `../src/Panopticon.Server/wwwroot`, and verify `npm --prefix web ci` and the four web gates exit 0
+- [x] 1.5 Add `compose.yaml` (Postgres 17, SeaweedFS S3, and an aws-cli bucket-init container) and verify `docker compose config` passes and `docker compose up -d` brings both services healthy
 
 ## 2. Task progress parsing
 
@@ -17,7 +17,7 @@
 ## 3. Persistence
 
 - [ ] 3.1 Add the EF Core 10 + Npgsql model from design D6 (repos, changes, agents, change_agents, report_events, with lower-cased identity keys) and the initial migration, and verify `dotnet ef migrations` builds and a Testcontainers Postgres test applies it
-- [ ] 3.2 Implement the content-addressed S3 document store (`documents/sha256/<hex>`, write-if-absent, configurable `ServiceURL`/`ForcePathStyle`), and verify a Testcontainers MinIO test shows identical content stored once
+- [ ] 3.2 Implement the content-addressed S3 document store (`documents/sha256/<hex>`, write-if-absent, configurable `ServiceURL`/`ForcePathStyle`), and verify a Testcontainers SeaweedFS test shows identical content stored once
 - [ ] 3.3 Implement the report-recording service (upsert repo/change/agent, update change snapshot and change_agent time, append report_event), and verify integration tests for "Repeat report updates the same change", "Case-insensitive identity", "Two agents on one change" and "Report kept as an event"
 
 ## 4. Online MCP endpoint

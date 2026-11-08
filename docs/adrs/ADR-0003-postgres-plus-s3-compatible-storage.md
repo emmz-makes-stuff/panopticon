@@ -30,7 +30,7 @@ instance with in-memory state, which is unsafe during Railway's overlapping zero
 
 - Filters, history and metrics are ordinary queries, and multiple instances are safe.
 - Each deployment runs one more managed service (Postgres).
-- Integration tests run against real Postgres and MinIO through Testcontainers, so the test gate needs
+- Integration tests run against real Postgres and SeaweedFS (S3-compatible; MinIO stopped publishing images) through Testcontainers, so the test gate needs
   Docker.
 
 ## Alternatives rejected
