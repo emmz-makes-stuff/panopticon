@@ -95,6 +95,64 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains("No git repository was found", BridgeHarness.Text(result), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task No_origin_remote_is_a_tool_error_saying_a_remote_is_required()
+    {
+        using var repo = TempGitRepo.Create(originUrl: null);
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), () => new HttpClient(), "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        Assert.Contains("needs a remote", BridgeHarness.Text(result), StringComparison.Ordinal);
+    }
+
+    // --- Change documents read locally (through the tool) ---
+
+    [Fact]
+    public async Task Change_missing_is_a_tool_error_naming_the_path()
+    {
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), () => new HttpClient(), "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("no-such-change", null, Ct);
+
+        Assert.True(result.IsError);
+        Assert.Contains(Path.Combine("openspec", "changes", "no-such-change"), BridgeHarness.Text(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Path_traversal_is_an_invalid_name_tool_error_and_nothing_is_sent()
+    {
+        var requests = 0;
+        using var repo = TempGitRepo.Create();
+        // What "../../tasks.md"-style names would reach if they weren't refused.
+        File.WriteAllText(Path.Combine(repo.Root, "tasks.md"), "## 1. Outside\n- [x] secret\n");
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root),
+            () => new HttpClient(new CountingHandler(() => requests++)),
+            "claude-code",
+            Ct);
+
+        var result = await bridge.ReportAsync("../../etc", null, Ct);
+
+        Assert.True(result.IsError);
+        Assert.StartsWith("Invalid change name", BridgeHarness.Text(result), StringComparison.Ordinal);
+        Assert.Equal(0, requests);
+    }
+
+    private sealed class CountingHandler(Action onRequest) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            onRequest();
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));
+        }
+    }
+
     // --- Agent identity + Forwarding: Successful report ---
 
     [Fact]

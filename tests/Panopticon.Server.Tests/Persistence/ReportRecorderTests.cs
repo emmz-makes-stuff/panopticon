@@ -1,3 +1,5 @@
+using Amazon.S3;
+using Amazon.S3.Model;
 using Microsoft.EntityFrameworkCore;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
@@ -101,9 +103,48 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
         await using var db = harness.NewDb();
         var reportEvent = await db.ReportEvents.SingleAsync(ct);
         Assert.Equal(recorded.ChangeId, reportEvent.ChangeId);
+        var agent = await db.Agents.SingleAsync(a => a.Id == reportEvent.AgentId, ct);
+        Assert.Equal(("claude-code", "vm-1"), (agent.ClientName, agent.MachineName));
         Assert.Equal(2, reportEvent.ReportedSection);
         Assert.Equal(recorded.ReceivedAt, reportEvent.ReceivedAt);
         Assert.Equal(TwoOfFour, await harness.Documents.GetAsync(reportEvent.TasksSha256, ct));
+    }
+
+    [Fact]
+    public async Task Each_report_is_an_event_from_its_own_agent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour), ct);
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", new("cursor", "vm-2"), null, TwoOfFour), ct);
+
+        await using var db = harness.NewDb();
+        var reporters = await db.ReportEvents
+            .OrderBy(e => e.ReceivedAt)
+            .Join(db.Agents, e => e.AgentId, a => a.Id, (e, a) => a.ClientName)
+            .ToListAsync(ct);
+        Assert.Equal(["claude-code", "cursor"], reporters);
+    }
+
+    // specs/progress-reporting "Unchanged document stored once", through the recorder rather than the store alone.
+    [Fact]
+    public async Task Identical_reports_are_two_events_sharing_one_stored_document()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour), ct);
+        harness.Clock.Advance(TimeSpan.FromMinutes(5));
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour), ct);
+
+        await using var db = harness.NewDb();
+        var shas = await db.ReportEvents.Select(e => e.TasksSha256).ToListAsync(ct);
+        Assert.Equal(2, shas.Count);
+        Assert.Single(shas.Distinct());
+        var listing = await harness.S3.ListObjectsV2Async(new ListObjectsV2Request { BucketName = harness.Bucket }, ct);
+        Assert.Single(listing.S3Objects);
     }
 
     [Fact]
@@ -142,13 +183,20 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
         public ManualClock Clock { get; } = ManualClock.StartingAt2026();
         public S3DocumentStore Documents { get; private set; } = null!;
 
+        public IAmazonS3 S3 { get; private set; } = null!;
+
+        public string Bucket { get; private set; } = null!;
+
         public static async Task<Harness> CreateAsync(PostgresFixture postgres, S3Fixture s3, CancellationToken ct)
         {
             var options = await s3.CreateBucketAsync(ct);
+            var client = options.CreateClient();
             return new Harness
             {
                 _connectionString = await postgres.CreateDatabaseAsync(ct),
-                Documents = new S3DocumentStore(options.CreateClient(), options.Bucket!),
+                Documents = new S3DocumentStore(client, options.Bucket!),
+                S3 = client,
+                Bucket = options.Bucket!,
             };
         }
 

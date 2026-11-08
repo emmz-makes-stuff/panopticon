@@ -81,11 +81,12 @@ The `Dockerfile` builds the dashboard and the server into one image. To run it a
 docker build -t panopticon .
 
 docker run --rm --network panopticon_default --env-file local/container.env panopticon --migrate
-docker run --rm --network panopticon_default --env-file local/container.env -p 7481:8080 panopticon
+docker run --rm --network panopticon_default --env-file local/container.env -p 127.0.0.1:7481:8080 panopticon
 ```
 
-Then open <http://localhost:7481>. `local/container.env` holds the compose values, with the service names as
-hosts:
+Then open <http://localhost:7481>. Publishing on `127.0.0.1` keeps the dashboard to this machine, which matters
+while it has no sign-in and the token is public. `compose.yaml` binds its ports the same way.
+`local/container.env` holds the compose values, with the service names as hosts:
 
 ```sh
 ConnectionStrings__Panopticon=Host=postgres;Port=5432;Database=panopticon;Username=panopticon;Password=panopticon

@@ -57,6 +57,25 @@ describe("renderCard content", () => {
     expect(element.querySelector("img, b")).toBeNull();
     expect(text(element, ".card-change")).toBe('<img src=x onerror="alert(1)">');
   });
+
+  // Spec task-progress "HTML in a task": a heading's markup must not reach the dashboard as markup.
+  it("puts a section title containing HTML in as text", () => {
+    const element = renderCard(
+      card({
+        currentSection: {
+          number: 2,
+          title: "<script>alert(1)</script><em>Core</em>",
+          progress: { done: 2, total: 5 },
+        },
+      }),
+      NOW,
+    );
+
+    expect(element.querySelector("script, em")).toBeNull();
+    expect(text(bar(element, "section"), ".bar-name")).toBe(
+      "Section 2: <script>alert(1)</script><em>Core</em>",
+    );
+  });
 });
 
 // Spec live-dashboard, "Two progress bars".

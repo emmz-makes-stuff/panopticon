@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: panopticon
       POSTGRES_DB: panopticon
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +25,7 @@ services:
     # -volume.max=0 sizes the volume limit from free disk; the default of 8 runs out once a few buckets exist.
     command: server -dir=/data -volume.max=0 -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
     ports:
-      - "8333:8333"
+      - "127.0.0.1:8333:8333"
     volumes:
       - s3-data:/data
       - ./local/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
