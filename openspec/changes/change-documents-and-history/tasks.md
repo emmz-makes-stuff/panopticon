@@ -62,8 +62,8 @@
 
 ## 10. Review fixes: web navigation
 
-- [ ] 10.1 Handle in-page anchors and document switching without rebuilding the change page (review #7): the router ignores a `popstate` that changes only the hash, and the change view swaps the article in place on a `?doc=` change, keeping the header and the live stream. Verify with router and change-view tests (a hash-only popstate does nothing; a doc switch fetches only the document and doesn't reconnect).
-- [ ] 10.2 Offer a retry when the history fails to load (review #9). Verify with a history-view test: a failed first load shows the error and a retry that loads the page.
+- [x] 10.1 Handle in-page anchors and document switching without rebuilding the change page (review #7): the router ignores a `popstate` that changes only the hash, and the change view swaps the article in place on a `?doc=` change, keeping the header and the live stream. Verify with router and change-view tests (a hash-only popstate does nothing; a doc switch fetches only the document and doesn't reconnect).
+- [x] 10.2 Offer a retry when the history fails to load (review #9). Verify with a history-view test: a failed first load shows the error and a retry that loads the page.
 
 ## Workflow follow-up
 

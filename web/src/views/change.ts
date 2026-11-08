@@ -36,7 +36,7 @@ const failureText = (failure: unknown) =>
 export function changeView(env: Env): View {
   return async ({ root, route, params }) => {
     const changeId = route["id"] ?? "";
-    const requested = params.get("doc");
+    let requested = params.get("doc");
     let ticket = 0;
     let closeStream: (() => void) | undefined;
 
@@ -66,19 +66,30 @@ export function changeView(env: Env): View {
     }
 
     root.replaceChildren(el("section", "page change-page", head, archivedStatus, body));
+    let latest = first;
     await show(first, ++ticket);
     if (!first.archivedAt) {
       closeStream = follow();
     }
 
-    return () => {
-      ticket++;
-      closeStream?.();
+    return {
+      teardown: () => {
+        ticket++;
+        closeStream?.();
+        closeStream = undefined;
+      },
+      // Another document of this change (a `?doc=` link): only the list and the article change, from the page already
+      // loaded, so the header isn't refetched and the live stream stays open.
+      update: (next) => {
+        requested = next.get("doc");
+        void show(latest, ++ticket);
+      },
     };
 
     // --- rendering ---
 
     async function show(changePage: ChangePage, mine: number): Promise<void> {
+      latest = changePage;
       head.replaceChildren(...renderHead(changePage));
       const listed = changePage.documents;
       const wanted = requested ? listed.find((d) => d.path === requested) : undefined;
@@ -184,19 +195,21 @@ export function changeView(env: Env): View {
       const source = create("/api/events");
       let opened = false;
 
+      // Its own ticket: a document picked while a refresh is loading must not drop the refreshed header.
+      let refreshing = 0;
       const refresh = () => {
-        const mine = ++ticket;
+        const mine = ++refreshing;
         fetchChange(env.api, changeId).then(
           (next) => {
-            if (mine !== ticket) {
-              return;
+            if (mine !== refreshing || closeStream === undefined) {
+              return; // A newer refresh overtook this one, or the page was left.
             }
 
             if (next.archivedAt) {
               archived(next);
             }
 
-            return show(next, mine);
+            return show(next, ++ticket);
           },
           () => {
             // The page keeps what it shows; the next event or reconnect tries again.

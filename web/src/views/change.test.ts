@@ -99,6 +99,25 @@ describe("change page", () => {
     expect(q(reloaded.root, '.doc-nav a[aria-current="page"]').textContent).toBe("cli-bridge");
   });
 
+  // Review fix 10.1: picking a document changes only the list and the article.
+  it("switching documents fetches only the document, keeping the header and the live stream", async () => {
+    const server = serverFor();
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => shownPath(root) === "proposal.md");
+    const source = FakeEventSource.latest();
+    const header = q(root, ".change-head");
+
+    q(root, '.doc-nav a[title="design.md"]').dispatchEvent(
+      new MouseEvent("click", { bubbles: true, button: 0 }),
+    );
+    await until(() => shownPath(root) === "design.md");
+
+    expect(server.to("GET", "/api/changes/c1")).toHaveLength(1);
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(source.closed).toBe(false);
+    expect(q(root, ".change-head")).toBe(header);
+  });
+
   it("Change with only tasks: lists only the tasks, and opens them", async () => {
     const server = serverFor(changePage({ documents: [doc("tasks.md", "tasks", "Tasks")] }));
     const { root } = await startTestShell("/changes/c1", server);

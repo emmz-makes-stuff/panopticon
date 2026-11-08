@@ -37,10 +37,16 @@ export function historyView(env: Env): View {
         list.append(...next.changes.map(row));
         before = next.nextBefore;
         more.hidden = before === null;
+        more.textContent = "Show more";
         error.clear();
       } catch (failure) {
         if (!(failure instanceof ApiError && failure.status === 401)) {
           error.show(failureText(failure));
+          // A failed first load leaves nothing to show more of, so the button offers to try again.
+          if (before === null) {
+            more.textContent = "Try again";
+            more.hidden = false;
+          }
         }
       } finally {
         more.disabled = false;

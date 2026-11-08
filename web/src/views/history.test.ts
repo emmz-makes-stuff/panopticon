@@ -110,6 +110,31 @@ describe("history page", () => {
     expect(q(root, ".form-error").textContent).toBe("Database is down.");
   });
 
+  // Review fix 10.2: a failed first load can be retried without reloading the page.
+  it("a failed first load offers to try again, which loads the page", async () => {
+    let calls = 0;
+    const server = signedIn().on("GET", "/api/history", () =>
+      ++calls === 1
+        ? { status: 500, body: { detail: "Database is down." } }
+        : {
+            status: 200,
+            body: { changes: [entry("c1", "team-auth", "2026-11-08T20:11:15Z")], nextBefore: null },
+          },
+    );
+    const { root } = await startTestShell("/history", server);
+    await until(() => root.querySelector(".form-error")?.textContent !== "");
+    const retry = q<HTMLButtonElement>(root, ".show-more");
+
+    expect(retry.hidden).toBe(false);
+    expect(retry.textContent).toBe("Try again");
+    retry.click();
+    await until(() => rows(root).length === 1);
+
+    expect(rows(root)[0]?.change).toBe("team-auth");
+    expect(retry.hidden).toBe(true);
+    expect(q(root, ".form-error").textContent).toBe("");
+  });
+
   it("Signed out: returns to the history after sign-in", async () => {
     const { nav, local } = await startTestShell("/history", signedOut());
 

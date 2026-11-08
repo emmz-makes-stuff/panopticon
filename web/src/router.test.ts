@@ -90,6 +90,48 @@ describe("createRouter", () => {
     expect(root.textContent).toBe("members");
   });
 
+  it("ignores a popstate that leaves the path and query as shown (an in-page anchor)", async () => {
+    const { root, events, left, router } = setup("/members?tab=all");
+    await router.start();
+    root.textContent = "scrolled to #fn-1";
+
+    events.dispatchEvent(new Event("popstate"));
+    await Promise.resolve();
+
+    expect(left).not.toHaveBeenCalled();
+    expect(root.textContent).toBe("scrolled to #fn-1");
+  });
+
+  it("updates a view in place when only the query changes, if the view can", async () => {
+    const nav = fakeNavigation("/changes/c1?doc=a.md");
+    const root = document.createElement("main");
+    const shows = vi.fn();
+    const teardown = vi.fn();
+    const update = vi.fn();
+    const changeView: View = ({ params }) => {
+      shows(params.get("doc"));
+      return { teardown, update: (next) => update(next.get("doc")) };
+    };
+    const router = createRouter({
+      root,
+      routes: { "/": () => undefined, "/changes/:id": changeView },
+      fallback: "/",
+      history: nav.history,
+      location: nav.location,
+      events: document.createElement("div"),
+    });
+    await router.start();
+
+    await router.navigate("/changes/c1?doc=b.md");
+    expect(update).toHaveBeenCalledWith("b.md");
+    expect(shows).toHaveBeenCalledTimes(1);
+    expect(teardown).not.toHaveBeenCalled();
+
+    await router.navigate("/changes/c2");
+    expect(teardown).toHaveBeenCalledTimes(1);
+    expect(shows).toHaveBeenLastCalledWith(null);
+  });
+
   it("lets a guard redirect before a view shows", async () => {
     const { root, nav, router } = setup("/members", (path) =>
       path === "/members" ? "/device?code=X" : undefined,
