@@ -79,15 +79,27 @@ public sealed record ProgressCount(int Done, int Total);
 public sealed record SectionSummary(int Number, string Title, ProgressCount Progress);
 
 /// <summary>The structured result of <c>report_progress</c>: the change's newly computed progress.</summary>
+/// <param name="Archived">
+/// The archive folder's name when the report was of an archived change. The bridge sets it for its own reply (spec
+/// cli-bridge, Archived change reported); the server leaves it out.
+/// </param>
 public sealed record ReportProgressResult(
     string ChangeId,
     ProgressCount Overall,
-    SectionSummary? CurrentSection)
+    SectionSummary? CurrentSection,
+    string? Archived = null)
 {
-    /// <summary>A one-line, human-readable summary, e.g. "Overall 7/20 · section 2 Core 2/5".</summary>
-    public string Describe() => CurrentSection is { } section
-        ? $"Overall {Overall.Done}/{Overall.Total} · section {section.Number} {section.Title} {section.Progress.Done}/{section.Progress.Total}"
-        : $"Overall {Overall.Done}/{Overall.Total}";
+    /// <summary>
+    /// A one-line, human-readable summary, e.g. "Overall 7/20 · section 2 Core 2/5", or for an archived change
+    /// "Overall 20/20 · archived as 2026-11-08-team-auth".
+    /// </summary>
+    public string Describe()
+    {
+        var progress = CurrentSection is { } section
+            ? $"Overall {Overall.Done}/{Overall.Total} · section {section.Number} {section.Title} {section.Progress.Done}/{section.Progress.Total}"
+            : $"Overall {Overall.Done}/{Overall.Total}";
+        return Archived is { } folder ? $"{progress} · archived as {folder}" : progress;
+    }
 }
 
 [JsonSourceGenerationOptions(

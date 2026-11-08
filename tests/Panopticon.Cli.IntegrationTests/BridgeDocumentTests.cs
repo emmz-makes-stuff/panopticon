@@ -77,7 +77,8 @@ public class BridgeDocumentTests(PostgresFixture postgres, S3Fixture s3)
         var result = await bridge.ReportAsync("team-auth", null, Ct);
 
         Assert.True(result.IsError is not true, BridgeHarness.Text(result));
-        Assert.StartsWith("Overall 1/2", BridgeHarness.Text(result), StringComparison.Ordinal);
+        Assert.Equal("Overall 1/2 · section 1 Setup 1/2 · archived as 2026-11-08-team-auth", BridgeHarness.Text(result));
+        Assert.Equal("2026-11-08-team-auth", result.StructuredContent?.GetProperty("archived").GetString());
         using var http = await server.CreateSignedInClientAsync(cancellationToken: Ct);
         var history = await http.GetFromJsonAsync<JsonElement>(ChangeEndpoints.HistoryPath, Ct);
         var archived = Assert.Single(history.GetProperty("changes").EnumerateArray());

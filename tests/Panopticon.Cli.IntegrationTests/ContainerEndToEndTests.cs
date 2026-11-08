@@ -195,6 +195,9 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
             Assert.Equal((card.ChangeId, Change, archiveFolder), (archived.ChangeId, archived.Change, archived.ArchiveFolder));
             Assert.Empty((await browser.GetFromJsonAsync<List<ChangeCard>>(DashboardEndpoints.ChangesPath, Ct))!);
             Assert.NotNull((await browser.GetFromJsonAsync<ChangePage>(ChangeEndpoints.ChangePath(card.ChangeId), Ct))!.ArchivedAt);
+
+            // 7. The agent reporting the name again is told it's archived, and nothing changes.
+            Assert.Equal($"Overall 1/2 · section 1 First 1/2 · archived as {archiveFolder}", await bridge.ReportAsync());
         }
         catch
         {

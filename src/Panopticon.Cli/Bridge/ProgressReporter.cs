@@ -70,6 +70,7 @@ internal sealed partial class ProgressReporter(
             {
                 reported.Forget(change);
                 LogReportedArchived(change, archive, result.Overall.Done, result.Overall.Total);
+                return result with { Archived = archive };
             }
             else
             {

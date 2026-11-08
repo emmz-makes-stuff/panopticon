@@ -46,8 +46,11 @@ report: the archive folder's documents, marked with the folder's name.
   about a second later, as the agent that last reported that change. The agent doesn't need to do anything.
   - Changes this bridge never reported on are left alone. So are archives made while no bridge was running, until
     something reports that change name again (the first way).
-  - A failure, such as an unreachable server, is logged to stderr, and the bridge keeps serving. The agent's next
-    `report_progress` for that change reports it archived instead.
+  - A failure, such as an unreachable server, is logged to stderr, and the bridge keeps serving. It retries the
+    archived report every 30 seconds until it gets through. The agent's next `report_progress` for that change
+    reports it archived too.
+  - The bridge sends one report at a time for each change, so an archived report never overtakes one the agent
+    started before the folder moved.
 
 Reporting an archived change again changes nothing: the server keeps it as it was when it was archived. A new
 change later created with the same name starts a fresh card.
@@ -146,7 +149,8 @@ PANOPTICON_SERVER_URL=http://localhost:7480 PANOPTICON_TOKEN=dev-bootstrap-token
 
 Then ask the agent to call `report_progress`. It should pass `change` (the folder under `openspec/changes/`)
 and, optionally, `section` (the `## N.` it is working on). The reply states overall and current-section
-progress, e.g. `Overall 7/20 · section 2 Core 2/5`.
+progress, e.g. `Overall 7/20 · section 2 Core 2/5`. For an archived change it ends with the archive folder, e.g.
+`Overall 20/20 · section 4 Docs 3/3 · archived as 2026-11-08-team-auth`.
 
 ## Other agents
 

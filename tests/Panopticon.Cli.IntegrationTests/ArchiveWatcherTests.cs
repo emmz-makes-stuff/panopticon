@@ -85,6 +85,31 @@ public class ArchiveWatcherTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("2026-11-08-team-auth", (await db.Changes.SingleAsync(Ct)).ArchiveFolder);
     }
 
+    // Spec cli-bridge: "Watching for archives", Server unreachable at archive time (review fix 8.1).
+    [Fact]
+    public async Task Server_down_at_archive_time_is_retried_by_the_watcher_itself()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("team-auth", Tasks);
+        var down = false;
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root, await server.MemberTokenAsync(Ct)) with { ArchiveRetryInterval = TimeSpan.FromSeconds(1) },
+            () => down ? new HttpClient(new UnreachableHandler()) : server.CreateClient(),
+            "claude-code",
+            Ct);
+        Assert.True((await bridge.ReportAsync("team-auth", null, Ct)).IsError is not true);
+
+        down = true;
+        Archive(repo, "team-auth", "2026-11-08-team-auth");
+        await EventuallyAsync(() => bridge.Log.Contains("Will retry the archived report", StringComparison.Ordinal));
+
+        // No folder event and no tool call from here: only the retry can send it.
+        down = false;
+        var change = await EventuallyAsync(server, async db => await db.Changes.SingleOrDefaultAsync(c => c.ArchiveFolder != null, Ct));
+        Assert.Equal("2026-11-08-team-auth", change.ArchiveFolder);
+    }
+
     // Spec cli-bridge: "One report at a time per change", Report in flight at archive time.
     [Fact]
     public async Task A_report_in_flight_at_archive_time_is_sent_before_the_archived_one()

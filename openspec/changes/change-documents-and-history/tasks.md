@@ -52,8 +52,8 @@
 
 ## 8. Review fixes: the bridge's archive reports
 
-- [ ] 8.1 Retry a failed archived report every 30 seconds while the bridge runs, until it succeeds (review #4; spec cli-bridge, Watching for archives). Verify "Server unreachable at archive time" with a short, injected retry interval, and update `docs/cli.md`'s Archives section.
-- [ ] 8.2 Say "archived as `<folder>`" in `report_progress`'s reply for an archived change (spec cli-bridge, Archived change reported). Verify "Report after archive", and update the e2e and `docs/cli.md`.
+- [x] 8.1 Retry a failed archived report every 30 seconds while the bridge runs, until it succeeds (review #4; spec cli-bridge, Watching for archives). Verify "Server unreachable at archive time" with a short, injected retry interval, and update `docs/cli.md`'s Archives section.
+- [x] 8.2 Say "archived as `<folder>`" in `report_progress`'s reply for an archived change (spec cli-bridge, Archived change reported). Verify "Report after archive", and update the e2e and `docs/cli.md`.
 
 ## 9. Review fixes: document count and storage
 

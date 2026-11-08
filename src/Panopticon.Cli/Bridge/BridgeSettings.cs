@@ -22,6 +22,9 @@ internal sealed record BridgeSettings(
     public const string ServerUrlVariable = "PANOPTICON_SERVER_URL";
     public const string TokenVariable = "PANOPTICON_TOKEN";
 
+    /// <summary>How long the archive watcher waits before retrying a failed archived report (spec cli-bridge).</summary>
+    public TimeSpan ArchiveRetryInterval { get; init; } = TimeSpan.FromSeconds(30);
+
     public static BridgeSettings FromEnvironment(TextWriter stderr) =>
         Resolve(Environment.GetEnvironmentVariable, CliConfigFile.ForCurrentUser(), stderr, Environment.CurrentDirectory, Environment.MachineName);
 
