@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { signedOut, startTestShell } from "../testShell";
-import { RETURN_TO_KEY } from "../shell";
+import { savedReturn, signedOut, startTestShell } from "../testShell";
+import { RETURN_TO_KEY, RETURN_TO_LIFETIME_MS } from "../returnPath";
 import { card, MEMBER, until, q } from "../testing";
+
+/** A saved return path, as the shell stores it, `ageMs` before the test shell's clock (2026-11-08T12:00:00Z). */
+const saved = (path: string, ageMs = 0) =>
+  JSON.stringify({ path, savedAt: new Date("2026-11-08T12:00:00Z").getTime() - ageMs });
 import { SIGN_IN_EMAIL_KEY } from "./signIn";
 
 async function submit(root: HTMLElement, email: string) {
@@ -87,8 +91,9 @@ describe("/sign-in/confirm", () => {
     const server = signedOut()
       .on("POST", "/api/auth/confirm", { status: 200, body: MEMBER })
       .on("GET", "/api/members", { status: 200, body: [] });
-    const { root, nav, session } = await startTestShell("/sign-in/confirm#the-secret", server);
-    session.setItem(RETURN_TO_KEY, "/members");
+    const { root, nav, local } = await startTestShell("/sign-in/confirm#the-secret", server, {
+      local: { [RETURN_TO_KEY]: saved("/members") },
+    });
 
     q<HTMLButtonElement>(root, ".page button").click();
     await until(() => nav.path() === "/members");
@@ -96,7 +101,35 @@ describe("/sign-in/confirm", () => {
     expect(server.to("POST", "/api/auth/confirm")[0]?.body).toEqual({ secret: "the-secret" });
     expect(nav.path()).toBe("/members");
     expect(root.querySelector(".account-name")?.textContent).toBe("Emmz");
-    expect(session.getItem(RETURN_TO_KEY)).toBeNull();
+    expect(savedReturn(local)).toBeNull();
+  });
+
+  it("ignores a return path older than its lifetime, and goes to the cards", async () => {
+    const server = signedOut()
+      .on("POST", "/api/auth/confirm", { status: 200, body: MEMBER })
+      .on("GET", "/api/changes", { status: 200, body: [card()] });
+    const { root, nav, local } = await startTestShell("/sign-in/confirm#the-secret", server, {
+      local: { [RETURN_TO_KEY]: saved("/members", RETURN_TO_LIFETIME_MS + 1) },
+    });
+
+    q<HTMLButtonElement>(root, ".page button").click();
+    await until(() => nav.path() === "/");
+
+    expect(savedReturn(local)).toBeNull();
+  });
+
+  it("ignores a return path that isn't on this site", async () => {
+    const server = signedOut()
+      .on("POST", "/api/auth/confirm", { status: 200, body: MEMBER })
+      .on("GET", "/api/changes", { status: 200, body: [card()] });
+    const { root, nav } = await startTestShell("/sign-in/confirm#the-secret", server, {
+      local: { [RETURN_TO_KEY]: saved("//evil.example/") },
+    });
+
+    q<HTMLButtonElement>(root, ".page button").click();
+    await until(() => nav.path() === "/");
+
+    expect(nav.path()).toBe("/");
   });
 
   it("goes to the cards when there's nowhere to return to", async () => {

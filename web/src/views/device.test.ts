@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { RETURN_TO_KEY } from "../shell";
+import { RETURN_TO_KEY } from "../returnPath";
 import { MEMBER, until, type FakeServer, q } from "../testing";
-import { signedIn, signedOut, startTestShell } from "../testShell";
+import { savedReturn, signedIn, signedOut, startTestShell } from "../testShell";
 import type { DeviceLogin } from "./device";
 
 const pending: DeviceLogin = { userCode: "BCDF-GHJK", machineName: "vm-1", state: "pending" };
@@ -114,15 +114,15 @@ describe("/device", () => {
     const first = await startTestShell("/device?code=BCDF-GHJK", server);
 
     expect(first.heading()).toBe("Sign in");
-    expect(first.session.getItem(RETURN_TO_KEY)).toBe("/device?code=BCDF-GHJK");
+    expect(savedReturn(first.local)).toBe("/device?code=BCDF-GHJK");
     expect(server.calls.some((call) => call.path.startsWith("/api/device"))).toBe(false);
 
-    // The magic link opens in the same tab: the return path survives in sessionStorage.
+    // The emailed link opens in a new tab: a fresh app that shares only this browser's localStorage.
     server
       .on("POST", "/api/auth/confirm", { status: 200, body: MEMBER })
       .on("GET", "/api/device/BCDF-GHJK", { status: 200, body: pending });
     const back = await startTestShell("/sign-in/confirm#secret", server, {
-      session: { [RETURN_TO_KEY]: "/device?code=BCDF-GHJK" },
+      local: { [RETURN_TO_KEY]: first.local.getItem(RETURN_TO_KEY) ?? "" },
     });
     q<HTMLButtonElement>(back.root, ".page button").click();
     await until(() => back.heading() === "Log in vm-1?");

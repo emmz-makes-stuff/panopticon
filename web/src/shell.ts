@@ -2,6 +2,7 @@ import { ApiError, createApi, type Api, type FetchLike, type SessionMember } fro
 import { PRODUCT_NAME } from "./app";
 import type { EventSourceFactory } from "./live";
 import { el, routeLink } from "./dom";
+import { saveReturnPath, takeReturnPath } from "./returnPath";
 import {
   createRouter,
   type HistoryLike,
@@ -14,9 +15,6 @@ import { deviceView } from "./views/device";
 import { membersView } from "./views/members";
 import { confirmView, signInView } from "./views/signIn";
 import { tokensView } from "./views/tokens";
-
-/** Where the app goes after sign-in: the page you were sent away from (design D18 and D12's `/device?code=`). */
-export const RETURN_TO_KEY = "panopticon.returnTo";
 
 /** Pages anyone can open. Everything else needs a session. */
 export const PUBLIC_PATHS: readonly string[] = ["/sign-in", "/sign-in/confirm"];
@@ -34,9 +32,10 @@ export interface Env {
   renamed(displayName: string): void;
   /** Where the cards view shows the live status and change count. */
   statusSlot: HTMLElement;
-  /** Per-tab storage, for the return path (it survives the magic-link round trip in the same tab). */
-  session: StorageLike;
-  /** Per-browser storage, for the address a sign-in link was asked for. */
+  /**
+   * Per-browser storage, shared by every tab: the address a sign-in link was asked for, and the return path (which
+   * has to survive the emailed link opening in a new tab).
+   */
   local: StorageLike;
   location: LocationLike & { readonly hash: string; readonly origin: string };
   history: HistoryLike;
@@ -49,7 +48,6 @@ export interface Env {
 export interface ShellDeps {
   fetch?: FetchLike | undefined;
   createEventSource?: EventSourceFactory | undefined;
-  session?: StorageLike | undefined;
   local?: StorageLike | undefined;
   history?: HistoryLike | undefined;
   location?: Env["location"] | undefined;
@@ -142,7 +140,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
 
   function rememberReturn(path: string): void {
     if (!PUBLIC_PATHS.includes(new URL(path, "http://x").pathname)) {
-      env.session.setItem(RETURN_TO_KEY, path);
+      saveReturnPath(env.local, path, env.now());
     }
   }
 
@@ -165,12 +163,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     signedIn(next) {
       member = next;
       renderAccount();
-      const returnTo = env.session.getItem(RETURN_TO_KEY);
-      env.session.removeItem(RETURN_TO_KEY);
-      void router?.navigate(
-        returnTo?.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/",
-        { replace: true },
-      );
+      void router?.navigate(takeReturnPath(env.local, env.now()) ?? "/", { replace: true });
     },
     renamed(displayName) {
       if (member) {
@@ -179,7 +172,6 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
       }
     },
     statusSlot,
-    session: deps.session ?? window.sessionStorage,
     local: deps.local ?? window.localStorage,
     location,
     history,

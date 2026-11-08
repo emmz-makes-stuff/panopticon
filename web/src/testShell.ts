@@ -1,5 +1,6 @@
 // Test harness for the whole signed-in app (imported by *.test.ts only).
-import { startShell } from "./shell";
+import { RETURN_TO_KEY } from "./returnPath";
+import { startShell, type StorageLike } from "./shell";
 import {
   card,
   FakeEventSource,
@@ -14,8 +15,6 @@ export interface TestShellOptions {
   confirm?: (message: string) => boolean;
   /** What localStorage holds at start. */
   local?: Record<string, string>;
-  /** What sessionStorage holds at start. */
-  session?: Record<string, string>;
 }
 
 /** Starts the app at `url` against a fake server, with fake navigation, storage and EventSource. */
@@ -28,12 +27,10 @@ export async function startTestShell(
   const events = document.createElement("div");
   events.append(root);
   const nav = fakeNavigation(url);
-  const session = memoryStorage(options.session);
   const local = memoryStorage(options.local);
   const shell = await startShell(root, {
     fetch: server,
     createEventSource: (eventsUrl) => new FakeEventSource(eventsUrl),
-    session,
     local,
     history: nav.history,
     location: nav.location,
@@ -42,7 +39,7 @@ export async function startTestShell(
     confirm: options.confirm ?? (() => true),
   });
   const heading = () => root.querySelector(".view h2")?.textContent;
-  return { root, nav, session, local, shell, heading, events };
+  return { root, nav, local, shell, heading, events };
 }
 
 /** A server with a signed-in member and one card. */
@@ -53,3 +50,9 @@ export const signedIn = (member = MEMBER) =>
 
 /** A server with no session. */
 export const signedOut = () => fakeServer().on("GET", "/api/session", { status: 401 });
+
+/** The return path saved in `local`, or null (what the shell will go to after sign-in, before expiry). */
+export function savedReturn(local: StorageLike): string | null {
+  const raw = local.getItem(RETURN_TO_KEY);
+  return raw ? (JSON.parse(raw) as { path: string }).path : null;
+}

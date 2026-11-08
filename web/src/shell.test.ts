@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RETURN_TO_KEY } from "./shell";
 import { FakeEventSource, fakeServer, MEMBER, settle, until, q } from "./testing";
-import { signedIn, startTestShell } from "./testShell";
+import { savedReturn, signedIn, startTestShell } from "./testShell";
 
 beforeEach(() => {
   FakeEventSource.instances.length = 0;
@@ -12,13 +11,13 @@ describe("startShell", () => {
   it("Not signed in: shows the sign-in page, loads no change data, and remembers where you were going", async () => {
     const server = fakeServer().on("GET", "/api/session", { status: 401 });
 
-    const { heading, nav, session, root } = await startTestShell("/", server);
+    const { heading, nav, local, root } = await startTestShell("/", server);
 
     expect(heading()).toBe("Sign in");
     expect(nav.path()).toBe("/sign-in");
     expect(server.to("GET", "/api/changes")).toHaveLength(0);
     expect(FakeEventSource.instances).toHaveLength(0);
-    expect(session.getItem(RETURN_TO_KEY)).toBe("/");
+    expect(savedReturn(local)).toBe("/");
     expect(root.querySelector(".account")?.childElementCount).toBe(0);
   });
 
@@ -54,7 +53,7 @@ describe("startShell", () => {
 
   it("Session ends while watching: a stream error with a 401 session check stops updates and shows sign-in", async () => {
     const server = signedIn();
-    const { heading, nav, session } = await startTestShell("/", server);
+    const { heading, nav, local } = await startTestShell("/", server);
     const stream = FakeEventSource.latest();
     stream.open();
     await settle();
@@ -69,7 +68,7 @@ describe("startShell", () => {
     expect(stream.closed).toBe(true);
     await settle();
     expect(FakeEventSource.instances).toHaveLength(1);
-    expect(session.getItem(RETURN_TO_KEY)).toBe("/");
+    expect(savedReturn(local)).toBe("/");
   });
 
   it("keeps reconnecting when the stream drops but the session is still good (offline, not signed out)", async () => {
@@ -91,16 +90,16 @@ describe("startShell", () => {
   it("any 401 while signed in sends you to sign in, remembering the page", async () => {
     const server = signedIn().on("GET", "/api/members", { status: 401 });
 
-    const { heading, nav, session } = await startTestShell("/members", server);
+    const { heading, nav, local } = await startTestShell("/members", server);
     await until(() => heading() === "Sign in");
 
     expect(nav.path()).toBe("/sign-in");
-    expect(session.getItem(RETURN_TO_KEY)).toBe("/members");
+    expect(savedReturn(local)).toBe("/members");
   });
 
   it("Sign out ends the session on the server and shows the sign-in page", async () => {
     const server = signedIn().on("POST", "/api/auth/sign-out", { status: 204 });
-    const { root, heading, session } = await startTestShell("/", server);
+    const { root, heading, local } = await startTestShell("/", server);
 
     q<HTMLButtonElement>(root, ".account button").click();
     await until(() => heading() === "Sign in");
@@ -108,7 +107,7 @@ describe("startShell", () => {
     expect(server.to("POST", "/api/auth/sign-out")).toHaveLength(1);
     expect(heading()).toBe("Sign in");
     expect(root.querySelector(".account")?.childElementCount).toBe(0);
-    expect(session.getItem(RETURN_TO_KEY)).toBeNull();
+    expect(savedReturn(local)).toBeNull();
     expect(FakeEventSource.latest().closed).toBe(true);
   });
 

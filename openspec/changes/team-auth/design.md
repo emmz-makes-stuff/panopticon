@@ -172,7 +172,7 @@ tokens. ADR-0002 decides .NET 10 and vanilla TypeScript. ADR-0003 decides Postgr
     page.
   - `POST /api/device/{userCode}/approve` and `/deny` need a session and the D6 header.
   - The approval page is `/device?code=XXXX-XXXX`. When it isn't signed in, it sends you through sign-in and
-    keeps the code, using `sessionStorage` to survive the magic-link round trip. It never approves on load.
+    keeps the code as the D18 return path, so it survives the magic-link round trip. It never approves on load.
 - **D13. Token endpoints.**
   - `GET /api/tokens` lists your active tokens.
   - `DELETE /api/tokens/{id}` revokes one of your tokens. It answers 404 for anyone else's, so it doesn't
@@ -222,7 +222,10 @@ tokens. ADR-0002 decides .NET 10 and vanilla TypeScript. ADR-0003 decides Postgr
     framework (ADR-0002).
   - The views are `/` (cards), `/sign-in`, `/sign-in/confirm`, `/device`, `/members` and `/tokens`.
   - On load, the app calls `GET /api/session`.
-    - On a 401 it shows `/sign-in`, remembering where you were going.
+    - On a 401 it shows `/sign-in`, remembering where you were going. The return path is kept in
+      `localStorage` as `{path, savedAt}`, because the emailed link usually opens in a new tab, and a new tab's
+      `sessionStorage` starts empty. It's removed when read, it's ignored after 15 minutes (a sign-in link's lifetime, and longer than a
+      device code lives), and only a same-site path (`/…`, not `//…`) is followed.
     - Signed in, it shows a header with your name, links to Members and Tokens, and Sign out.
   - All `/api` calls go through one `api.ts` wrapper. It adds the D6 header and `Accept: application/json`,
     and turns a 401 into a "signed out" event, which the router handles.

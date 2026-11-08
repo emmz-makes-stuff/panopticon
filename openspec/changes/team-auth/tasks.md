@@ -54,8 +54,9 @@
 
 ## 9. Integration and human verification
 
-- [ ] 9.1 Extend the container end-to-end check: start with an initial member, sign in through captured or logged links, run `panopticon login` and approve, report through `panopticon mcp`, and see the card with the member's name; verify the check passes
-- [ ] 9.2 Update the README (configuration settings, the first sign-in, `panopticon login`), and write the human verification recipe in a devlog note (real Resend delivery with a verified domain; the dashboard look and the new pages in a real browser; Claude Code reporting through a `panopticon login` token end to end); stop for Emmz to run it
+- [x] 9.0 Keep the D18 return path in `localStorage` with a 15-minute expiry, not `sessionStorage`, so `/device?code=` survives the emailed sign-in link opening in a new tab (found after §8 landed); update D12 and D18, and verify Vitest tests for the new-tab return trip, an expired path, and an off-site path
+- [x] 9.1 Extend the container end-to-end check: start with an initial member, sign in through captured or logged links, run `panopticon login` and approve, report through `panopticon mcp`, and see the card with the member's name; verify the check passes
+- [x] 9.2 Update the README (configuration settings, the first sign-in, `panopticon login`), and write the human verification recipe in a devlog note (real Resend delivery with a verified domain; the dashboard look and the new pages in a real browser; Claude Code reporting through a `panopticon login` token end to end); stop for Emmz to run it
 
 ## Workflow follow-up
 

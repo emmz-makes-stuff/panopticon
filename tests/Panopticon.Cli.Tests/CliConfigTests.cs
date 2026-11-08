@@ -49,6 +49,16 @@ public sealed class CliConfigTests : IDisposable
         var settings = Resolve(new() { [BridgeSettings.TokenVariable] = "  " });
 
         Assert.Equal("pnp_saved", settings.Token);
+        Assert.False(settings.TokenFromEnvironment);
+    }
+
+    [Fact]
+    public void The_token_records_whether_it_came_from_the_environment()
+    {
+        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));
+
+        Assert.True(Resolve(new() { [BridgeSettings.TokenVariable] = "pnp_env" }).TokenFromEnvironment);
+        Assert.False(Resolve([]).TokenFromEnvironment);
     }
 
     [Fact]

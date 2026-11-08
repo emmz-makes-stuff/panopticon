@@ -88,8 +88,11 @@ Or add the bridge for just yourself, without a file:
 claude mcp add panopticon --scope local -- panopticon mcp
 ```
 
-To point one repo somewhere else, set the variables in its `env` block instead, expanded from your shell so
-the token never lands in the file. For example, `"PANOPTICON_TOKEN": "${PANOPTICON_TOKEN}"`.
+With `panopticon login` you don't need an `env` block at all. To point one repo somewhere else, set the
+variables in its `env` block instead, expanded from your shell so the token never lands in the file. Give each
+one an empty default, for example `"PANOPTICON_TOKEN": "${PANOPTICON_TOKEN:-}"`. Claude Code passes a plain
+`${PANOPTICON_TOKEN}` through literally when the variable is unset, and that text then overrides the saved
+login and is rejected. A blank value counts as unset, so the bridge falls back to the saved login.
 
 **Local development.** A server running in Development also accepts its bootstrap token, `dev-bootstrap-token`.
 Reports made with it have no member. It's a shortcut for working on Panopticon itself:
@@ -118,5 +121,8 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
   `openspec/changes/`.
 - **"Couldn't reach the Panopticon server at …"**: check `PANOPTICON_SERVER_URL`, and that the server is up.
 - **"isn't configured: … not set"**: run `panopticon login`, or set the variables it names.
-- **"rejected the token"**: the token was revoked, its member was removed, or `PANOPTICON_TOKEN` is wrong. Run
-  `panopticon login` for a new one. A set `PANOPTICON_TOKEN` takes precedence over the saved login, so unset it.
+- **"rejected the saved login's token"**: the token was revoked, or its member was removed. Run
+  `panopticon login` for a new one.
+- **"rejected the token from PANOPTICON_TOKEN"**: the variable is wrong, and it takes precedence over the saved
+  login. Correct it, or remove it from the agent's MCP server environment. Check for an unexpanded
+  `${PANOPTICON_TOKEN}` in `.mcp.json` (see above).

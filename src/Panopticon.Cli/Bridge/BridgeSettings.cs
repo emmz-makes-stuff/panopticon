@@ -3,7 +3,16 @@ using Panopticon.Cli.Config;
 namespace Panopticon.Cli.Bridge;
 
 /// <summary>The bridge's configuration, read once at start-up (spec cli-bridge, "Configuration").</summary>
-internal sealed record BridgeSettings(string? ServerUrl, string? Token, string WorkingDirectory, string MachineName)
+/// <param name="TokenFromEnvironment">
+/// Whether <see cref="Token"/> came from <c>PANOPTICON_TOKEN</c> rather than the saved login, so a rejected token's
+/// error can say which one to fix.
+/// </param>
+internal sealed record BridgeSettings(
+    string? ServerUrl,
+    string? Token,
+    string WorkingDirectory,
+    string MachineName,
+    bool TokenFromEnvironment = false)
 {
     public const string ServerUrlVariable = "PANOPTICON_SERVER_URL";
     public const string TokenVariable = "PANOPTICON_TOKEN";
@@ -26,6 +35,7 @@ internal sealed record BridgeSettings(string? ServerUrl, string? Token, string W
         ArgumentNullException.ThrowIfNull(config);
         var serverUrl = NonBlank(getEnvironmentVariable(ServerUrlVariable));
         var token = NonBlank(getEnvironmentVariable(TokenVariable));
+        var tokenFromEnvironment = token is not null;
         if (serverUrl is null || token is null)
         {
             var saved = config.Read(stderr);
@@ -33,7 +43,7 @@ internal sealed record BridgeSettings(string? ServerUrl, string? Token, string W
             token ??= NonBlank(saved?.Token);
         }
 
-        return new BridgeSettings(serverUrl, token, workingDirectory, machineName);
+        return new BridgeSettings(serverUrl, token, workingDirectory, machineName, tokenFromEnvironment);
     }
 
     private static string? NonBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

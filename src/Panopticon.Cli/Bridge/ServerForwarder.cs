@@ -18,11 +18,13 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
     /// <param name="endpoint">The server's MCP endpoint, from <see cref="BridgeSettings.RequireServer"/>.</param>
     /// <param name="token">The bearer token, from the same call.</param>
     /// <param name="report">The report to send.</param>
+    /// <param name="tokenFromEnvironment">Whether the token came from <c>PANOPTICON_TOKEN</c>, for a rejected token's error.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     public async Task<ReportProgressResult> ForwardAsync(
         Uri endpoint,
         string token,
         ReportProgressArguments report,
+        bool tokenFromEnvironment,
         CancellationToken cancellationToken)
     {
         var server = BridgeSettings.Display(endpoint);
@@ -57,7 +59,8 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
                 report.ToToolArguments(),
                 cancellationToken: cancellationToken);
         }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested && Describe(exception, server) is { } message)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+            && Describe(exception, server, tokenFromEnvironment) is { } message)
         {
             throw new BridgeException(message, exception);
         }
@@ -103,15 +106,21 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
         new($"The Panopticon server at {server} returned a malformed progress result: {reason}", inner);
 
     // Maps a transport or protocol failure to a message for the agent; null lets anything unexpected propagate.
-    private static string? Describe(Exception exception, string server)
+    private static string? Describe(Exception exception, string server, bool tokenFromEnvironment)
     {
         for (var current = exception; current is not null; current = current.InnerException)
         {
             switch (current)
             {
+                // A set PANOPTICON_TOKEN overrides the saved login, so 'panopticon login' alone can't fix it: say so.
+                case HttpRequestException { StatusCode: HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden } http
+                    when tokenFromEnvironment:
+                    return $"The Panopticon server at {server} rejected the token from {BridgeSettings.TokenVariable} "
+                        + $"({(int)http.StatusCode!}). {BridgeSettings.TokenVariable} overrides the saved login: correct it, "
+                        + "or remove it from the agent's MCP server environment to use the token from 'panopticon login'.";
                 case HttpRequestException { StatusCode: HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden } http:
-                    return $"The Panopticon server at {server} rejected the token ({(int)http.StatusCode!}). "
-                        + "Run 'panopticon login' to get a new token.";
+                    return $"The Panopticon server at {server} rejected the saved login's token ({(int)http.StatusCode!}): "
+                        + "it was revoked, or its member was removed. Run 'panopticon login' to get a new token.";
                 case HttpRequestException { StatusCode: { } status }:
                     return $"The Panopticon server at {server} answered {(int)status} {status}.";
                 case HttpRequestException http:
