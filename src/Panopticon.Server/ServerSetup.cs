@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.AspNetCore;
 using Panopticon.Server.Auth;
+using Panopticon.Server.Changes;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
@@ -104,6 +105,8 @@ public static class ServerSetup
         // Reporting and live updates.
         services.AddScoped<ReportRecorder>();
         services.AddScoped<ChangeCards>();
+        services.AddScoped<ChangePages>();
+        services.AddSingleton<DocumentRenderer>();
         services.AddSingleton<ChangeBroadcaster>();
 
         // Auth (team-auth D4): no default scheme, so nothing is looked up unless an endpoint's policy asks for it.
@@ -146,6 +149,7 @@ public static class ServerSetup
         app.MapDevice();
         app.MapTokens();
         app.MapDashboard();
+        app.MapChanges();
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file
         // extension (the built assets) out of the fallback, so UseStaticFiles serves them: an endpoint matched here would

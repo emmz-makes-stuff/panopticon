@@ -14,9 +14,9 @@
 
 ## 3. Server: rendering and the read APIs
 
-- [ ] 3.1 Add `DocumentRenderer` (D8): its own Markdig pipeline with `DisableHtml()`, task lists as disabled checkboxes, tables, the link and image scheme filter, images as links, YAML as escaped `<pre>`, and a hash-keyed bounded cache. Verify unit tests for "Script in a document", "JavaScript link", `data:` and `vbscript:` URLs, inline and block raw HTML, images, task checkboxes, tables and YAML.
-- [ ] 3.2 Implement `GET /api/changes/{id}` (header, agents, archive fields, and the ordered document list with `kind` and `title`) and `GET /api/changes/{id}/documents/{**path}` (D9), both needing a session. Verify "Open an active change", "Change with only tasks", "Unknown change" (404), an unknown document path (404), the ordering of specs and devlog notes, and the 401 without a session.
-- [ ] 3.3 Implement `GET /api/history` (D9: archived changes, archive time descending, keyset pages of 50, needing a session). Verify "Two archived changes", "Nothing archived yet", the paging boundary, and the 401 without a session.
+- [x] 3.1 Add `DocumentRenderer` (D8): its own Markdig pipeline with `DisableHtml()`, task lists as disabled checkboxes, tables, the link and image scheme filter, images as links, YAML as escaped `<pre>`, and a hash-keyed bounded cache. Verify unit tests for "Script in a document", "JavaScript link", `data:` and `vbscript:` URLs, inline and block raw HTML, images, task checkboxes, tables and YAML.
+- [x] 3.2 Implement `GET /api/changes/{id}` (header, agents, archive fields, and the ordered document list with `kind` and `title`) and `GET /api/changes/{id}/documents/{**path}` (D9), both needing a session. Verify "Open an active change", "Change with only tasks", "Unknown change" (404), an unknown document path (404), the ordering of specs and devlog notes, and the 401 without a session.
+- [x] 3.3 Implement `GET /api/history` (D9: archived changes, archive time descending, keyset pages of 50, needing a session). Verify "Two archived changes", "Nothing archived yet", the paging boundary, and the 401 without a session.
 
 ## 4. Bridge: the whole folder and archives
 

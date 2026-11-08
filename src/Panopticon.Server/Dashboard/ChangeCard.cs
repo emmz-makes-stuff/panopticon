@@ -42,13 +42,13 @@ public sealed class ChangeCards(PanopticonDb db)
         return change is null ? null : ToCard(change);
     }
 
-    private IQueryable<Change> Query() => db.Changes
+    internal IQueryable<Change> Query() => db.Changes
         .AsNoTracking()
         .AsSplitQuery()
         .Include(c => c.Repo)
         .Include(c => c.Agents).ThenInclude(a => a.Agent).ThenInclude(a => a.Member);
 
-    private static ChangeCard ToCard(Change change)
+    internal static ChangeCard ToCard(Change change)
     {
         var snapshot = change.Snapshot;
         var section = snapshot.CurrentSectionNumber is { } number
