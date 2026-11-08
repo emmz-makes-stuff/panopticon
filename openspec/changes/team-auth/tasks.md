@@ -16,8 +16,8 @@
 
 ## 3. Dashboard requires sign-in
 
-- [ ] 3.1 Require a session on `/api/changes` and `/api/events`, with a 401 and no redirect for unauthenticated `/api/*` calls; verify the "Not signed in" scenario and that `/healthz`, the sign-in endpoints and the app shell stay open; update the existing dashboard endpoint tests to sign in through a test helper
-- [ ] 3.2 Re-check the session on each SSE keep-alive tick and end the stream when it's gone (D11), and verify a test where signing out (and, separately, removing the member) ends an open `/api/events` stream within one tick
+- [x] 3.1 Require a session on `/api/changes` and `/api/events`, with a 401 and no redirect for unauthenticated `/api/*` calls; verify the "Not signed in" scenario and that `/healthz`, the sign-in endpoints and the app shell stay open; update the existing dashboard endpoint tests to sign in through a test helper
+- [x] 3.2 Re-check the session on each SSE keep-alive tick and end the stream when it's gone (D11), and verify a test where signing out (and, separately, removing the member) ends an open `/api/events` stream within one tick
 
 ## 4. Member management API
 
