@@ -81,18 +81,14 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             ReportedSection = report.ReportedSection,
         };
 
-        // Content-addressed and idempotent: storing before the database write is safe even if that write fails.
         // An older CLI sends no documents, so its manifest holds just the tasks (spec: Report from an older CLI).
-        var tasksSha256 = await documents.PutAsync(report.TasksMarkdown, cancellationToken);
-        var manifest = new List<StoredDocument>();
-        foreach (var document in report.Documents ?? [new Contracts.ChangeDocument(Contracts.DocumentLimits.TasksPath, report.TasksMarkdown)])
-        {
-            // tasks.md is already stored above; DocumentChecks guarantees its listed content is tasksMarkdown.
-            var sha256 = document.Path == Contracts.DocumentLimits.TasksPath
-                ? tasksSha256
-                : await documents.PutAsync(document.Content, cancellationToken);
-            manifest.Add(new StoredDocument(document.Path, sha256, Encoding.UTF8.GetByteCount(document.Content)));
-        }
+        // Otherwise DocumentChecks has made sure the documents include tasks.md, with tasksMarkdown as its content.
+        var reported = report.Documents ?? [new Contracts.ChangeDocument(Contracts.DocumentLimits.TasksPath, report.TasksMarkdown)];
+        var manifest = reported
+            .Select(d => new StoredDocument(d.Path, S3DocumentStore.Hash(d.Content), Encoding.UTF8.GetByteCount(d.Content)))
+            .ToList();
+        var tasksSha256 = manifest.Single(d => d.Path == Contracts.DocumentLimits.TasksPath).Sha256;
+        await StoreNewContentAsync(report, reported, manifest, cancellationToken);
 
         var receivedAt = clock.GetUtcNow();
 
@@ -201,6 +197,45 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
     }
 
     private sealed record StoredDocument(string Path, string Sha256, int SizeBytes);
+
+    /// <summary>The most store calls a report makes at once.</summary>
+    private const int MaxConcurrentStores = 8;
+
+    /// <summary>
+    /// Stores the content the change doesn't already hold, a few at a time (review fix 9.2). Content-addressed and
+    /// idempotent, so storing before the database write is safe even if that write fails. A hash among the active
+    /// change's latest documents is skipped: an earlier report stored it before committing, and objects are never
+    /// deleted.
+    /// </summary>
+    private async Task StoreNewContentAsync(
+        ReportInput report,
+        IReadOnlyList<Contracts.ChangeDocument> reported,
+        IReadOnlyList<StoredDocument> manifest,
+        CancellationToken cancellationToken)
+    {
+        var (hostKey, ownerKey, repoKey) = (Key(report.Repo.Host), Key(report.Repo.Owner), Key(report.Repo.Name));
+        var changeKey = Key(report.ChangeName);
+        var held = (await db.ChangeDocuments
+                .Where(d => db.Changes.Any(c => c.Id == d.ChangeId
+                    && c.ArchivedAt == null
+                    && c.NameKey == changeKey
+                    && c.Repo.HostKey == hostKey
+                    && c.Repo.OwnerKey == ownerKey
+                    && c.Repo.NameKey == repoKey))
+                .Select(d => d.Sha256)
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var toStore = reported
+            .Zip(manifest, (document, stored) => (document.Content, stored.Sha256))
+            .Where(d => !held.Contains(d.Sha256))
+            .DistinctBy(d => d.Sha256, StringComparer.Ordinal)
+            .Select(d => d.Content);
+        await Parallel.ForEachAsync(
+            toStore,
+            new ParallelOptions { MaxDegreeOfParallelism = MaxConcurrentStores, CancellationToken = cancellationToken },
+            async (content, ct) => await documents.PutAsync(content, ct));
+    }
 
     private async Task<Repo> FindOrAddRepoAsync(RepoIdentity identity, CancellationToken cancellationToken)
     {

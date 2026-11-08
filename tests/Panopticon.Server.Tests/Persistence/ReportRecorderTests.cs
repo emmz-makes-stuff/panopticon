@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.EntityFrameworkCore;
@@ -221,6 +222,25 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
         Assert.All(designs, d => Assert.Equal(designHash, d.Sha256));
     }
 
+    // Review fix 9.2: content the change already holds isn't stored again.
+    [Fact]
+    public async Task A_repeat_report_stores_only_the_content_that_changed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+        (string, string)[] unchanged = [("design.md", "# Design\n"), ("specs/auth/spec.md", "# Spec\n")];
+
+        await harness.RecordAsync(WithDocuments("team-auth", TwoOfFour, unchanged), ct);
+        Assert.Equal(3, harness.Stored.Count);
+        harness.Stored.Clear();
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        await harness.RecordAsync(WithDocuments("team-auth", ThreeOfFour, unchanged), ct);
+
+        Assert.Equal([ThreeOfFour], harness.Stored);
+        await using var db = harness.NewDb();
+        Assert.Equal(3, await db.ChangeDocuments.CountAsync(ct));
+    }
+
     [Fact]
     public async Task Each_report_keeps_a_manifest_naming_the_version_it_carried()
     {
@@ -412,6 +432,9 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
         public ManualClock Clock { get; } = ManualClock.StartingAt2026();
         public S3DocumentStore Documents { get; private set; } = null!;
 
+        /// <summary>The content of every store call the recorder made, in any order.</summary>
+        public ConcurrentQueue<string> Stored { get; } = new();
+
         public IAmazonS3 S3 { get; private set; } = null!;
 
         public string Bucket { get; private set; } = null!;
@@ -435,7 +458,18 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
         public async Task<RecordedReport> RecordAsync(ReportInput report, CancellationToken ct)
         {
             await using var db = NewDb();
-            return await new ReportRecorder(db, Documents, Clock).RecordAsync(report, ct);
+            return await new ReportRecorder(db, new CountingStore(Documents, Stored), Clock).RecordAsync(report, ct);
         }
+    }
+
+    private sealed class CountingStore(IDocumentStore inner, ConcurrentQueue<string> stored) : IDocumentStore
+    {
+        public Task<string> PutAsync(string content, CancellationToken cancellationToken)
+        {
+            stored.Enqueue(content);
+            return inner.PutAsync(content, cancellationToken);
+        }
+
+        public Task<string?> GetAsync(string sha256, CancellationToken cancellationToken) => inner.GetAsync(sha256, cancellationToken);
     }
 }

@@ -161,6 +161,22 @@ public class ChangeDocumentsTests
         Assert.Contains("the limit is 4194304 bytes (4 MB)", error.Message, StringComparison.Ordinal);
     }
 
+    // Spec cli-bridge: Document size limits, Too many files (review fix 9.1).
+    [Fact]
+    public async Task Too_many_files_names_the_document_limit()
+    {
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("walking-skeleton", "- [ ] a\n");
+        for (var i = 0; i < DocumentLimits.MaxDocuments; i++)
+        {
+            repo.WriteFile($"{Change}/devlog/note-{i:D3}.md", "x");
+        }
+
+        var error = await Assert.ThrowsAsync<BridgeException>(() => ChangeDocuments.ReadAsync(repo.Root, "walking-skeleton", Ct));
+
+        Assert.Equal("The change has 501 Markdown and YAML files; the limit is 500 documents. Nothing was sent.", error.Message);
+    }
+
     // --- Archived change reported ---
 
     [Fact]

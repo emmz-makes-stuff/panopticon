@@ -33,6 +33,7 @@ public class DocumentCheckTests(PostgresFixture postgres, S3Fixture s3)
         ["One file too large"] = ([new("devlog/huge.md", new string('a', DocumentLimits.MaxDocumentBytes + 1))], "'devlog/huge.md' is 262145 bytes; the limit is 262144 bytes (256 KB)"),
         ["Multi-byte characters count as bytes"] = ([new("design.md", new string('é', (DocumentLimits.MaxDocumentBytes / 2) + 1))], "'design.md' is 262146 bytes"),
         ["Oversized report"] = (Fill(17), "the limit is 4194304 bytes (4 MB)"),
+        ["Too many documents"] = ([.. Enumerable.Range(0, DocumentLimits.MaxDocuments + 1).Select(i => new ChangeDocument($"devlog/{i:D3}.md", ""))], "carries 501 documents; the limit is 500"),
     };
 
     public static TheoryData<string> Rejected => [.. _rejected.Keys];

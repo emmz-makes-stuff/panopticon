@@ -48,6 +48,12 @@ internal static partial class ChangeDocuments
         var files = new List<(string Relative, FileInfo File)>();
         Collect(new DirectoryInfo(directory), string.Empty, files);
         files.Sort((a, b) => string.CompareOrdinal(a.Relative, b.Relative));
+        if (files.Count > DocumentLimits.MaxDocuments)
+        {
+            throw new BridgeException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The change has {files.Count} Markdown and YAML files; the limit is {DocumentLimits.MaxDocuments} documents. Nothing was sent."));
+        }
 
         // Sizes are checked before anything is read. Strict UTF-8 decoding gives back the same bytes less any BOM, so
         // the decoded text the server counts can't be larger. (A file grown since is caught by the server's checks.)

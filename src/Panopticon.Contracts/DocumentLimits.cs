@@ -17,6 +17,9 @@ public static class DocumentLimits
     /// <summary>All of a report's documents together: 4 MB (binary).</summary>
     public const int MaxTotalBytes = 4 * 1024 * 1024;
 
+    /// <summary>The most documents one report may carry, <c>tasks.md</c> included.</summary>
+    public const int MaxDocuments = 500;
+
     /// <summary>The longest relative path a document may have.</summary>
     public const int MaxPathLength = 512;
 

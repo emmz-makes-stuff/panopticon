@@ -19,6 +19,14 @@ internal static partial class DocumentChecks
     /// <exception cref="McpException">A path, size, duplicate or <c>tasks.md</c> mismatch; nothing is recorded.</exception>
     public static IReadOnlyList<ChangeDocument> Check(IReadOnlyList<ChangeDocument?>? documents, string tasksMarkdown)
     {
+        // Before anything else, so a report of very many tiny documents costs nothing to refuse.
+        if (documents?.Count > DocumentLimits.MaxDocuments)
+        {
+            throw new McpException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The report carries {documents.Count} documents; the limit is {DocumentLimits.MaxDocuments}."));
+        }
+
         var checkedDocuments = new List<ChangeDocument>();
         var paths = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < (documents?.Count ?? 0); index++)

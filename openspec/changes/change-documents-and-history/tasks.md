@@ -57,8 +57,8 @@
 
 ## 9. Review fixes: document count and storage
 
-- [ ] 9.1 Add `DocumentLimits.MaxDocuments = 500`, checked by the bridge before sending and by `DocumentChecks` on the server (review #5). Verify "Too many files" (bridge) and "Too many documents" (server), both sending or recording nothing.
-- [ ] 9.2 In `ReportRecorder`, hash documents locally, skip storing any hash the change's latest documents already hold, and store the rest concurrently (review #6). Verify with a counting `IDocumentStore` that a repeat report with one changed file stores only that file, and that "Unchanged design stored once" still holds.
+- [x] 9.1 Add `DocumentLimits.MaxDocuments = 500`, checked by the bridge before sending and by `DocumentChecks` on the server (review #5). Verify "Too many files" (bridge) and "Too many documents" (server), both sending or recording nothing.
+- [x] 9.2 In `ReportRecorder`, hash documents locally, skip storing any hash the change's latest documents already hold, and store the rest concurrently (review #6). Verify with a counting `IDocumentStore` that a repeat report with one changed file stores only that file, and that "Unchanged design stored once" still holds.
 
 ## 10. Review fixes: web navigation
 
