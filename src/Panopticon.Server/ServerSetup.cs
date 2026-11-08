@@ -141,6 +141,8 @@ public static class ServerSetup
         app.MapSignIn();
         app.MapSession();
         app.MapMembers();
+        app.MapDevice();
+        app.MapTokens();
         app.MapDashboard();
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file

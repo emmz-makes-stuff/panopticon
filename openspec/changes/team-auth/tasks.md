@@ -26,10 +26,10 @@
 
 ## 5. Device login and API tokens (server)
 
-- [ ] 5.1 Add the device-login and token request and response records to `Panopticon.Contracts` (with the source-generated JSON context), and verify a round-trip serialization test
-- [ ] 5.2 Implement `POST /api/device/start` and `POST /api/device/poll` (pending, slow_down, denied, expired, and approved once, D12) with the D7 limits, and verify "Nobody approves" (server side), "Token handed over once" and "Polling too fast"
-- [ ] 5.3 Implement `GET /api/device/{code}` and the approve and deny endpoints (session plus the D6 header; codes normalized; per-session attempt limit), and verify "Approve" and "Deny" (server side) and "Unknown or expired code"
-- [ ] 5.4 Implement `GET /api/tokens` and `DELETE /api/tokens/{id}` (only your own tokens, 404 for anyone else's, no secret in any response), and verify "Token never shown again", "List and revoke" (server side) and "Someone else's token"
+- [x] 5.1 Add the device-login and token request and response records to `Panopticon.Contracts` (with the source-generated JSON context), and verify a round-trip serialization test
+- [x] 5.2 Implement `POST /api/device/start` and `POST /api/device/poll` (pending, slow_down, denied, expired, and approved once, D12) with the D7 limits, and verify "Nobody approves" (server side), "Token handed over once" and "Polling too fast"
+- [x] 5.3 Implement `GET /api/device/{code}` and the approve and deny endpoints (session plus the D6 header; codes normalized; per-session attempt limit), and verify "Approve" and "Deny" (server side) and "Unknown or expired code"
+- [x] 5.4 Implement `GET /api/tokens` and `DELETE /api/tokens/{id}` (only your own tokens, 404 for anyone else's, no secret in any response), and verify "Token never shown again", "List and revoke" (server side) and "Someone else's token"
 
 ## 6. Per-user tokens on `/mcp` and attribution
 

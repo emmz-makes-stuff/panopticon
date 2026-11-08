@@ -143,7 +143,7 @@ public static class SignInEndpoints
         TypedResults.Problem(detail: detail, statusCode: (int)status);
 
     // Links are built on the configured public URL, never the Host header; only Development may fall back to the request.
-    private static Uri LinkRoot(PublicUrlOptions publicUrl, HttpContext context, IHostEnvironment environment) =>
+    internal static Uri LinkRoot(PublicUrlOptions publicUrl, HttpContext context, IHostEnvironment environment) =>
         publicUrl.TryGetUri(out var root)
             ? root
             : environment.IsDevelopment()
