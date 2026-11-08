@@ -62,6 +62,7 @@ gates:
 deps:
 	@fail=0; \
 	dotnet --list-sdks 2>/dev/null | grep -Eq '^10\.0\.(40[3-9]|4[1-9][0-9]|[5-9][0-9]{2})' || { echo "MISSING/WRONG VERSION dotnet — need SDK 10.0.403+: dotnetup install 10.0.4xx"; fail=1; }; \
+	dotnet ef --version 2>/dev/null | grep -q '^10\.' || { echo "MISSING/WRONG VERSION dotnet-ef — need 10.x: dotnet tool install -g dotnet-ef --version 10.0.14"; fail=1; }; \
 	if [ "$$(uname)" = "Darwin" ]; then xcrun --find clang >/dev/null 2>&1 || { echo "MISSING clang toolchain — xcode-select --install"; fail=1; }; \
 	else clang --version >/dev/null 2>&1 || { echo "MISSING clang toolchain — apt install clang zlib1g-dev"; fail=1; }; fi; \
 	node --version 2>/dev/null | grep -Eq '^v(2[2-9]|[3-9][0-9])\.' || { echo "MISSING/WRONG VERSION node — need >=22: brew install node"; fail=1; }; \

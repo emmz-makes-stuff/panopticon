@@ -39,7 +39,16 @@ csharp_style_prefer_primary_constructors = true:suggestion
 csharp_style_prefer_collection_expression = when_types_loosely_match:suggestion
 dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
 
-# Naming: private fields _camelCase
+# Naming: constants PascalCase (more specific, so it wins over the private-field rule)
+dotnet_naming_rule.constants_pascal.severity = warning
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal_case
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = *
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+# Naming: other private fields (static readonly included) _camelCase
 dotnet_naming_rule.private_fields_underscore.severity = warning
 dotnet_naming_rule.private_fields_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore.style = underscore_camel
@@ -47,6 +56,10 @@ dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 dotnet_naming_style.underscore_camel.capitalization = camel_case
 dotnet_naming_style.underscore_camel.required_prefix = _
+
+# EF Core migrations are tool-generated: exempt from analyzers and style rules
+[src/Panopticon.Server/Data/Migrations/**.cs]
+generated_code = true
 
 # Tests: allow underscores in test method names
 [tests/**.cs]

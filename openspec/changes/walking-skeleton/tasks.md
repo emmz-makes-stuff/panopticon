@@ -16,9 +16,9 @@
 
 ## 3. Persistence
 
-- [ ] 3.1 Add the EF Core 10 + Npgsql model from design D6 (repos, changes, agents, change_agents, report_events, with lower-cased identity keys) and the initial migration, and verify `dotnet ef migrations` builds and a Testcontainers Postgres test applies it
-- [ ] 3.2 Implement the content-addressed S3 document store (`documents/sha256/<hex>`, write-if-absent, configurable `ServiceURL`/`ForcePathStyle`), and verify a Testcontainers SeaweedFS test shows identical content stored once
-- [ ] 3.3 Implement the report-recording service (upsert repo/change/agent, update change snapshot and change_agent time, append report_event), and verify integration tests for "Repeat report updates the same change", "Case-insensitive identity", "Two agents on one change" and "Report kept as an event"
+- [x] 3.1 Add the EF Core 10 + Npgsql model from design D6 (repos, changes, agents, change_agents, report_events, with lower-cased identity keys) and the initial migration, and verify `dotnet ef migrations` builds and a Testcontainers Postgres test applies it
+- [x] 3.2 Implement the content-addressed S3 document store (`documents/sha256/<hex>`, write-if-absent, configurable `ServiceURL`/`ForcePathStyle`), and verify a Testcontainers SeaweedFS test shows identical content stored once
+- [x] 3.3 Implement the report-recording service (upsert repo/change/agent, update change snapshot and change_agent time, append report_event), and verify integration tests for "Repeat report updates the same change", "Case-insensitive identity", "Two agents on one change" and "Report kept as an event"
 
 ## 4. Online MCP endpoint
 
