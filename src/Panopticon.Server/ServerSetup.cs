@@ -140,6 +140,7 @@ public static class ServerSetup
         app.MapMcp(McpPath).RequireAuthorization(AuthPolicies.Reporter);
         app.MapSignIn();
         app.MapSession();
+        app.MapMembers();
         app.MapDashboard();
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file

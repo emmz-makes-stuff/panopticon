@@ -21,8 +21,8 @@
 
 ## 4. Member management API
 
-- [ ] 4.1 Implement `GET /api/members`, `POST /api/members` (invite, or make a removed member active again; 400 for an invalid email, 409 for an active member) and `PATCH /api/members/me` (1–50 characters after trimming), and verify the "Invite a colleague", "Invalid address", "Already a member", "List members", "Default name", "Rename yourself" (in the list) and "Blank name rejected" scenarios
-- [ ] 4.2 Implement `DELETE /api/members/{id}` (no self-removal; one transaction that sets `removed_at`, deletes sessions and revokes tokens), and verify "Remove a colleague", "Can't remove yourself" and that a removed member's sign-in requests send no email
+- [x] 4.1 Implement `GET /api/members`, `POST /api/members` (invite, or make a removed member active again; 400 for an invalid email, 409 for an active member) and `PATCH /api/members/me` (1–50 characters after trimming), and verify the "Invite a colleague", "Invalid address", "Already a member", "List members", "Default name", "Rename yourself" (in the list) and "Blank name rejected" scenarios
+- [x] 4.2 Implement `DELETE /api/members/{id}` (no self-removal; one transaction that sets `removed_at`, deletes sessions and revokes tokens), and verify "Remove a colleague", "Can't remove yourself" and that a removed member's sign-in requests send no email
 
 ## 5. Device login and API tokens (server)
 
