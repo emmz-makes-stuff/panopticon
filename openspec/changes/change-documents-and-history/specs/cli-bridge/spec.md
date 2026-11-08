@@ -37,7 +37,7 @@ out of the change's folder.
 
 ### Requirement: Document size limits
 The bridge SHALL refuse to send a report whose documents include a file other than `tasks.md` over 256 KB, a
-`tasks.md` over 1 MiB (as `task-progress` already limits it), or a total over 4 MB. The error SHALL name the offending file and its size, or the total, and nothing SHALL be sent.
+`tasks.md` over 1 MiB (as `task-progress` already limits it), a total over 4 MB, or more than 500 documents. The error SHALL name the offending file and its size, the total, or the count, and nothing SHALL be sent.
 
 #### Scenario: One file too large
 - **WHEN** `devlog/huge.md` is 300 KB
@@ -47,16 +47,21 @@ The bridge SHALL refuse to send a report whose documents include a file other th
 - **WHEN** the change's documents total 5 MB, each under 256 KB
 - **THEN** `report_progress` returns an error naming the 4 MB total limit, and sends nothing
 
+#### Scenario: Too many files
+- **WHEN** the change's folder holds 501 Markdown files
+- **THEN** `report_progress` returns an error naming the 500-document limit, and sends nothing
+
 ### Requirement: Archived change reported
 When the reported change has no folder under `openspec/changes/` but has one under `openspec/changes/archive/`
 named `<YYYY-MM-DD>-<change>`, the bridge SHALL report that folder's documents, marked archived with the folder's
-name. When there are several, it SHALL use the latest date.
+name. When there are several, it SHALL use the latest date. The tool's reply SHALL say that the change was
+archived, and under which folder.
 
 #### Scenario: Report after archive
 - **WHEN** `team-auth` was moved to `openspec/changes/archive/2026-11-08-team-auth/` and the agent reports
   `team-auth`
 - **THEN** the bridge reports that folder's documents, marked archived as `2026-11-08-team-auth`, and returns the
-  final progress
+  final progress, saying it was archived as `2026-11-08-team-auth`
 
 #### Scenario: Archived twice under one name
 - **WHEN** both `archive/2026-03-01-cleanup/` and `archive/2026-11-08-cleanup/` exist and the agent reports
@@ -67,7 +72,8 @@ name. When there are several, it SHALL use the latest date.
 While `panopticon mcp` runs, it SHALL watch `openspec/changes/` for the changes it has reported in this session.
 When one of those folders moves to `openspec/changes/archive/`, the bridge SHALL report it archived by itself, as
 the last agent that reported it, within a few seconds. A watcher failure SHALL be logged to stderr and SHALL NOT
-stop the bridge.
+stop the bridge. When the archived report fails, the bridge SHALL retry it every 30 seconds while it runs, until it
+succeeds.
 
 #### Scenario: Archive while the bridge runs
 - **WHEN** Claude Code reported `team-auth` through the bridge, then `/opsx:archive` moves its folder to `archive/`
@@ -77,6 +83,19 @@ stop the bridge.
 #### Scenario: Unreported change archived
 - **WHEN** a change this bridge never reported on is moved to `archive/`
 - **THEN** the bridge reports nothing about it
+
+#### Scenario: Server unreachable at archive time
+- **WHEN** `team-auth` is archived while the server can't be reached, and the server comes back a minute later
+- **THEN** the bridge's retry reports `team-auth` archived, without the agent calling a tool
+
+### Requirement: One report at a time per change
+The bridge SHALL send one report at a time for each change, whether the agent or the archive watcher started it, so
+an archived report never overtakes a report already read from the active folder.
+
+#### Scenario: Report in flight at archive time
+- **WHEN** the agent's report of `team-auth` has been read from its active folder and is still being sent when
+  `/opsx:archive` moves the folder
+- **THEN** the archived report is sent after it, and the dashboard ends with no `team-auth` card
 
 #### Scenario: Server down at archive time
 - **WHEN** the watcher's archived report fails because the server can't be reached

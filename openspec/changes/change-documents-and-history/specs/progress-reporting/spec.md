@@ -77,7 +77,7 @@ under that folder name SHALL change nothing and SHALL return that change's final
 
 ### Requirement: Document checks
 The server SHALL reject a report whose document paths are not plain relative paths inside the change's folder,
-or whose documents exceed 256 KB each (1 MiB for `tasks.md`, per `task-progress`) or 4 MB in total, with an error naming the problem, and SHALL record nothing.
+or whose documents exceed 256 KB each (1 MiB for `tasks.md`, per `task-progress`), 4 MB in total, or 500 in number, with an error naming the problem, and SHALL record nothing.
 
 #### Scenario: Path escapes the folder
 - **WHEN** a report carries a document at `../../secrets.md`
@@ -86,3 +86,7 @@ or whose documents exceed 256 KB each (1 MiB for `tasks.md`, per `task-progress`
 #### Scenario: Oversized report
 - **WHEN** a report's documents total over 4 MB
 - **THEN** the tool returns an error naming the limit, and records nothing
+
+#### Scenario: Too many documents
+- **WHEN** a report carries 501 documents, each of them empty
+- **THEN** the tool returns an error naming the 500-document limit, and records nothing

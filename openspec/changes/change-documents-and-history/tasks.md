@@ -42,6 +42,29 @@
 
   Then stop for Emmz to run it.
 
+## 7. Review fixes: correctness
+
+- [ ] 7.1 Send one report at a time per change in the bridge (a per-change lock in `ProgressReporter`, shared by tool calls and the watcher), so an archived report can't overtake a report already read from the active folder (review #1). Verify "Report in flight at archive time" with a forwarder that holds the first report until the archive has happened.
+- [ ] 7.2 Give a clean `BridgeException` when `tasks.md` is present only under another case (`Tasks.md` on a case-insensitive disk), instead of an `InvalidOperationException` from `Single` (review #2). Verify with a bridge test that writes `Tasks.md`.
+- [ ] 7.3 Don't publish `change-updated` for an archived change: `ReportProgressTool` skips the publish when the card read after commit is archived (review #3). Verify with a broadcaster test where the archive commits between the report and the card read.
+- [ ] 7.4 Convert the history `before` cursor to UTC before querying (review #8). Verify `/api/history?before=…+01:00` gives the right page, not a 500.
+- [ ] 7.5 Remove dead code (review #10): the redundant devlog `ThenBy` in `ChangePages`, the after-decoding size pass in `ChangeDocuments.ReadAsync` (keep the check before reading), and the unused `ChangeFolder.Directory`. Fix the stale "(tasks.md 9.1)" reference in `ContainerEndToEndTests`.
+
+## 8. Review fixes: the bridge's archive reports
+
+- [ ] 8.1 Retry a failed archived report every 30 seconds while the bridge runs, until it succeeds (review #4; spec cli-bridge, Watching for archives). Verify "Server unreachable at archive time" with a short, injected retry interval, and update `docs/cli.md`'s Archives section.
+- [ ] 8.2 Say "archived as `<folder>`" in `report_progress`'s reply for an archived change (spec cli-bridge, Archived change reported). Verify "Report after archive", and update the e2e and `docs/cli.md`.
+
+## 9. Review fixes: document count and storage
+
+- [ ] 9.1 Add `DocumentLimits.MaxDocuments = 500`, checked by the bridge before sending and by `DocumentChecks` on the server (review #5). Verify "Too many files" (bridge) and "Too many documents" (server), both sending or recording nothing.
+- [ ] 9.2 In `ReportRecorder`, hash documents locally, skip storing any hash the change's latest documents already hold, and store the rest concurrently (review #6). Verify with a counting `IDocumentStore` that a repeat report with one changed file stores only that file, and that "Unchanged design stored once" still holds.
+
+## 10. Review fixes: web navigation
+
+- [ ] 10.1 Handle in-page anchors and document switching without rebuilding the change page (review #7): the router ignores a `popstate` that changes only the hash, and the change view swaps the article in place on a `?doc=` change, keeping the header and the live stream. Verify with router and change-view tests (a hash-only popstate does nothing; a doc switch fetches only the document and doesn't reconnect).
+- [ ] 10.2 Offer a retry when the history fails to load (review #9). Verify with a history-view test: a failed first load shows the error and a retry that loads the page.
+
 ## Workflow follow-up
 
 - Run the whole-change review and offer `/code-review` before archiving.
