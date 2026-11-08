@@ -109,14 +109,14 @@ public static class ServerSetup
         services.AddScoped<SessionStore>();
         services.AddAuthentication()
             .AddScheme<AuthenticationSchemeOptions, SessionHandler>(SessionHandler.SchemeName, _ => { })
-            .AddScheme<AuthenticationSchemeOptions, BootstrapTokenHandler>(BootstrapTokenHandler.SchemeName, _ => { });
+            .AddScheme<AuthenticationSchemeOptions, ApiTokenHandler>(ApiTokenHandler.SchemeName, _ => { });
         services.AddAuthorizationBuilder()
             .AddPolicy(AuthPolicies.Member, policy => policy
                 .AddAuthenticationSchemes(SessionHandler.SchemeName)
                 .RequireAuthenticatedUser()
                 .RequireClaim(PanopticonClaims.SessionId))
             .AddPolicy(AuthPolicies.Reporter, policy => policy
-                .AddAuthenticationSchemes(BootstrapTokenHandler.SchemeName)
+                .AddAuthenticationSchemes(ApiTokenHandler.SchemeName)
                 .RequireAuthenticatedUser());
 
         services.AddMcpServer()

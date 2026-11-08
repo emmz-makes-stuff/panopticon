@@ -1,10 +1,13 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
+using Panopticon.Contracts;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
@@ -18,8 +21,12 @@ namespace Panopticon.Server.Tests.Infrastructure;
 public sealed class PanopticonFactory(
     string connectionString,
     S3Options s3,
-    string? bootstrapToken = PanopticonFactory.Token) : WebApplicationFactory<Program>
+    string? bootstrapToken = null) : WebApplicationFactory<Program>
 {
+    private readonly SemaphoreSlim _memberTokenLock = new(1, 1);
+    private string? _memberToken;
+
+    /// <summary>A bootstrap token, for the tests of how Development accepts it (and how elsewhere refuses it).</summary>
     public const string Token = "test-bootstrap-token";
 
     /// <summary>The member every test server starts with (Panopticon:InitialMembers), unless Settings say otherwise.</summary>
@@ -34,10 +41,10 @@ public sealed class PanopticonFactory(
     public string? WebRoot { get; init; }
 
     /// <summary>
-    /// The host environment. Development until the per-user token work (team-auth 6.3) moves the tests off the
-    /// bootstrap token, which only Development accepts.
+    /// The host environment: <c>Testing</c>, which counts as "outside Development", so reports need a member's API
+    /// token. Tests of Development-only behaviour set it.
     /// </summary>
-    public string Environment { get; init; } = "Development";
+    public string Environment { get; init; } = "Testing";
 
     /// <summary>Every email the server sends, when <see cref="CaptureEmail"/> is on (the default).</summary>
     public CapturingEmailSender Emails { get; } = new();
@@ -58,7 +65,7 @@ public sealed class PanopticonFactory(
         PostgresFixture postgres,
         S3Fixture s3,
         CancellationToken cancellationToken,
-        string? bootstrapToken = Token) =>
+        string? bootstrapToken = null) =>
         new(await postgres.CreateDatabaseAsync(cancellationToken), await s3.CreateBucketAsync(cancellationToken), bootstrapToken);
 
     public PanopticonDb NewDb() => PostgresFixture.CreateDb(ConnectionString);
@@ -86,8 +93,77 @@ public sealed class PanopticonFactory(
         return http;
     }
 
-    /// <summary>An MCP client for <c>/mcp</c>, sending the given bearer token (the valid one by default).</summary>
-    public async Task<McpClient> CreateMcpClientAsync(string? token = Token, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// An API token for a member (who must exist), issued the way <c>panopticon login</c> gets one: a device login
+    /// started, approved in the member's signed-in browser, and polled for.
+    /// </summary>
+    public async Task<string> CreateApiTokenAsync(
+        string email = MemberEmail,
+        string machineName = "vm-1",
+        CancellationToken cancellationToken = default)
+    {
+        using var browser = await CreateSignedInClientAsync(email, cancellationToken);
+        using var cli = CreateClient();
+        using var started = await cli.PostApiAsync(DeviceEndpoints.StartPath, new { machineName }, cancellationToken);
+        started.EnsureSuccessStatusCode();
+        var start = (await started.Content.ReadFromJsonAsync<DeviceStartResponse>(cancellationToken))!;
+        using (var approved = await browser.PostApiAsync($"{DeviceEndpoints.LoginPath(start.UserCode)}/approve", null, cancellationToken))
+        {
+            approved.EnsureSuccessStatusCode();
+        }
+
+        using var polled = await cli.PostApiAsync(DeviceEndpoints.PollPath, new { start.DeviceSecret }, cancellationToken);
+        var poll = (await polled.Content.ReadFromJsonAsync<DevicePollResponse>(cancellationToken))!;
+        return poll.Token ?? throw new InvalidOperationException($"The device login wasn't approved: {poll.Status}.");
+    }
+
+    /// <summary>
+    /// An API token for a member (who must exist), written straight to the database. For a server on Kestrel
+    /// (<c>UseKestrel</c>), where the in-memory browser client that <see cref="CreateApiTokenAsync"/> signs in with
+    /// can't reach it.
+    /// </summary>
+    public async Task<string> SeedApiTokenAsync(
+        string email = MemberEmail,
+        string machineName = "vm-1",
+        CancellationToken cancellationToken = default)
+    {
+        var secret = Secrets.NewApiToken();
+        await using var db = NewDb();
+        var memberId = await db.Members
+            .Where(m => m.EmailKey == Panopticon.Server.Auth.MemberEmail.Key(email))
+            .Select(m => m.Id)
+            .SingleAsync(cancellationToken);
+        db.ApiTokens.Add(new ApiToken
+        {
+            MemberId = memberId,
+            SecretHash = Secrets.Hash(secret),
+            MachineName = machineName,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return secret;
+    }
+
+    /// <summary>The default member's API token, issued once per test server and reused.</summary>
+    public async Task<string> MemberTokenAsync(CancellationToken cancellationToken = default)
+    {
+        await _memberTokenLock.WaitAsync(cancellationToken);
+        try
+        {
+            return _memberToken ??= await CreateApiTokenAsync(cancellationToken: cancellationToken);
+        }
+        finally
+        {
+            _memberTokenLock.Release();
+        }
+    }
+
+    /// <summary>An MCP client for <c>/mcp</c>, reporting as the default member with their API token.</summary>
+    public async Task<McpClient> CreateMcpClientAsync(CancellationToken cancellationToken = default) =>
+        await CreateMcpClientAsync(await MemberTokenAsync(cancellationToken), cancellationToken);
+
+    /// <summary>An MCP client for <c>/mcp</c>, sending the given bearer token, or none.</summary>
+    public async Task<McpClient> CreateMcpClientAsync(string? token, CancellationToken cancellationToken = default)
     {
         var http = CreateClient();
         var headers = new Dictionary<string, string>();
@@ -107,6 +183,16 @@ public sealed class PanopticonFactory(
             ownsHttpClient: true);
 
         return await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _memberTokenLock.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

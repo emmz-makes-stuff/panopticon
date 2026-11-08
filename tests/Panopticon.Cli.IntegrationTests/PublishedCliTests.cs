@@ -50,7 +50,7 @@ public class PublishedCliTests(PostgresFixture postgres, S3Fixture s3)
                 EnvironmentVariables = new Dictionary<string, string?>
                 {
                     ["PANOPTICON_SERVER_URL"] = serverUrl,
-                    ["PANOPTICON_TOKEN"] = PanopticonFactory.Token,
+                    ["PANOPTICON_TOKEN"] = await server.SeedApiTokenAsync(cancellationToken: Ct),
                 },
                 StandardErrorLines = stderr.Enqueue,
             }),

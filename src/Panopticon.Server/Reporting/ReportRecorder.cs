@@ -9,8 +9,11 @@ namespace Panopticon.Server.Reporting;
 /// <summary>Where a change lives: host, owner (may contain '/', e.g. GitLab subgroups) and repo name.</summary>
 public sealed record RepoIdentity(string Host, string Owner, string Name);
 
-/// <summary>The reporting agent: its MCP client name and the machine it runs on.</summary>
-public sealed record AgentIdentity(string ClientName, string MachineName);
+/// <summary>
+/// The reporting agent: its MCP client name, the machine it runs on, and the member whose token it reported with
+/// (design D16). <see cref="MemberId"/> comes from the token, never from the report; it's null for the bootstrap token.
+/// </summary>
+public sealed record AgentIdentity(string ClientName, string MachineName, Guid? MemberId = null);
 
 /// <summary>A validated progress report (spec: progress-reporting, Report content).</summary>
 public sealed record ReportInput(
@@ -173,9 +176,9 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
 
     private async Task<Agent> FindOrAddAgentAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
-        var (clientKey, machineKey) = (Key(identity.ClientName), Key(identity.MachineName));
+        var (clientKey, machineKey, memberId) = (Key(identity.ClientName), Key(identity.MachineName), identity.MemberId);
         var agent = await db.Agents.SingleOrDefaultAsync(
-            a => a.ClientNameKey == clientKey && a.MachineNameKey == machineKey,
+            a => a.MemberId == memberId && a.ClientNameKey == clientKey && a.MachineNameKey == machineKey,
             cancellationToken);
         if (agent is not null)
         {
@@ -185,6 +188,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         agent = new Agent
         {
             Id = Guid.CreateVersion7(),
+            MemberId = memberId,
             ClientName = identity.ClientName,
             MachineName = identity.MachineName,
             ClientNameKey = clientKey,

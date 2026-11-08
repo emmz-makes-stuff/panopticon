@@ -33,9 +33,9 @@
 
 ## 6. Per-user tokens on `/mcp` and attribution
 
-- [ ] 6.1 Replace `BootstrapTokenHandler` as `/mcp`'s scheme with `ApiToken` (D4: hash lookup, unrevoked and active member, `last_used_at` written at most once a minute, the bootstrap token in Development only), confirm how the member reaches `ReportProgressTool` (D16), and verify the "Missing token", "Wrong token", "No token configured", "Revoked token", "Bootstrap token in Development", "Bootstrap token elsewhere" and "Last used" scenarios
-- [ ] 6.2 Record the member on agents (`(member, client, machine)` identity) and add `Member` to `CardAgent`, and verify "Two members on one machine", "Card shows identity and agents" (API side), "Agent without a member" and "Reports remain" (a removed member's agent still shows their name)
-- [ ] 6.3 Move the server and bridge test helpers (`PanopticonFactory`, `BridgeHarness`, the end-to-end check) from the bootstrap token to a member plus API token created through a test helper; keep the bootstrap tests under `Development`; and verify `make test` is green
+- [x] 6.1 Replace `BootstrapTokenHandler` as `/mcp`'s scheme with `ApiToken` (D4: hash lookup, unrevoked and active member, `last_used_at` written at most once a minute, the bootstrap token in Development only), confirm how the member reaches `ReportProgressTool` (D16), and verify the "Missing token", "Wrong token", "No token configured", "Revoked token", "Bootstrap token in Development", "Bootstrap token elsewhere" and "Last used" scenarios
+- [x] 6.2 Record the member on agents (`(member, client, machine)` identity) and add `Member` to `CardAgent`, and verify "Two members on one machine", "Card shows identity and agents" (API side), "Agent without a member" and "Reports remain" (a removed member's agent still shows their name)
+- [x] 6.3 Move the server and bridge test helpers (`PanopticonFactory`, `BridgeHarness`, the end-to-end check) from the bootstrap token to a member plus API token created through a test helper; keep the bootstrap tests under `Development`; and verify `make test` is green
 
 ## 7. CLI login and configuration
 

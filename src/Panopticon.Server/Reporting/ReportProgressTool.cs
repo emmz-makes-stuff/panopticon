@@ -4,6 +4,7 @@ using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Panopticon.Contracts;
+using Panopticon.Server.Auth;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Live;
 using Panopticon.Server.Progress;
@@ -23,6 +24,7 @@ public sealed class ReportProgressTool
         ReportRecorder recorder,
         ChangeCards cards,
         ChangeBroadcaster broadcaster,
+        RequestContext<CallToolRequestParams> context,
         [Description("Required. The repo: host, owner (may contain '/') and name.")] RepoRef? repo = null,
         [Description("Required. The OpenSpec change name.")] string? change = null,
         [Description("Required. The reporting agent: MCP client name and machine name.")] AgentRef? agent = null,
@@ -30,7 +32,12 @@ public sealed class ReportProgressTool
         [Description("Optional. The section number the agent is working on.")] int? section = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(context);
         var input = Validate(repo, change, agent, tasksMarkdown, section);
+
+        // The member comes from the bearer token (design D16): the SDK carries the request's authenticated user into
+        // the tool as RequestContext.User. A bootstrap-token report has no member.
+        input = input with { Agent = input.Agent with { MemberId = context.User?.GetMemberId() } };
 
         RecordedReport recorded;
         try

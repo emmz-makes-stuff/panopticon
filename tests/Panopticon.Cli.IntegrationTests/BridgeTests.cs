@@ -182,7 +182,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         using var repo = TempGitRepo.Create("git@github.com:emmz/panopticon.git");
         repo.WriteTasks("walking-skeleton", Tasks);
         var subdirectory = repo.CreateSubdirectory(Path.Combine("src", "app"));
-        await using var bridge = await BridgeHarness.StartAsync(Settings(subdirectory), server.CreateClient, "claude-code", Ct);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(subdirectory, token: await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
 
         var result = await bridge.ReportAsync("walking-skeleton", 2, Ct);
 
@@ -197,7 +197,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         Assert.Equal("walking-skeleton", card.Change);
         var agent = Assert.Single(card.Agents);
-        Assert.Equal(("claude-code", "vm-1"), (agent.Client, agent.Machine));
+        Assert.Equal(("claude-code", "vm-1", "member"), (agent.Client, agent.Machine, agent.Member));
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
         using var repo = TempGitRepo.Create("https://user:secret@github.com/emmz/panopticon.git");
         repo.WriteTasks("walking-skeleton", Tasks);
-        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), server.CreateClient, "claude-code", Ct);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, token: await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
 
         var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
 
@@ -272,7 +272,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         using var repo = TempGitRepo.Create();
         // A tasks.md over the server's size limit makes the server's own tool fail.
         repo.WriteTasks("walking-skeleton", "## 1. Big\n" + new string('x', 2 * 1024 * 1024));
-        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), server.CreateClient, "claude-code", Ct);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, token: await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
 
         var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
 

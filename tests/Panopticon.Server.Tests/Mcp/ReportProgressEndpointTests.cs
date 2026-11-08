@@ -101,7 +101,7 @@ public class ReportProgressEndpointTests(PostgresFixture postgres, S3Fixture s3)
     public async Task Bootstrap_token_outside_development_fails_at_startup_naming_the_setting(string environment)
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct))
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), PanopticonFactory.Token)
         {
             Environment = environment,
         };

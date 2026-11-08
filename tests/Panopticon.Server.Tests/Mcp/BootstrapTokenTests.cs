@@ -12,5 +12,5 @@ public class BootstrapTokenTests
     [InlineData("secret", "", false)]
     [InlineData("secret", null, false)]
     public void Matches_only_the_exact_configured_token(string presented, string? expected, bool matches) =>
-        Assert.Equal(matches, BootstrapTokenHandler.Matches(presented, expected));
+        Assert.Equal(matches, BootstrapToken.Matches(presented, expected));
 }
