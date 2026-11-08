@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
-// The server listens on 5080 in development: macOS ControlCenter holds port 5000.
-const serverUrl = process.env["PANOPTICON_DEV_SERVER"] ?? "http://localhost:5080";
+// The server listens on 7480 in development (5000 is macOS ControlCenter; 5080-5280 are commonly taken).
+const serverUrl = process.env["PANOPTICON_DEV_SERVER"] ?? "http://localhost:7480";
 
 export default defineConfig({
   build: {

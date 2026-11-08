@@ -21,6 +21,9 @@ public sealed class PanopticonFactory(
 
     public string ConnectionString { get; } = connectionString;
 
+    /// <summary>A web root to serve instead of the project's wwwroot (which exists only after a web build).</summary>
+    public string? WebRoot { get; init; }
+
     public static async Task<PanopticonFactory> CreateAsync(
         PostgresFixture postgres,
         S3Fixture s3,
@@ -63,5 +66,9 @@ public sealed class PanopticonFactory(
         builder.UseSetting($"{S3Options.Section}:Bucket", s3.Bucket);
         builder.UseSetting($"{S3Options.Section}:ForcePathStyle", "true");
         builder.UseSetting(BootstrapTokenOptions.ConfigKey, bootstrapToken ?? string.Empty);
+        if (WebRoot is not null)
+        {
+            builder.UseWebRoot(WebRoot);
+        }
     }
 }

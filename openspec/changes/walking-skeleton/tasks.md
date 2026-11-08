@@ -29,9 +29,9 @@
 
 ## 5. Dashboard read API and live stream
 
-- [ ] 5.1 Add `GET /api/changes` returning card DTOs, most recently reported first, and verify an integration test with two changes in two repos
-- [ ] 5.2 Add `GET /api/events` using `TypedResults.ServerSentEvents` that streams `change-updated` events from the broadcaster, and verify an integration test reads an SSE event after a report
-- [ ] 5.3 Serve `wwwroot` static files with an `index.html` fallback, plus Development-time migrations and a `--migrate` flag, and verify `dotnet run` against compose serves the built web app at `/`
+- [x] 5.1 Add `GET /api/changes` returning card DTOs, most recently reported first, and verify an integration test with two changes in two repos
+- [x] 5.2 Add `GET /api/events` using `TypedResults.ServerSentEvents` that streams `change-updated` events from the broadcaster, and verify an integration test reads an SSE event after a report
+- [x] 5.3 Serve `wwwroot` static files with an `index.html` fallback, plus Development-time migrations and a `--migrate` flag, and verify `dotnet run` against compose serves the built web app at `/`
 
 ## 6. CLI bridge
 

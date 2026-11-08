@@ -73,13 +73,28 @@ public static class ServerSetup
 
     public static WebApplication MapPanopticon(this WebApplication app)
     {
+        // The built web UI (design D10: Vite builds into wwwroot).
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
+
         app.UseAuthentication();
         app.UseAuthorization();
 
         app.MapGet("/healthz", () => TypedResults.Ok("ok"));
         app.MapMcp(McpPath).RequireAuthorization();
+        app.MapDashboard();
+
+        // Client-side routes fall back to the app shell; unknown API paths stay 404.
+        app.MapFallbackToFile("{*path:regex(^(?!api/|mcp).*$)}", "index.html");
 
         return app;
+    }
+
+    /// <summary>Applies any pending EF Core migrations.</summary>
+    public static async Task MigrateAsync(this WebApplication app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<PanopticonDb>().Database.MigrateAsync();
     }
 
     private sealed class DatabaseOptions
