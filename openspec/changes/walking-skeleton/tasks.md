@@ -43,10 +43,10 @@
 
 ## 7. Web dashboard
 
-- [ ] 7.1 Run the `frontend-design` skill to set the "fun but clean" direction (type, colour tokens with light/dark, card and progress-bar treatment, empty state), and record it in `web/DESIGN.md`
-- [ ] 7.2 Implement the card list from `GET /api/changes` (card content, two labelled bars with counts, empty-bar state, empty dashboard state), and verify Vitest tests for the "One card per change", "Card content" and "Two progress bars" scenarios
-- [ ] 7.3 Make the bars accessible (`role="progressbar"` with label and `aria-valuenow`, and not colour-only), and verify a Vitest test asserting the accessible name and value
-- [ ] 7.4 Add live updates via `EventSource` (in-place update, new card at top, auto-reconnect with full refresh and an offline indicator, stale events ignored), and verify Vitest tests with a fake `EventSource` for every "Live updates" scenario
+- [x] 7.1 Run the `frontend-design` skill to set the "fun but clean" direction (type, colour tokens with light/dark, card and progress-bar treatment, empty state), and record it in `web/DESIGN.md`
+- [x] 7.2 Implement the card list from `GET /api/changes` (card content, two labelled bars with counts, empty-bar state, empty dashboard state), and verify Vitest tests for the "One card per change", "Card content" and "Two progress bars" scenarios
+- [x] 7.3 Make the bars accessible (`role="progressbar"` with label and `aria-valuenow`, and not colour-only), and verify a Vitest test asserting the accessible name and value
+- [x] 7.4 Add live updates via `EventSource` (in-place update, new card at top, auto-reconnect with full refresh and an offline indicator, stale events ignored), and verify Vitest tests with a fake `EventSource` for every "Live updates" scenario
 
 ## 8. Container and end-to-end check
 

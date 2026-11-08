@@ -27,3 +27,6 @@ src/Panopticon.Server/wwwroot/
 # Claude Code harness state (not project content)
 .claude/.cc-writes/
 .claude/settings.local.json
+
+# Local MCP bridge config for Claude Code (machine-specific command path; see docs/cli.md)
+.mcp.json

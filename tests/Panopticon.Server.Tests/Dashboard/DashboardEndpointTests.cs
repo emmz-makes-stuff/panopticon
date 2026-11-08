@@ -69,8 +69,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(20));
 
-        // Headers may not flush until the first event, so open the stream in the background and wait
-        // for its subscription before reporting.
+        // Open the stream in the background and wait for its subscription before reporting.
         var responseTask = http.GetAsync(DashboardEndpoints.EventsPath, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         while (broadcaster.SubscriberCount == 0)
         {
@@ -104,13 +103,31 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
     }
 
     [Fact]
+    public async Task Events_send_headers_at_once_without_waiting_for_a_report()
+    {
+        // A browser's EventSource only opens (and the dashboard only refreshes and shows "Live") once headers arrive.
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        var broadcaster = factory.Services.GetRequiredService<ChangeBroadcaster>();
+        using var http = factory.CreateClient();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
+        using var response = await http.GetAsync(DashboardEndpoints.EventsPath, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(1, broadcaster.SubscriberCount);
+    }
+
+    [Fact]
     public async Task Ending_the_stream_unsubscribes()
     {
         var ct = TestContext.Current.CancellationToken;
         var broadcaster = new ChangeBroadcaster();
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, cancel.Token).GetAsyncEnumerator(ct);
+        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, cancel.Token).GetAsyncEnumerator(ct);
         var moving = enumerator.MoveNextAsync();
         Assert.Equal(1, broadcaster.SubscriberCount);
 
@@ -134,5 +151,30 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains("<title>Panopticon</title>", await http.GetStringAsync("/changes/some-route", ct), StringComparison.Ordinal);
         using var api = await http.GetAsync("/api/does-not-exist", ct);
         Assert.Equal(HttpStatusCode.NotFound, api.StatusCode);
+    }
+
+    [Fact]
+    public async Task Built_assets_are_served_as_themselves_not_as_the_app_shell()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
+        Directory.CreateDirectory(Path.Combine(webRoot, "assets"));
+        await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>shell</title>", ct);
+        await File.WriteAllTextAsync(Path.Combine(webRoot, "assets", "index-abc.js"), "console.log(1);", ct);
+        await File.WriteAllTextAsync(Path.Combine(webRoot, "assets", "index-abc.css"), "body{}", ct);
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        using var http = factory.CreateClient();
+
+        using var script = await http.GetAsync("/assets/index-abc.js", ct);
+        Assert.Equal(HttpStatusCode.OK, script.StatusCode);
+        Assert.Equal("text/javascript", script.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("console.log(1);", await script.Content.ReadAsStringAsync(ct));
+
+        using var style = await http.GetAsync("/assets/index-abc.css", ct);
+        Assert.Equal("text/css", style.Content.Headers.ContentType?.MediaType);
+
+        // A missing asset is a 404, not the shell (which a browser would refuse as a script).
+        using var missing = await http.GetAsync("/assets/gone.js", ct);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 }
