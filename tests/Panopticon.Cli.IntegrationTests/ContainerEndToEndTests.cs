@@ -14,6 +14,7 @@ using ModelContextProtocol.Protocol;
 using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Cli.Tests.Infrastructure;
 using Panopticon.Server.Auth;
+using Panopticon.Server.Changes;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Tests.Infrastructure;
@@ -28,8 +29,10 @@ namespace Panopticon.Cli.IntegrationTests;
 /// <list type="number">
 /// <item>sign in through the logged link (Development with no Resend key logs each email);</item>
 /// <item>run the published <c>panopticon login</c> and approve its code;</item>
-/// <item>report through <c>panopticon mcp</c> using only the saved login;</item>
-/// <item>see the card name the member.</item>
+/// <item>report a whole change folder through <c>panopticon mcp</c> using only the saved login;</item>
+/// <item>see the card name the member;</item>
+/// <item>read the change page's documents (change-documents-and-history 6.1);</item>
+/// <item>archive the folder and see the running bridge's watcher move the change to the history.</item>
 /// </list>
 /// Building the image takes minutes, so this is opt-in: <c>make test</c> skips the trait, and <c>make e2e</c> runs it.
 /// </summary>
@@ -38,6 +41,7 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
     public const string Trait = "ContainerE2E";
 
     private const string MemberEmail = "e2e@example.test";
+    private const string Change = "team-auth-e2e";
     private const string DbName = "panopticon";
     private const string DbUser = "panopticon";
     private const string DbPassword = "panopticon";
@@ -125,7 +129,7 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", Trait)]
-    public async Task A_member_signs_in_logs_in_a_machine_reports_and_the_card_names_them()
+    public async Task A_member_signs_in_logs_in_a_machine_reports_reads_the_documents_and_archives()
     {
         try
         {
@@ -152,17 +156,45 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
             Assert.True(login.ExitCode == 0, $"panopticon login exited {login.ExitCode}.\nstdout:\n{login.Stdout}\nstderr:\n{login.Stderr}");
             Assert.Contains($"as {member.DisplayName} ({MemberEmail})", login.Stdout, StringComparison.Ordinal);
 
-            // 3. Report through `panopticon mcp`, with no token in the environment: only the saved login.
+            // 3. Report a whole change folder through `panopticon mcp`, with no token in the environment: only the
+            //    saved login. The bridge stays up, so its archive watcher sees step 6.
             using var repo = TempGitRepo.Create("git@github.com:emmz/panopticon.git");
-            repo.WriteTasks("team-auth-e2e", "## 1. First\n- [x] 1.1 One\n- [ ] 1.2 Two\n");
-            var report = await ReportAsync(repo.Root);
+            repo.WriteTasks(Change, "## 1. First\n- [x] 1.1 One\n- [ ] 1.2 Two\n");
+            repo.WriteFile($"openspec/changes/{Change}/proposal.md", "# Proposal\n\nWhy we sign in.\n");
+            repo.WriteFile($"openspec/changes/{Change}/design.md", "# Design\n");
+            repo.WriteFile($"openspec/changes/{Change}/specs/team-auth/spec.md", "# Spec\n");
+            repo.WriteFile($"openspec/changes/{Change}/devlog/20261108-1200-start.md", "# Start\n");
+            await using var bridge = await BridgeAsync(repo.Root);
+            var report = await bridge.ReportAsync();
             Assert.StartsWith("Overall 1/2", report, StringComparison.Ordinal);
 
             // 4. The card shows the member on the agent row.
             var card = Assert.Single((await browser.GetFromJsonAsync<List<ChangeCard>>(DashboardEndpoints.ChangesPath, Ct))!);
-            Assert.Equal("team-auth-e2e", card.Change);
+            Assert.Equal(Change, card.Change);
             var agent = Assert.Single(card.Agents);
             Assert.Equal(("e2e-agent", member.DisplayName), (agent.Client, agent.Member));
+
+            // 5. The change page lists every document the bridge sent, and renders one.
+            var page = (await browser.GetFromJsonAsync<ChangePage>(ChangeEndpoints.ChangePath(card.ChangeId), Ct))!;
+            Assert.Null(page.ArchivedAt);
+            Assert.Equal(
+                ["design.md", "devlog/20261108-1200-start.md", "proposal.md", "specs/team-auth/spec.md", "tasks.md"],
+                page.Documents.Select(d => d.Path).Order(StringComparer.Ordinal));
+            var proposal = (await browser.GetFromJsonAsync<RenderedDocument>(ChangeEndpoints.DocumentPath(card.ChangeId, "proposal.md"), Ct))!;
+            Assert.Contains("Why we sign in.", proposal.Html, StringComparison.Ordinal);
+
+            // 6. Archive the folder as /opsx:archive would: the running bridge's watcher reports it, and the change
+            //    moves from the dashboard to the history.
+            var archiveFolder = $"2026-11-08-{Change}";
+            Directory.Move(
+                Path.Combine(repo.Root, "openspec", "changes", Change),
+                Path.Combine(repo.CreateSubdirectory(Path.Combine("openspec", "changes", "archive")), archiveFolder));
+            var archived = await WaitForAsync(
+                async () => (await browser.GetFromJsonAsync<HistoryPage>(ChangeEndpoints.HistoryPath, Ct))!.Changes.SingleOrDefault(),
+                "the archived change in the history");
+            Assert.Equal((card.ChangeId, Change, archiveFolder), (archived.ChangeId, archived.Change, archived.ArchiveFolder));
+            Assert.Empty((await browser.GetFromJsonAsync<List<ChangeCard>>(DashboardEndpoints.ChangesPath, Ct))!);
+            Assert.NotNull((await browser.GetFromJsonAsync<ChangePage>(ChangeEndpoints.ChangePath(card.ChangeId), Ct))!.ArchivedAt);
         }
         catch
         {
@@ -274,7 +306,22 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
         }
     }
 
-    private async Task<string> ReportAsync(string repoRoot)
+    /// <summary>A running <c>panopticon mcp</c>, kept up so its archive watcher runs between reports.</summary>
+    private sealed class BridgeSession(McpClient client, ConcurrentQueue<string> stderr) : IAsyncDisposable
+    {
+        public async Task<string> ReportAsync()
+        {
+            var result = await client.CallToolAsync(
+                "report_progress", new Dictionary<string, object?> { ["change"] = Change }, cancellationToken: Ct);
+            var text = string.Join(" ", result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+            Assert.True(result.IsError is not true, $"{text}\nstderr:\n{string.Join('\n', stderr)}");
+            return text;
+        }
+
+        public ValueTask DisposeAsync() => client.DisposeAsync();
+    }
+
+    private async Task<BridgeSession> BridgeAsync(string repoRoot)
     {
         var stderr = new ConcurrentQueue<string>();
         var environment = new Dictionary<string, string?>
@@ -285,7 +332,7 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
         };
         IsolateConfig(environment);
 
-        await using var client = await McpClient.CreateAsync(
+        var client = await McpClient.CreateAsync(
             new StdioClientTransport(new StdioClientTransportOptions
             {
                 Command = PublishedCli.Path,
@@ -296,12 +343,7 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
             }),
             new McpClientOptions { ClientInfo = new Implementation { Name = "e2e-agent", Version = "1.0.0" } },
             cancellationToken: Ct);
-
-        var result = await client.CallToolAsync(
-            "report_progress", new Dictionary<string, object?> { ["change"] = "team-auth-e2e" }, cancellationToken: Ct);
-        var text = string.Join(" ", result.Content.OfType<TextContentBlock>().Select(block => block.Text));
-        Assert.True(result.IsError is not true, $"{text}\nstderr:\n{string.Join('\n', stderr)}");
-        return text;
+        return new BridgeSession(client, stderr);
     }
 
     // The CLI reads and writes a saved login: point it at this test's directory, never the real one.
@@ -322,7 +364,8 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
         return stdout + stderr;
     }
 
-    private static async Task<string> WaitForAsync(Func<Task<string?>> probe, string what)
+    private static async Task<T> WaitForAsync<T>(Func<Task<T?>> probe, string what)
+        where T : class
     {
         var deadline = DateTime.UtcNow + _stepTimeout;
         while (DateTime.UtcNow < deadline)

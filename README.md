@@ -3,6 +3,8 @@
 A live dashboard of coding agents working through [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes.
 Agents report through a small local MCP bridge (the `panopticon` CLI). The server parses each change's
 `tasks.md`, and the dashboard shows one card per change, with section and whole-change progress updating live.
+Each card opens the change's own page, which shows the documents in its folder. Once a change is archived with
+`/opsx:archive`, it leaves the dashboard for the history.
 
 - Requirements: [`docs/DISCOVERY.md`](docs/DISCOVERY.md). Decisions: [`docs/adrs/`](docs/adrs/).
 - Connecting an agent: [`docs/cli.md`](docs/cli.md).
@@ -63,6 +65,21 @@ artifacts/cli/panopticon login --server http://localhost:7480
 It prints a code and a link. Open the link while signed in, check the code, and choose **Approve**. The CLI saves
 the token, and `panopticon mcp` uses it from then on. Connecting Claude Code and other agents is covered in
 [`docs/cli.md`](docs/cli.md). The Tokens page lists every machine's token, and revoking one stops its reports at once.
+
+### Change pages and the history
+
+Each report sends the whole change folder: `proposal.md`, `design.md`, `tasks.md`, the specs, the devlog and any
+other files. Choose a change's name on its card to open its page. The page lists those documents, grouped, and
+shows one at a time, rendered from Markdown. It opens on the proposal, and it updates live while the change is
+active.
+
+When `/opsx:archive` moves the folder to `openspec/changes/archive/`, a running `panopticon mcp` that reported the
+change notices, and reports it as archived. The card leaves the dashboard, and the change appears on the History
+page, newest first, with its documents as they were when it was archived. If no bridge was running, the next report
+of that change name archives it instead. How the bridge finds archives is in [`docs/cli.md`](docs/cli.md#archives).
+
+**After deploying this version**, changes archived before it are still cards. Report each one once from its repo with
+the new CLI (ask the agent to report it, or call `report_progress` with its name), and it moves to the history.
 
 ### Working on the dashboard
 
@@ -141,7 +158,9 @@ AOT publish, the web build/test/format/lint, and OpenSpec validation). `make tes
 (Testcontainers).
 
 `make e2e` isn't a gate. It builds this image, then runs the whole team flow against it: it signs in through the
-logged link, runs `panopticon login` and approves it, reports through `panopticon mcp`, and checks that the card
-names the member. It needs Docker, and the first image build takes a few minutes.
+logged link, runs `panopticon login` and approves it, and reports a whole change folder through `panopticon mcp`. It
+checks that the card names the member and that the change page lists the documents. Then it archives the folder and
+waits for the running bridge to move the change to the history. It needs Docker, and the first image build takes a
+few minutes.
 
 The workflow for building changes is in [`CLAUDE.md`](CLAUDE.md).

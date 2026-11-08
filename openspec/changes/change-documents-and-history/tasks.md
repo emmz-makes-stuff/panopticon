@@ -34,8 +34,8 @@
 
 ## 6. Integration and human verification
 
-- [ ] 6.1 Extend the container end-to-end test: report a change through the published `panopticon mcp` with a full folder, check that `GET /api/changes/{id}` lists its documents, then move the folder to `archive/` and check that the watcher's report lands it in `GET /api/history`. Verify `make e2e` passes.
-- [ ] 6.2 Update the README (the change page and history; reporting once after deploy moves already-archived changes to history), and write the human verification recipe in a devlog note:
+- [x] 6.1 Extend the container end-to-end test: report a change through the published `panopticon mcp` with a full folder, check that `GET /api/changes/{id}` lists its documents, then move the folder to `archive/` and check that the watcher's report lands it in `GET /api/history`. Verify `make e2e` passes.
+- [x] 6.2 Update the README (the change page and history; reporting once after deploy moves already-archived changes to history), and write the human verification recipe in a devlog note:
   - the look of both pages, in light and dark, at desktop and phone width;
   - a real `/opsx:archive` watched leaving an open dashboard;
   - `walking-skeleton` and `team-auth` moved to history by reporting each once.
