@@ -22,10 +22,10 @@
 
 ## 4. Online MCP endpoint
 
-- [ ] 4.1 Add shared contract records and a `JsonSerializerContext` in `Panopticon.Contracts` for the `report_progress` input/output, and verify a round-trip serialisation unit test
-- [ ] 4.2 Add bootstrap bearer auth (constant-time compare, startup failure when unset) protecting `/mcp`, and verify integration tests for the Missing token, Wrong token and No token configured scenarios
-- [ ] 4.3 Map the MCP endpoint at `/mcp` (streamable HTTP, stateless) with the `report_progress` tool wired to parsing (section 2) and recording (section 3), including field validation, and verify an in-process MCP client test covers "Tool is discoverable", "Valid report accepted" and "Missing required field"
-- [ ] 4.4 Add the in-process change broadcaster (bounded per-subscriber channels) and publish on every accepted report, and verify a test that a subscriber receives the updated card after a report
+- [x] 4.1 Add shared contract records and a `JsonSerializerContext` in `Panopticon.Contracts` for the `report_progress` input/output, and verify a round-trip serialisation unit test
+- [x] 4.2 Add bootstrap bearer auth (constant-time compare, startup failure when unset) protecting `/mcp`, and verify integration tests for the Missing token, Wrong token and No token configured scenarios
+- [x] 4.3 Map the MCP endpoint at `/mcp` (streamable HTTP, stateless) with the `report_progress` tool wired to parsing (section 2) and recording (section 3), including field validation, and verify an in-process MCP client test covers "Tool is discoverable", "Valid report accepted" and "Missing required field"
+- [x] 4.4 Add the in-process change broadcaster (bounded per-subscriber channels) and publish on every accepted report, and verify a test that a subscriber receives the updated card after a report
 
 ## 5. Dashboard read API and live stream
 

@@ -1,8 +1,10 @@
+using Panopticon.Server;
+
 var builder = WebApplication.CreateBuilder(args);
+builder.AddPanopticon();
 
 var app = builder.Build();
-
-app.MapGet("/healthz", () => TypedResults.Ok("ok"));
+app.MapPanopticon();
 
 app.Run();
 
