@@ -50,9 +50,9 @@
 
 ## 8. Container and end-to-end check
 
-- [ ] 8.1 Add a multi-stage `Dockerfile` (node stage builds web into wwwroot, then dotnet publish, then aspnet runtime image), and verify `docker build` succeeds and the container serves `/` and `/mcp` against compose services
-- [ ] 8.2 Document local running (compose, env vars including `Panopticon:BootstrapToken`, S3 settings, migrations) in `README.md`, and verify a fresh clone following it reaches a working dashboard
-- [ ] 8.3 End-to-end check: with the server running, configure Claude Code to use the published `panopticon mcp`, report on this change, and verify the card appears and both bars move live as tasks are ticked
+- [x] 8.1 Add a multi-stage `Dockerfile` (node stage builds web into wwwroot, then dotnet publish, then aspnet runtime image), and verify `docker build` succeeds and the container serves `/` and `/mcp` against compose services
+- [x] 8.2 Document local running (compose, env vars including `Panopticon:BootstrapToken`, S3 settings, migrations) in `README.md`, and verify a fresh clone following it reaches a working dashboard
+- [x] 8.3 End-to-end check: with the server running, configure Claude Code to use the published `panopticon mcp`, report on this change, and verify the card appears and both bars move live as tasks are ticked
 
 ## Workflow follow-up
 
