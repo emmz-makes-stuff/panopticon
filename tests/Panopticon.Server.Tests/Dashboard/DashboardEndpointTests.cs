@@ -219,6 +219,26 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("team-auth", card.GetProperty("change").GetString());
     }
 
+    // Review fix 7.3: the card a report publishes is read after commit; an archived change has none.
+    [Fact]
+    public async Task An_archived_change_has_no_card_to_publish()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        await using (var mcp = await factory.CreateMcpClientAsync(cancellationToken: ct))
+        {
+            var skeleton = Report("emmz", "panopticon", "walking-skeleton", "## 1. A\n- [x] a");
+            await mcp.CallToolAsync("report_progress", skeleton.ToToolArguments(), cancellationToken: ct);
+            await mcp.CallToolAsync("report_progress", (skeleton with { Archive = "2026-11-07-walking-skeleton" }).ToToolArguments(), cancellationToken: ct);
+        }
+
+        await using var db = factory.NewDb();
+        var changeId = (await db.Changes.SingleAsync(ct)).Id;
+        await using var scope = factory.Services.CreateAsyncScope();
+
+        Assert.Null(await scope.ServiceProvider.GetRequiredService<ChangeCards>().GetAsync(changeId, ct));
+    }
+
     [Fact]
     public async Task Events_send_headers_at_once_without_waiting_for_a_report()
     {

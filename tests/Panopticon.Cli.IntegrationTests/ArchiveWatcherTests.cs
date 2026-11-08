@@ -85,6 +85,38 @@ public class ArchiveWatcherTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("2026-11-08-team-auth", (await db.Changes.SingleAsync(Ct)).ArchiveFolder);
     }
 
+    // Spec cli-bridge: "One report at a time per change", Report in flight at archive time.
+    [Fact]
+    public async Task A_report_in_flight_at_archive_time_is_sent_before_the_archived_one()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("team-auth", Tasks);
+        var hold = new HoldNextRequest();
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root, await server.MemberTokenAsync(Ct)),
+            () => server.CreateDefaultClient(new HoldingHandler(hold)),
+            "claude-code",
+            Ct);
+        Assert.True((await bridge.ReportAsync("team-auth", null, Ct)).IsError is not true);
+
+        // The agent's next report reads the active folder, then is held on its way to the server.
+        hold.Arm();
+        var inFlight = bridge.ReportAsync("team-auth", 1, Ct);
+        await hold.Held.WaitAsync(_patience, Ct);
+        Archive(repo, "team-auth", "2026-11-08-team-auth");
+
+        // Long enough for the watcher to have sent its archived report, had it not waited.
+        await Task.Delay(ArchiveWatcher.Debounce * 4, Ct);
+        hold.Release();
+        Assert.True((await inFlight).IsError is not true);
+
+        var change = await EventuallyAsync(server, async db => await db.Changes.SingleOrDefaultAsync(c => c.ArchiveFolder != null, Ct));
+        Assert.Equal("2026-11-08-team-auth", change.ArchiveFolder);
+        await using var db = server.NewDb();
+        Assert.Equal(1, await db.Changes.CountAsync(Ct));
+    }
+
     private static void Archive(TempGitRepo repo, string change, string folder)
     {
         var archiveRoot = repo.CreateSubdirectory(Path.Combine("openspec", "changes", "archive"));
@@ -117,6 +149,38 @@ public class ArchiveWatcherTests(PostgresFixture postgres, S3Fixture s3)
         {
             Assert.True(DateTime.UtcNow < deadline, "Timed out waiting for the watcher.");
             await Task.Delay(100, Ct);
+        }
+    }
+
+    /// <summary>When armed, holds the next request sent until released; every other request goes straight through.</summary>
+    private sealed class HoldNextRequest
+    {
+        private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _armed;
+
+        public Task Held => _held.Task;
+
+        public void Arm() => Volatile.Write(ref _armed, 1);
+
+        public void Release() => _released.TrySetResult();
+
+        public async Task WaitIfArmedAsync(CancellationToken cancellationToken)
+        {
+            if (Interlocked.Exchange(ref _armed, 0) == 1)
+            {
+                _held.TrySetResult();
+                await _released.Task.WaitAsync(cancellationToken);
+            }
+        }
+    }
+
+    private sealed class HoldingHandler(HoldNextRequest hold) : DelegatingHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await hold.WaitIfArmedAsync(cancellationToken);
+            return await base.SendAsync(request, cancellationToken);
         }
     }
 

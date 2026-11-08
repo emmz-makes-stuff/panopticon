@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Panopticon.Cli.Git;
 using Panopticon.Contracts;
@@ -17,7 +18,29 @@ internal sealed partial class ProgressReporter(
     /// <summary>Used when the agent gave no client name at initialisation.</summary>
     public const string UnknownClient = "unknown-client";
 
+    // One report at a time per change (spec cli-bridge, One report at a time per change): the watcher's archived report
+    // waits for a report already read from the active folder, so it can't overtake it and leave a fresh active change.
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _changeLocks = new(StringComparer.Ordinal);
+
     public async Task<ReportProgressResult> ReportAsync(
+        string? clientName,
+        string change,
+        int? section,
+        CancellationToken cancellationToken)
+    {
+        var gate = _changeLocks.GetOrAdd(change, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await ReportLockedAsync(clientName, change, section, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<ReportProgressResult> ReportLockedAsync(
         string? clientName,
         string change,
         int? section,

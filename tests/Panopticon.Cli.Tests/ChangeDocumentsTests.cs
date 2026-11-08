@@ -108,6 +108,19 @@ public class ChangeDocumentsTests
     // --- Document size limits ---
 
     [Fact]
+    public async Task Tasks_named_with_another_case_is_a_clear_error()
+    {
+        // On a case-insensitive disk (macOS, Windows) 'tasks.md' finds this file; on Linux it doesn't. Either way the
+        // bridge says what's wrong, rather than failing with an InvalidOperationException.
+        using var repo = TempGitRepo.Create();
+        repo.WriteFile($"{Change}/Tasks.md", "- [ ] a\n");
+
+        var error = await Assert.ThrowsAsync<BridgeException>(() => ChangeDocuments.ReadAsync(repo.Root, "walking-skeleton", Ct));
+
+        Assert.StartsWith("Change 'walking-skeleton' has no tasks.md", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task One_file_too_large_names_it_and_the_limit()
     {
         using var repo = TempGitRepo.Create();

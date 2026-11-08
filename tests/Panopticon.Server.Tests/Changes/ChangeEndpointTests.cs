@@ -226,6 +226,26 @@ public class ChangeEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(JsonValueKind.Null, second.GetProperty("nextBefore").ValueKind);
     }
 
+    // Review fix 7.4: Npgsql refuses a non-UTC DateTimeOffset for timestamptz, which was a 500.
+    [Fact]
+    public async Task A_cursor_with_another_offset_means_the_same_instant()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        var start = new DateTimeOffset(2026, 11, 8, 12, 0, 0, TimeSpan.Zero);
+        await SeedArchivedAsync(factory, [start, start.AddMinutes(1), start.AddMinutes(2)], ct);
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
+
+        var before = start.AddMinutes(2).ToOffset(TimeSpan.FromHours(1)).ToString("O", CultureInfo.InvariantCulture);
+        using var response = await http.GetAsync($"{ChangeEndpoints.HistoryPath}?before={Uri.EscapeDataString(before)}", ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal(
+            ["cleanup-01", "cleanup-00"],
+            page.GetProperty("changes").EnumerateArray().Select(c => c.GetProperty("change").GetString()));
+    }
+
     [Fact]
     public async Task A_page_never_ends_inside_a_run_of_equal_archive_times()
     {

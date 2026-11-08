@@ -9,7 +9,7 @@ namespace Panopticon.Cli;
 /// A change's folder as read for a report: its Markdown and YAML files, its <c>tasks.md</c>, and the archive folder's
 /// name when the change has been archived.
 /// </summary>
-internal sealed record ChangeFolder(string Directory, string? Archive, string Tasks, IReadOnlyList<ChangeDocument> Documents);
+internal sealed record ChangeFolder(string? Archive, string Tasks, IReadOnlyList<ChangeDocument> Documents);
 
 /// <summary>
 /// Reads a change's documents from <c>openspec/changes/&lt;change&gt;/</c> under the repo root, or from its latest
@@ -49,7 +49,8 @@ internal static partial class ChangeDocuments
         Collect(new DirectoryInfo(directory), string.Empty, files);
         files.Sort((a, b) => string.CompareOrdinal(a.Relative, b.Relative));
 
-        // Sizes are checked before anything is read, and again on the decoded text, which is what the server counts.
+        // Sizes are checked before anything is read. Strict UTF-8 decoding gives back the same bytes less any BOM, so
+        // the decoded text the server counts can't be larger. (A file grown since is caught by the server's checks.)
         long total = 0;
         foreach (var (relative, file) in files)
         {
@@ -60,20 +61,16 @@ internal static partial class ChangeDocuments
         CheckTotal(total);
 
         var documents = new List<ChangeDocument>(files.Count);
-        total = 0;
         foreach (var (relative, file) in files)
         {
-            var content = await ReadUtf8Async(file.FullName, relative, cancellationToken);
-            var bytes = Encoding.UTF8.GetByteCount(content);
-            CheckSize(relative, bytes);
-            total += bytes;
-            documents.Add(new ChangeDocument(relative, content));
+            documents.Add(new ChangeDocument(relative, await ReadUtf8Async(file.FullName, relative, cancellationToken)));
         }
 
-        CheckTotal(total);
-
-        var tasks = documents.Single(d => d.Path == TasksFileName).Content;
-        return new ChangeFolder(directory, archive, tasks, documents);
+        // On a case-insensitive disk, File.Exists above also finds 'Tasks.md', but the server needs 'tasks.md' exactly.
+        var tasks = documents.SingleOrDefault(d => d.Path == TasksFileName)?.Content
+            ?? throw new BridgeException(
+                $"Change '{change}' has no {TasksFileName}: looked for '{tasksPath}', and the file there is named differently. Rename it to '{TasksFileName}'.");
+        return new ChangeFolder(archive, tasks, documents);
     }
 
     /// <summary>

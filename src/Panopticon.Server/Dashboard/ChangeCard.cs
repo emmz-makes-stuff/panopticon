@@ -36,9 +36,10 @@ public sealed class ChangeCards(PanopticonDb db)
         return changes.ConvertAll(ToCard);
     }
 
+    /// <summary>The change's card, or null when it's gone or archived: an archived change has no card to update.</summary>
     public async Task<ChangeCard?> GetAsync(Guid changeId, CancellationToken cancellationToken)
     {
-        var change = await Query().SingleOrDefaultAsync(c => c.Id == changeId, cancellationToken);
+        var change = await Query().SingleOrDefaultAsync(c => c.Id == changeId && c.ArchivedAt == null, cancellationToken);
         return change is null ? null : ToCard(change);
     }
 

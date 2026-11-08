@@ -44,11 +44,11 @@
 
 ## 7. Review fixes: correctness
 
-- [ ] 7.1 Send one report at a time per change in the bridge (a per-change lock in `ProgressReporter`, shared by tool calls and the watcher), so an archived report can't overtake a report already read from the active folder (review #1). Verify "Report in flight at archive time" with a forwarder that holds the first report until the archive has happened.
-- [ ] 7.2 Give a clean `BridgeException` when `tasks.md` is present only under another case (`Tasks.md` on a case-insensitive disk), instead of an `InvalidOperationException` from `Single` (review #2). Verify with a bridge test that writes `Tasks.md`.
-- [ ] 7.3 Don't publish `change-updated` for an archived change: `ReportProgressTool` skips the publish when the card read after commit is archived (review #3). Verify with a broadcaster test where the archive commits between the report and the card read.
-- [ ] 7.4 Convert the history `before` cursor to UTC before querying (review #8). Verify `/api/history?before=…+01:00` gives the right page, not a 500.
-- [ ] 7.5 Remove dead code (review #10): the redundant devlog `ThenBy` in `ChangePages`, the after-decoding size pass in `ChangeDocuments.ReadAsync` (keep the check before reading), and the unused `ChangeFolder.Directory`. Fix the stale "(tasks.md 9.1)" reference in `ContainerEndToEndTests`.
+- [x] 7.1 Send one report at a time per change in the bridge (a per-change lock in `ProgressReporter`, shared by tool calls and the watcher), so an archived report can't overtake a report already read from the active folder (review #1). Verify "Report in flight at archive time" with a forwarder that holds the first report until the archive has happened.
+- [x] 7.2 Give a clean `BridgeException` when `tasks.md` is present only under another case (`Tasks.md` on a case-insensitive disk), instead of an `InvalidOperationException` from `Single` (review #2). Verify with a bridge test that writes `Tasks.md`.
+- [x] 7.3 Don't publish `change-updated` for an archived change: `ReportProgressTool` skips the publish when the card read after commit is archived (review #3). Verify with a broadcaster test where the archive commits between the report and the card read.
+- [x] 7.4 Convert the history `before` cursor to UTC before querying (review #8). Verify `/api/history?before=…+01:00` gives the right page, not a 500.
+- [x] 7.5 Remove dead code (review #10): the redundant devlog `ThenBy` in `ChangePages`, the after-decoding size pass in `ChangeDocuments.ReadAsync` (keep the check before reading), and the unused `ChangeFolder.Directory`. Fix the stale "(tasks.md 9.1)" reference in `ContainerEndToEndTests`.
 
 ## 8. Review fixes: the bridge's archive reports
 

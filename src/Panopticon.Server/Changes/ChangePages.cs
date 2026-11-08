@@ -82,8 +82,10 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
     public async Task<HistoryPage> HistoryAsync(DateTimeOffset? before, int limit, CancellationToken cancellationToken)
     {
         var query = cards.Query().Where(c => c.ArchivedAt != null);
-        if (before is { } cursor)
+        if (before is { } given)
         {
+            // Npgsql writes only UTC offsets to timestamptz, and a cursor with any other offset is the same instant.
+            var cursor = given.ToUniversalTime();
             query = query.Where(c => c.ArchivedAt < cursor);
         }
 
@@ -132,7 +134,6 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
                 "devlog" => 4,
                 _ => 5,
             })
-            .ThenBy(d => d.Kind == "devlog" ? 0 : 1)
             .ThenByDescending(d => d.Kind == "devlog" ? d.Path : string.Empty, StringComparer.Ordinal)
             .ThenBy(d => d.Path, StringComparer.Ordinal)];
 

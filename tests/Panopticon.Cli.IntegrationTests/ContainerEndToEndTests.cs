@@ -23,9 +23,9 @@ using Testcontainers.PostgreSql;
 namespace Panopticon.Cli.IntegrationTests;
 
 /// <summary>
-/// The whole team flow against the real container image (tasks.md 9.1). It builds the image from the
-/// <c>Dockerfile</c>, migrates and starts it beside Postgres and SeaweedFS on a private network, then works as a member
-/// would:
+/// The whole team flow against the real container image (team-auth 9.1, extended by change-documents-and-history
+/// 6.1). It builds the image from the <c>Dockerfile</c>, migrates and starts it beside Postgres and SeaweedFS on a
+/// private network, then works as a member would:
 /// <list type="number">
 /// <item>sign in through the logged link (Development with no Resend key logs each email);</item>
 /// <item>run the published <c>panopticon login</c> and approve its code;</item>

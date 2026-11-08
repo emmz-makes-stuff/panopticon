@@ -28,6 +28,11 @@ public sealed class ChangeBroadcaster
     private readonly Lock _gate = new();
     private readonly List<Channel<ChangeEvent>> _subscribers = [];
 
+    // Changes announced as archived. A report that read its card before the archive committed can publish after the
+    // archived event; that update is dropped, so it can't put the card back. An archived change's id never becomes
+    // active again (a reused name gets a new change), and there's one id per archive since start-up.
+    private readonly HashSet<Guid> _archived = [];
+
     public int SubscriberCount
     {
         get
@@ -67,6 +72,16 @@ public sealed class ChangeBroadcaster
     {
         lock (_gate)
         {
+            if (change is ChangeEvent.Updated updated && _archived.Contains(updated.Card.ChangeId))
+            {
+                return;
+            }
+
+            if (change is ChangeEvent.Archived archived)
+            {
+                _archived.Add(archived.ChangeId);
+            }
+
             foreach (var subscriber in _subscribers)
             {
                 subscriber.Writer.TryWrite(change);
