@@ -1,0 +1,57 @@
+# Local development services (design D17). Not for production: credentials are fixed and public.
+#   docker compose up -d
+name: panopticon
+
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_USER: panopticon
+      POSTGRES_PASSWORD: panopticon
+      POSTGRES_DB: panopticon
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U panopticon -d panopticon"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # S3-compatible object store. MinIO no longer publishes images, so SeaweedFS replaces it.
+  s3:
+    image: chrislusf/seaweedfs:4.50
+    # -volume.max=0 sizes the volume limit from free disk; the default of 8 runs out once a few buckets exist.
+    command: server -dir=/data -volume.max=0 -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "127.0.0.1:8333:8333"
+    volumes:
+      - s3-data:/data
+      - ./local/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/healthz || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  # Creates the documents bucket once, like a pre-provisioned Railway Bucket.
+  s3-init:
+    image: amazon/aws-cli:2.39.6
+    depends_on:
+      s3:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: panopticon-local
+      AWS_SECRET_ACCESS_KEY: panopticon-local-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        aws --endpoint-url http://s3:8333 s3api head-bucket --bucket panopticon-documents
+        || aws --endpoint-url http://s3:8333 s3 mb s3://panopticon-documents
+    restart: "no"
+
+volumes:
+  postgres-data:
+  s3-data:

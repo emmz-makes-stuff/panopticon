@@ -1,0 +1,313 @@
+/* "Lit cells": see web/DESIGN.md for the tokens, type scale and principles. */
+
+:root {
+  --paper: #f4f6fb;
+  --card: #ffffff;
+  --ink: #1c2140;
+  --ink-muted: #5b6180;
+  --rule: #dde2ee;
+  --lit: #0f8b7d;
+  --spark: #d6336c;
+
+  --font-display: "Gabarito", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --step--1: 0.8rem;
+  --step-0: 1rem;
+  --step-2: 1.5625rem;
+  --step-3: 1.953rem;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12152b;
+    --card: #1b1f3b;
+    --ink: #e9ecf8;
+    --ink-muted: #9ca3c4;
+    --rule: #2d3355;
+    --lit: #3fd1be;
+    --spark: #ff7aa2;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #12152b;
+  --card: #1b1f3b;
+  --ink: #e9ecf8;
+  --ink-muted: #9ca3c4;
+  --rule: #2d3355;
+  --lit: #3fd1be;
+  --spark: #ff7aa2;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 var(--step-0) / 1.5 var(--font-body);
+}
+
+#app {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Header */
+
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.wordmark {
+  margin: 0;
+  font: 700 var(--step-3) / 1 var(--font-display);
+  letter-spacing: 0.03em;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+/* Cards */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem 1.125rem 1.125rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.card-host {
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.card-repo {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.card-time {
+  font-size: var(--step--1);
+  font-weight: 400;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.card-change {
+  margin: 0.15rem 0 0.9rem;
+  font: 700 var(--step-2) / 1.15 var(--font-display);
+  overflow-wrap: anywhere;
+}
+
+.card-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--step--1);
+}
+
+.card-agent {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+}
+
+/* Lit-cell bars */
+
+.bar {
+  margin-top: 0.5rem;
+}
+
+.bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: var(--step--1);
+}
+
+.bar-name {
+  font-weight: 600;
+}
+
+.bar-count {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cells {
+  display: flex;
+  gap: 3px;
+  height: 10px;
+  margin-top: 0.3rem;
+}
+
+.cell {
+  flex: 1;
+  border-radius: 2px;
+  background: var(--rule);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-muted) 25%, transparent);
+}
+
+.cell.lit {
+  background: var(--lit);
+  box-shadow: none;
+}
+
+.cells.dense {
+  gap: 0;
+}
+
+.cells.dense .cell {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.cells.dense .cell:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.cells.dense .cell:last-child {
+  border-radius: 0 2px 2px 0;
+}
+
+.bar-empty {
+  display: flex;
+  align-items: center;
+  height: 1.6rem;
+  margin-top: 0.3rem;
+  padding: 0 0.6rem;
+  border: 1px dashed var(--rule);
+  border-radius: 4px;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+/* Empty and error states */
+
+.empty-state,
+.load-error {
+  max-width: 38rem;
+  padding: 3rem 0;
+}
+
+.empty-state h2,
+.load-error h2 {
+  margin: 0 0 0.5rem;
+  font: 700 var(--step-2) / 1.15 var(--font-display);
+}
+
+.empty-state p,
+.load-error p {
+  margin: 0 0 1rem;
+  color: var(--ink-muted);
+}
+
+.empty-state pre {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: var(--step--1);
+  line-height: 1.6;
+}
+
+/* Live state */
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--spark);
+}
+
+.live[data-status="offline"],
+.live[data-status="connecting"] {
+  color: var(--ink-muted);
+}
+
+.live[data-status="offline"] .dot,
+.live[data-status="connecting"] .dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--ink-muted);
+}
+
+/* The one motion: a report lights its new cells in sequence (web/DESIGN.md, principle 4). */
+
+.card.updated {
+  box-shadow: inset 3px 0 0 var(--spark);
+}
+
+.cell.lighting {
+  animation: light 260ms ease-out both;
+}
+
+@keyframes light {
+  from {
+    background: var(--rule);
+    transform: scaleY(0.4);
+  }
+
+  to {
+    background: var(--lit);
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell.lighting {
+    animation: none;
+  }
+}

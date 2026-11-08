@@ -1,0 +1,32 @@
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+artifacts/
+
+# Web
+web/node_modules/
+web/coverage/
+
+# Vite builds the web app into the server's wwwroot (design D10)
+src/Panopticon.Server/wwwroot/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vs/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code harness state (not project content)
+.claude/.cc-writes/
+.claude/settings.local.json
+
+# Local MCP bridge config for Claude Code (machine-specific command path; see docs/cli.md)
+.mcp.json

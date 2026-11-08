@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Panopticon.Server\Panopticon.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same S3 identities as local compose (local/seaweedfs-s3.json). -->
+    <None Include="..\..\local\seaweedfs-s3.json" Link="Infrastructure\seaweedfs-s3.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

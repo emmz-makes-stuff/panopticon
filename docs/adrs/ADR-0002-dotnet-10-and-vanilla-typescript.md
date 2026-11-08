@@ -21,7 +21,7 @@ clean" (designed with the `frontend-design` skill). Setup should take minutes on
 - **Contracts:** a shared .NET library that both the server and the CLI reference.
 - **Web:** **vanilla TypeScript + CSS**, built with **Vite**, with no UI framework. Live updates arrive
   through the browser's `EventSource`.
-- The SDK is pinned through `global.json` to 10.0.400 with `rollForward: latestFeature`.
+- The SDK is pinned through `global.json` to 10.0.403 with `rollForward: latestFeature`. (Raised from 10.0.400, whose bundled AOT compiler had a known vulnerability.)
 
 ## Evidence
 

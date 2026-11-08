@@ -13,8 +13,9 @@ CHANGES := $(notdir $(patsubst %/,%,$(filter-out %/archive/,$(wildcard openspec/
 build:
 	@dotnet build Panopticon.slnx -c Release -warnaserror; code=$$?; echo "BUILD_EXIT:$$code"; exit $$code
 
-# Needs Docker (Testcontainers: Postgres, MinIO).
-test:
+# Needs Docker (Testcontainers: Postgres, SeaweedFS). Runs aot first: the CLI end-to-end tests drive the
+# published binary in artifacts/cli.
+test: aot
 	@dotnet test --solution Panopticon.slnx -c Release; code=$$?; echo "TEST_EXIT:$$code"; exit $$code
 
 format:
@@ -40,11 +41,13 @@ web-format: web-install
 web-lint: web-install
 	@npm --prefix web run lint; code=$$?; echo "WEB_LINT_EXIT:$$code"; exit $$code
 
-# Validates every active change. No active change is a failure, not a silent pass.
+# Validates every active change. With none (e.g. right after an archive) it says so and validates the main specs
+# instead, so the gate still checks something rather than passing silently.
 validate:
 	@fail=0; \
 	if [ -z "$(CHANGES)" ]; then \
-		echo "no active change found under openspec/changes/"; fail=1; \
+		echo "no active change under openspec/changes/: validating the main specs"; \
+		openspec validate --specs --strict || fail=1; \
 	else \
 		for c in $(CHANGES); do openspec validate $$c --strict || fail=1; done; \
 	fi; \
@@ -61,7 +64,8 @@ gates:
 # `gates`: it checks the machine, not the code, and auth checks may need the network.
 deps:
 	@fail=0; \
-	dotnet --list-sdks 2>/dev/null | grep -q '^10\.0\.[4-9]' || { echo "MISSING/WRONG VERSION dotnet — need SDK 10.0.400+: brew install --cask dotnet-sdk"; fail=1; }; \
+	dotnet --list-sdks 2>/dev/null | grep -Eq '^10\.0\.(40[3-9]|4[1-9][0-9]|[5-9][0-9]{2})' || { echo "MISSING/WRONG VERSION dotnet — need SDK 10.0.403+: dotnetup install 10.0.4xx"; fail=1; }; \
+	dotnet ef --version 2>/dev/null | grep -q '^10\.' || { echo "MISSING/WRONG VERSION dotnet-ef — need 10.x: dotnet tool install -g dotnet-ef --version 10.0.14"; fail=1; }; \
 	if [ "$$(uname)" = "Darwin" ]; then xcrun --find clang >/dev/null 2>&1 || { echo "MISSING clang toolchain — xcode-select --install"; fail=1; }; \
 	else clang --version >/dev/null 2>&1 || { echo "MISSING clang toolchain — apt install clang zlib1g-dev"; fail=1; }; fi; \
 	node --version 2>/dev/null | grep -Eq '^v(2[2-9]|[3-9][0-9])\.' || { echo "MISSING/WRONG VERSION node — need >=22: brew install node"; fail=1; }; \

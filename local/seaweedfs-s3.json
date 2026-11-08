@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "panopticon-local",
+      "credentials": [
+        {
+          "accessKey": "panopticon-local",
+          "secretKey": "panopticon-local-secret"
+        }
+      ],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}

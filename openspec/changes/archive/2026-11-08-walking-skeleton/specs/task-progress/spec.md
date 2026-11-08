@@ -50,13 +50,19 @@ come before the first section.
 - **THEN** overall progress is 0 of 0, which views show as empty, not as an error
 
 ### Requirement: Current section
-The current section SHALL be the section number the agent reported, if that section exists. Otherwise
-it SHALL be the first section with an unfinished task. If every task is done, it SHALL be the last
-section that has tasks.
+The current section SHALL be the section number the agent reported, if that section exists. If more
+than one section has that number, a section whose heading gives the number explicitly SHALL be chosen
+over one numbered by position. Otherwise it SHALL be the first section with an unfinished task. If
+every task is done, it SHALL be the last section that has tasks.
 
 #### Scenario: Reported section wins
 - **WHEN** the agent reports section 3 and section 2 still has unfinished tasks
 - **THEN** the current section is 3
+
+#### Scenario: Explicit number preferred
+- **WHEN** `tasks.md` has headings `## 1. Setup`, `## Notes` (section 2 by position) and `## 2. Core`,
+  and the agent reports section 2
+- **THEN** the current section is 2 "Core"
 
 #### Scenario: Unknown reported section
 - **WHEN** the agent reports section 9 and `tasks.md` has 4 sections
