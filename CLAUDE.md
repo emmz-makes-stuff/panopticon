@@ -28,6 +28,11 @@ paraphrase them.
   is no active change.
 - `make gates`: all of the above.
 
+`make test` skips the `Category=ContainerE2E` trait. `make e2e` runs it: it builds the server image from the
+`Dockerfile`, then runs the whole team flow against it (sign in, `panopticon login`, report, check the card). It needs
+Docker, so run it unsandboxed. It isn't part of `make gates`, but run it before a section that touches the image, the
+sign-in flow or the CLI lands.
+
 `make deps` is separate: it checks that every tool and login in `docs/dependencies.md` is present.
 
 ### Starting a change

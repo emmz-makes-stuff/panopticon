@@ -35,7 +35,13 @@ export function renderCard(card: ChangeCard, now: Date): HTMLElement {
   const agents = element("ul", "card-agents");
   agents.setAttribute("aria-label", "Agents");
   for (const agent of card.agents) {
-    agents.append(element("li", "card-agent", agentName(agent)));
+    const row = element("li", "card-agent", agentName(agent));
+    if (agent.member) {
+      // The member, as its own quieter element after the agent (design D17). Set as text, never markup.
+      row.append(" ", element("span", "card-agent-member", agent.member));
+    }
+
+    agents.append(row);
   }
 
   article.append(host, repoLine, change, sectionBar, overallBar, agents);

@@ -1,4 +1,4 @@
-import { fetchChanges, type FetchLike } from "./api";
+import { createApi, fetchChanges, type Api, type FetchLike } from "./api";
 import { renderCard } from "./card";
 import { relativeTime } from "./format";
 import type { ChangeCard } from "./types";
@@ -12,8 +12,15 @@ export const LIGHTING_STEP_MS = 60;
 export type LiveStatus = "connecting" | "live" | "offline";
 
 export interface AppDeps {
+  /** The API to load cards through. Without one, an API over `fetch` is made. */
+  api?: Api;
   fetch?: FetchLike;
   now?: () => Date;
+  /**
+   * Where to show the live status and change count. The signed-in shell passes its header's slot; without one, the
+   * dashboard draws its own header (wordmark and status).
+   */
+  statusSlot?: HTMLElement;
 }
 
 export interface App {
@@ -45,6 +52,7 @@ const reportedAt = (card: ChangeCard) => Date.parse(card.lastReportedAt);
 /** Mounts the dashboard into `root`, then loads the cards. Resolves once the first load has rendered (or failed). */
 export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<App> {
   const now = deps.now ?? (() => new Date());
+  const api = deps.api ?? createApi({ fetch: deps.fetch });
   const shown = new Map<string, Shown>();
 
   const header = document.createElement("header");
@@ -66,13 +74,16 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
   count.className = "change-count";
   status.append(live, count);
   header.append(wordmark, status);
+  if (deps.statusSlot) {
+    deps.statusSlot.replaceChildren(status);
+  }
 
   const content = document.createElement("div");
   content.className = "content";
   const grid = document.createElement("section");
   grid.className = "grid";
   grid.setAttribute("aria-label", "Changes");
-  root.replaceChildren(header, content);
+  root.replaceChildren(...(deps.statusSlot ? [content] : [header, content]));
 
   // Most recently reported first, as the server orders them.
   function layout(): void {
@@ -129,7 +140,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     },
 
     async refresh() {
-      app.render(await fetchChanges(deps.fetch));
+      app.render(await fetchChanges(api));
     },
 
     updateTimes() {
@@ -193,10 +204,8 @@ function renderEmptyState(): HTMLElement {
     "Connect one with the panopticon CLI, then ask it to report progress on a change.";
   const command = document.createElement("pre");
   command.textContent = [
-    "claude mcp add panopticon --scope local \\",
-    `  --env PANOPTICON_SERVER_URL=${location.origin} \\`,
-    '  --env PANOPTICON_TOKEN="$PANOPTICON_TOKEN" \\',
-    "  -- panopticon mcp",
+    `panopticon login --server ${location.origin}`,
+    "claude mcp add panopticon --scope local -- panopticon mcp",
   ].join("\n");
   const more = document.createElement("p");
   more.textContent = "Other agents and the full setup are in docs/cli.md.";

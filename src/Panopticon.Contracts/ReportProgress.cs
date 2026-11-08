@@ -76,6 +76,10 @@ public sealed record ReportProgressResult(
 [JsonSerializable(typeof(AgentRef))]
 [JsonSerializable(typeof(ReportProgressArguments))]
 [JsonSerializable(typeof(ReportProgressResult))]
+[JsonSerializable(typeof(DeviceStartRequest))]
+[JsonSerializable(typeof(DeviceStartResponse))]
+[JsonSerializable(typeof(DevicePollRequest))]
+[JsonSerializable(typeof(DevicePollResponse))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(int))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;

@@ -1,0 +1,82 @@
+# Tasks
+
+## 1. Members and the data model
+
+- [x] 1.1 Add the D1 tables (`members`, `sign_in_links`, `sessions`, `device_logins`, `api_tokens`) and the D2 change (`agents.member_id` plus the `NULLS NOT DISTINCT` unique index) in one EF Core migration, and verify a Testcontainers test applies it to an empty database and to one with walking-skeleton data
+- [x] 1.2 Add the D3 secret helper (32-byte base64url secrets, the `pnp_` prefix for API tokens, SHA-256 hashes, user codes from `BCDFGHJKLMNPQRSTVWXZ` formatted `XXXX-XXXX` and normalized ignoring case and the hyphen), and verify unit tests for format, entropy length and normalization
+- [x] 1.3 Seed `Panopticon:InitialMembers` at start-up (D10: normalized keys, default display name, skip any existing row, removed ones included) and fail start-up when no active member exists, and verify the "Members are identified by email" and "Initial members from configuration" scenarios as integration tests
+- [x] 1.4 Make `Panopticon:BootstrapToken` optional and fail start-up when it's set outside Development (D5); add `Panopticon:PublicUrl`, then update `appsettings.Development.json` (public URL, the `dev@localhost.test` seed) and `PanopticonFactory` (seeded members, a `Settings` default for `InitialMembers`); verify start-up tests for each setting, and that the existing suite still passes
+
+## 2. Email and magic-link sign-in
+
+- [x] 2.1 Add `IEmailSender` with `ResendEmailSender` (`Resend` SDK pinned in `Directory.Packages.props`), the Development-only `LoggingEmailSender`, and a test `CapturingEmailSender`, with start-up validation of `Resend:ApiKey`, `Email:From` and `PublicUrl` outside Development (D9); verify the "Missing key in production" and "Local development" scenarios as tests
+- [x] 2.2 Implement `POST /api/auth/sign-in` (always 202; link stored hashed; an email with a `/sign-in/confirm#<secret>` link only for active members; send failures logged without the link) and the D7 per-email and per-IP limits; verify "Member asks for a link", "Stranger asks for a link", "Delivery fails" and "Repeated requests" as integration tests
+- [x] 2.3 Implement `POST /api/auth/confirm` (single use, 15-minute expiry, active member only) and the `Session` scheme (D4: hashed session cookie, HttpOnly, SameSite=Lax, Secure outside Development, a 7-day sliding expiry written at most once a minute); verify "Link used twice", "Expired link", "Link for a removed member", "Scanner opens the link" (a GET spends nothing), "Active use" and "Idle for a week" with `ManualClock`
+- [x] 2.4 Add `GET /api/session` and `POST /api/auth/sign-out`, plus the D6 `X-Panopticon-Request` endpoint filter for every state-changing session endpoint; verify "Sign out" (an old cookie is refused) and "Forged request" (a missing header gets refused) as tests
+
+## 3. Dashboard requires sign-in
+
+- [x] 3.1 Require a session on `/api/changes` and `/api/events`, with a 401 and no redirect for unauthenticated `/api/*` calls; verify the "Not signed in" scenario and that `/healthz`, the sign-in endpoints and the app shell stay open; update the existing dashboard endpoint tests to sign in through a test helper
+- [x] 3.2 Re-check the session on each SSE keep-alive tick and end the stream when it's gone (D11), and verify a test where signing out (and, separately, removing the member) ends an open `/api/events` stream within one tick
+
+## 4. Member management API
+
+- [x] 4.1 Implement `GET /api/members`, `POST /api/members` (invite, or make a removed member active again; 400 for an invalid email, 409 for an active member) and `PATCH /api/members/me` (1–50 characters after trimming), and verify the "Invite a colleague", "Invalid address", "Already a member", "List members", "Default name", "Rename yourself" (in the list) and "Blank name rejected" scenarios
+- [x] 4.2 Implement `DELETE /api/members/{id}` (no self-removal; one transaction that sets `removed_at`, deletes sessions and revokes tokens), and verify "Remove a colleague", "Can't remove yourself" and that a removed member's sign-in requests send no email
+
+## 5. Device login and API tokens (server)
+
+- [x] 5.1 Add the device-login and token request and response records to `Panopticon.Contracts` (with the source-generated JSON context), and verify a round-trip serialization test
+- [x] 5.2 Implement `POST /api/device/start` and `POST /api/device/poll` (pending, slow_down, denied, expired, and approved once, D12) with the D7 limits, and verify "Nobody approves" (server side), "Token handed over once" and "Polling too fast"
+- [x] 5.3 Implement `GET /api/device/{code}` and the approve and deny endpoints (session plus the D6 header; codes normalized; per-session attempt limit), and verify "Approve" and "Deny" (server side) and "Unknown or expired code"
+- [x] 5.4 Implement `GET /api/tokens` and `DELETE /api/tokens/{id}` (only your own tokens, 404 for anyone else's, no secret in any response), and verify "Token never shown again", "List and revoke" (server side) and "Someone else's token"
+
+## 6. Per-user tokens on `/mcp` and attribution
+
+- [x] 6.1 Replace `BootstrapTokenHandler` as `/mcp`'s scheme with `ApiToken` (D4: hash lookup, unrevoked and active member, `last_used_at` written at most once a minute, the bootstrap token in Development only), confirm how the member reaches `ReportProgressTool` (D16), and verify the "Missing token", "Wrong token", "No token configured", "Revoked token", "Bootstrap token in Development", "Bootstrap token elsewhere" and "Last used" scenarios
+- [x] 6.2 Record the member on agents (`(member, client, machine)` identity) and add `Member` to `CardAgent`, and verify "Two members on one machine", "Card shows identity and agents" (API side), "Agent without a member" and "Reports remain" (a removed member's agent still shows their name)
+- [x] 6.3 Move the server and bridge test helpers (`PanopticonFactory`, `BridgeHarness`, the end-to-end check) from the bootstrap token to a member plus API token created through a test helper; keep the bootstrap tests under `Development`; and verify `make test` is green
+
+## 7. CLI login and configuration
+
+- [x] 7.1 Add the D14 config file (path per OS, atomic write, mode 0600 and directory 0700 on Unix, source-generated JSON), and make `BridgeSettings` take each value from its environment variable, then the file; verify unit tests for "Saved login", "Environment overrides the saved login" and an unreadable file
+- [x] 7.2 Update the bridge's messages ("Missing token" naming `panopticon login`, and "Token rejected" saying to run `panopticon login`), and verify the updated bridge tests
+- [x] 7.3 Implement `panopticon login [--server <url>]` (D15: start, print the code and URL, poll with back-off, save on approval, exit 1 on denied or expired, 130 on cancel), and verify in-process tests against the test server for "Login on a VM", "Approve" (the CLI saves the token and prints the member), "Deny" and "Nobody approves" (with a short expiry), plus "Saved for the bridge" (file mode included)
+- [x] 7.4 Add `login` to `panopticon --help` and confirm it works in the Native AOT binary (a published-binary test of `login` against an unreachable server, which fails cleanly with no trimming warnings), and update `docs/cli.md` (login, the config file, precedence) and verify every documented command runs as written
+
+## 8. Web: sign-in, pages and the card
+
+- [x] 8.1 Add the D18 router and the `api.ts` wrapper (the D6 header, and 401 → signed out), plus the session-first start-up in `main.ts` and the "signed out vs offline" check in `connectLive`, and verify Vitest tests for routing, the 401 handling and "Session ends while watching"
+- [x] 8.2 Build the sign-in pages (`/sign-in`: the request form and "check your email"; `/sign-in/confirm`: read the fragment, "Sign in as …?", confirm, and the used and expired messages with a resend), and verify Vitest tests for each state
+- [x] 8.3 Build the signed-in header (name, Members, Tokens, Sign out), and the members page (list, invite, rename yourself, remove others with a confirmation), with display names rendered as text; verify Vitest tests for each action and for markup in a name staying text
+- [x] 8.4 Build the device approval page (`/device?code=`: code entry, machine name, approve or deny, never on load, the code kept across sign-in) and the tokens page (list, revoke), and verify Vitest tests for "Not signed in" (the return trip), approve, deny, an invalid code, and revoke
+- [x] 8.5 Show the member on each card's agent row (D17) and update `web/DESIGN.md` for the new pages and the row, using the `frontend-design` skill; verify the card tests for "Card shows identity and agents" and "Agent without a member"
+
+## 9. Integration and human verification
+
+- [x] 9.0 Keep the D18 return path in `localStorage` with a 15-minute expiry, not `sessionStorage`, so `/device?code=` survives the emailed sign-in link opening in a new tab (found after §8 landed); update D12 and D18, and verify Vitest tests for the new-tab return trip, an expired path, and an off-site path
+- [x] 9.1 Extend the container end-to-end check: start with an initial member, sign in through captured or logged links, run `panopticon login` and approve, report through `panopticon mcp`, and see the card with the member's name; verify the check passes
+- [x] 9.2 Update the README (configuration settings, the first sign-in, `panopticon login`), and write the human verification recipe in a devlog note (real Resend delivery with a verified domain; the dashboard look and the new pages in a real browser; Claude Code reporting through a `panopticon login` token end to end); stop for Emmz to run it
+
+## 10. Review fixes: bridge, CLI and web
+
+- [x] 10.1 Use the saved server and token as a pair: `BridgeSettings` uses the saved token only when the server in use is the saved server (compared on the normalized root URL); otherwise the token counts as missing, and the error says to run `panopticon login --server <that server>`. Update the cli-bridge "Configuration" requirement with a scenario ("Environment server with a login saved for another server"), D14, and `docs/cli.md`; verify with `CliConfigTests`/`BridgeTests`
+- [x] 10.2 Reword the cli-bridge "Token rejected" scenario: the error names where the token came from, and says to correct or remove `PANOPTICON_TOKEN` for an environment token, or to run `panopticon login` for a saved one; `make validate` green
+- [x] 10.3 `panopticon login`: a failed config write after approval prints a clear error (the path and the reason, and that the issued token should be revoked on Tokens) and exits 1; a transient network error while polling is retried at the next interval instead of ending the login (until the code expires); verify with `LoginTests`
+- [x] 10.4 Web: `takeReturnPath` accepts only a path whose `new URL(path, origin).origin` is the page's origin (so `/\host` is refused); every `localStorage` access in the shell and the sign-in views is guarded, so blocked storage still lets you sign in; the confirm page shows the server's message for any `ApiError` other than 400, and "Couldn't reach the server" only for network failures; remove the duplicate doc comment above `Teardown` in `router.ts`; verify with Vitest tests for each
+
+## 11. Review fixes: server
+
+- [x] 11.1 Removal keeps at least one active member: inside the removal transaction, lock the active member rows (`SELECT … FOR UPDATE`), and refuse (409) unless the remover is still active and another active member remains after the removal; verify with a test of two concurrent mutual removals, where exactly one succeeds
+- [x] 11.2 Sign-in requests take the same path for members and strangers: the request handler only validates, rate-limits and queues a job; the background job looks up the member, stores the link and sends the email; verify that a stranger's and a member's request do the same work on the request path, and that the existing sign-in tests still pass
+- [x] 11.3 `InitialMembers` swallows only a unique violation (`PostgresException` `UniqueViolation`), as `InviteAsync` does, and lets any other database error fail start-up; verify with a test
+- [x] 11.4 Remove the unused `PublicUrlOptions.Link`, leaving `SignInEndpoints.LinkRoot` as the one way to build public URLs
+- [x] 11.5 Purge old auth rows: an hourly background job deletes sessions, sign-in links and device logins that expired more than a day ago (spent links included); record it in design.md as D19; verify with a test using a fake `TimeProvider`
+
+## Workflow follow-up
+
+- Run the whole-change review and offer `/code-review` before archiving.
+- Archive with `/opsx:archive` once the review is done.
+- Next changes, per the roadmap: drill-down, the full documents and archive → history; filtering and idle/stale;
+  metrics; `panopticon setup`, Releases and the Railway deploy (which also configures forwarded headers and pins
+  Postgres at 15 or later).

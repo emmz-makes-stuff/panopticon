@@ -35,6 +35,38 @@ public class ContractsTests
     }
 
     [Fact]
+    public void Device_login_records_round_trip_with_the_wire_names()
+    {
+        var context = ContractsJsonContext.Default;
+        var start = new DeviceStartResponse("secret", "BCDF-GHJK", "https://p.example/device?code=BCDF-GHJK", 5, 600);
+        var approved = new DevicePollResponse(DevicePollStatus.Approved, "pnp_token", new DeviceMember("Emmz", "emmz@example.com"));
+
+        var startJson = JsonSerializer.Serialize(start, context.DeviceStartResponse);
+        var approvedJson = JsonSerializer.Serialize(approved, context.DevicePollResponse);
+
+        Assert.Equal(start, JsonSerializer.Deserialize(startJson, context.DeviceStartResponse));
+        Assert.Equal(approved, JsonSerializer.Deserialize(approvedJson, context.DevicePollResponse));
+        Assert.Equal(
+            """{"deviceSecret":"secret","userCode":"BCDF-GHJK","approveUrl":"https://p.example/device?code=BCDF-GHJK","intervalSeconds":5,"expiresInSeconds":600}""",
+            startJson);
+        Assert.Contains("\"member\":{\"displayName\":\"Emmz\",\"email\":\"emmz@example.com\"}", approvedJson, StringComparison.Ordinal);
+        Assert.Equal(
+            new DeviceStartRequest("vm-1"),
+            JsonSerializer.Deserialize("""{"machineName":"vm-1"}""", context.DeviceStartRequest));
+        Assert.Equal(
+            """{"deviceSecret":"s"}""",
+            JsonSerializer.Serialize(new DevicePollRequest("s"), context.DevicePollRequest));
+    }
+
+    [Fact]
+    public void A_pending_poll_carries_only_its_status()
+    {
+        var json = JsonSerializer.Serialize(new DevicePollResponse(DevicePollStatus.SlowDown), ContractsJsonContext.Default.DevicePollResponse);
+
+        Assert.Equal("""{"status":"slow_down"}""", json);
+    }
+
+    [Fact]
     public void Tool_arguments_use_the_wire_names()
     {
         var arguments = _arguments.ToToolArguments();

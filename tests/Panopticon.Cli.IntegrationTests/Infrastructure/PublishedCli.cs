@@ -15,19 +15,8 @@ public static class PublishedCli
             return Require(configured);
         }
 
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(System.IO.Path.Combine(directory.FullName, "Panopticon.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        if (directory is null)
-        {
-            throw new InvalidOperationException("Couldn't find the repo root (Panopticon.slnx) above the test output.");
-        }
-
         var name = OperatingSystem.IsWindows() ? "panopticon.exe" : "panopticon";
-        return Require(System.IO.Path.Combine(directory.FullName, "artifacts", "cli", name));
+        return Require(System.IO.Path.Combine(RepoRoot.Path, "artifacts", "cli", name));
     }
 
     // A missing binary fails the test loudly rather than skipping it: the AOT build is what's under test.

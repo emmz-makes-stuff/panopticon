@@ -26,8 +26,12 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static BridgeSettings Settings(string workingDirectory, string? serverUrl = "http://localhost/", string? token = PanopticonFactory.Token) =>
-        new(serverUrl, token, workingDirectory, "vm-1");
+    private static BridgeSettings Settings(
+        string workingDirectory,
+        string? serverUrl = "http://localhost/",
+        string? token = PanopticonFactory.Token,
+        bool tokenFromEnvironment = true) =>
+        new(serverUrl, token, workingDirectory, "vm-1", tokenFromEnvironment);
 
     // --- Stdio MCP server ---
 
@@ -62,6 +66,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         Assert.True(result.IsError);
         Assert.Contains("PANOPTICON_TOKEN", BridgeHarness.Text(result), StringComparison.Ordinal);
+        Assert.Contains("panopticon login", BridgeHarness.Text(result), StringComparison.Ordinal);
         Assert.DoesNotContain("PANOPTICON_SERVER_URL", BridgeHarness.Text(result), StringComparison.Ordinal);
 
         // Still serving.
@@ -182,7 +187,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         using var repo = TempGitRepo.Create("git@github.com:emmz/panopticon.git");
         repo.WriteTasks("walking-skeleton", Tasks);
         var subdirectory = repo.CreateSubdirectory(Path.Combine("src", "app"));
-        await using var bridge = await BridgeHarness.StartAsync(Settings(subdirectory), server.CreateClient, "claude-code", Ct);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(subdirectory, token: await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
 
         var result = await bridge.ReportAsync("walking-skeleton", 2, Ct);
 
@@ -197,7 +202,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         Assert.Equal("walking-skeleton", card.Change);
         var agent = Assert.Single(card.Agents);
-        Assert.Equal(("claude-code", "vm-1"), (agent.Client, agent.Machine));
+        Assert.Equal(("claude-code", "vm-1", "member"), (agent.Client, agent.Machine, agent.Member));
     }
 
     [Fact]
@@ -206,7 +211,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
         using var repo = TempGitRepo.Create("https://user:secret@github.com/emmz/panopticon.git");
         repo.WriteTasks("walking-skeleton", Tasks);
-        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), server.CreateClient, "claude-code", Ct);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, token: await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
 
         var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
 
@@ -255,12 +260,34 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         Assert.True(result.IsError);
         var text = BridgeHarness.Text(result);
-        Assert.Contains("rejected the token", text, StringComparison.Ordinal);
+        // An environment token overrides the saved login, so the error names the variable to fix or remove.
+        Assert.Contains("rejected the token from PANOPTICON_TOKEN", text, StringComparison.Ordinal);
+        Assert.Contains("overrides the saved login", text, StringComparison.Ordinal);
+        Assert.Contains("panopticon login", text, StringComparison.Ordinal);
         Assert.DoesNotContain("not-the-right-token", text, StringComparison.Ordinal);
         Assert.DoesNotContain("not-the-right-token", bridge.Log, StringComparison.Ordinal);
 
         await using var db = server.NewDb();
         Assert.Empty(await new ChangeCards(db).ListAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Saved_login_token_rejected_says_to_log_in_again()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var repo = TempGitRepo.Create();
+        repo.WriteTasks("walking-skeleton", Tasks);
+        await using var bridge = await BridgeHarness.StartAsync(
+            Settings(repo.Root, token: "not-the-right-token", tokenFromEnvironment: false), server.CreateClient, "claude-code", Ct);
+
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
+
+        Assert.True(result.IsError);
+        var text = BridgeHarness.Text(result);
+        Assert.Contains("rejected the saved login's token", text, StringComparison.Ordinal);
+        Assert.Contains("Run 'panopticon login'", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("PANOPTICON_TOKEN", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("not-the-right-token", text, StringComparison.Ordinal);
     }
 
     // --- Forwarding: a server-side tool error comes back as a tool error ---
@@ -272,7 +299,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         using var repo = TempGitRepo.Create();
         // A tasks.md over the server's size limit makes the server's own tool fail.
         repo.WriteTasks("walking-skeleton", "## 1. Big\n" + new string('x', 2 * 1024 * 1024));
-        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), server.CreateClient, "claude-code", Ct);
+        await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, token: await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
 
         var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
 

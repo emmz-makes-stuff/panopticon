@@ -79,15 +79,54 @@ public class ReportProgressEndpointTests(PostgresFixture postgres, S3Fixture s3)
         await AssertNothingRecordedAsync(factory, ct);
     }
 
-    [Fact]
-    public async Task No_token_configured_fails_at_startup_naming_the_setting()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Testing")]
+    public async Task No_token_configured_starts_normally(string environment)
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct, bootstrapToken: null);
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), bootstrapToken: null)
+        {
+            Environment = environment,
+        };
+
+        using var http = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/healthz", ct)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Testing")]
+    [InlineData("Production")]
+    public async Task Bootstrap_token_outside_development_fails_at_startup_naming_the_setting(string environment)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), PanopticonFactory.Token)
+        {
+            Environment = environment,
+        };
 
         var ex = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
 
         Assert.Contains("Panopticon:BootstrapToken", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Development", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("not a url")]
+    [InlineData("ftp://panopticon.example.com")]
+    [InlineData("/relative")]
+    public async Task Invalid_public_url_fails_at_startup_naming_the_setting(string publicUrl)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct))
+        {
+            Settings = new Dictionary<string, string> { ["Panopticon:PublicUrl"] = publicUrl },
+        };
+
+        var ex = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+
+        Assert.Contains("Panopticon:PublicUrl", ex.Message, StringComparison.Ordinal);
     }
 
     // --- Requirement: Report content ---

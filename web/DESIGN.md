@@ -61,8 +61,8 @@ is cool rather than cream.
 ## Layout
 
 ```
-a PANOPTICON                                     ● Live      3 changes
-──────────────────────────────────────────────────────────────────────
+a PANOPTICON              ● Live  3 changes   Emmz  Members  Tokens  Sign out
+──────────────────────────────────────────────────────────────────────────
 ┌──────────────────────────┐ ┌──────────────────────────┐ ┌─────────
 │ github.com               │ │ dev.azure.com            │ │ (dimmed)
 │ emmz/panopticon   2m ago │ │ acme/Nova       14m ago  │ │ …  3h ago
@@ -72,7 +72,7 @@ a PANOPTICON                                     ● Live      3 changes
 │ ▮▮▮▮▯         4/5 (80%) │ │ ▮▯▯           1/3 (33%) │ │
 │ Whole change             │ │ Whole change             │ │
 │ ▮▮▮▮▮▮▮▮▮▯▯▯ 22/30 (73%)│ │ ▮▯▯▯▯▯▯▯▯     1/9 (11%) │ │
-│ claude-code@vm-1         │ │ cursor@laptop            │ │
+│ claude-code@vm-1 Emmz    │ │ cursor@laptop Sam        │ │
 └──────────────────────────┘ └──────────────────────────┘ └─────────
 ```
 
@@ -84,11 +84,58 @@ a PANOPTICON                                     ● Live      3 changes
   the gaps disappear and the cells merge into a continuous fill, so very long changes don't turn into
   noise.
 - **Empty bar** (no tasks): a dashed `--rule` track reading "No tasks in tasks.md yet". There's no 0%.
-- **Header:** the wordmark, and on the right the live state. That's a `--spark` dot and "Live", or a
-  hollow dot and "Offline, reconnecting…" while disconnected. The number of changes sits beside it.
+- **Agent row:** each agent is a hairline pill reading `claude-code@vm-1`, then the member who runs it in
+  `--ink-muted` (`.card-agent-member`, design D17). The member is quieter than the agent, and absent for
+  reports made before team sign-in.
+- **Header:** the wordmark, which is also the link home and keeps its name styling (no underline, no link
+  colour). On the dashboard, the live state follows, pushed right: a `--spark` dot and "Live", or a
+  hollow dot and "Offline, reconnecting…" while disconnected, with the number of changes beside it. Other
+  pages leave that slot empty. When signed in, the account sits last: your display name (600), then
+  Members, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,
+  with the account on its own line.
 - **Empty dashboard:** "No agents have reported yet." Below it, one line: connect one with the panopticon
-  CLI, then ask it to report progress on a change. Then the `claude mcp add` command from `docs/cli.md` in
-  a copyable block.
+  CLI, then ask it to report progress on a change. Then the two commands in a copyable block:
+  `panopticon login --server <this origin>` and `claude mcp add panopticon --scope local -- panopticon mcp`.
+
+## Pages: sign-in, members, tokens and device approval
+
+These are tools, not views of progress, so they stay quieter than the cards and never use `--lit`.
+
+```
+Members
+──────────────────────────────────────────────
+Emmz (you)      emmz@example.com   Joined 8 Nov 2026
+  Your display name [Emmz            ] [Save]
+──────────────────────────────────────────────
+Sam             sam@example.com    Joined 9 Nov 2026     [Remove]
+──────────────────────────────────────────────
+
+Invite someone
+They become a member at once, and sign in with their email.
+Email [               ]  Display name (optional) [        ]  [Invite]
+```
+
+- **One left-aligned column**, 38rem wide, under the header. The page heading is Gabarito 700 at 25px, the
+  same as the empty state's. Subheadings ("Invite someone") are Gabarito at 20px. Lead text is
+  `--ink-muted`.
+- **Lists, not cards:** members and tokens are rows between hairline `--rule` dividers. The name (or the
+  machine) is 600, and the email, dates and last use follow in small muted text. Cards stay reserved for
+  changes.
+- **Forms:** a label above each input (small, 600). Inputs and their button sit on one line and wrap on
+  phones. Inputs have a 4px radius and a border dark enough to meet 3:1.
+- **Buttons:** the main action of a page (Send me a link, Sign in, Invite, Continue, Approve) is solid
+  `--ink` with `--card` text. Teal stays the progress colour only. Others are outlined. Remove and Revoke
+  are small outlined buttons at the row's right: the confirmation that follows does the warning, so they
+  don't shout. Sign out and "Use a different address" are link buttons.
+- **Errors** are `--ink` at 600 with a 3px `--spark` rule on the left, in a `role="alert"` line that takes
+  no space while it's empty. They say what happened and what to do, and never apologise.
+- **Device approval:** the heading names the machine ("Log in vm-1?"). The code is the loudest thing on
+  the page, in Gabarito 700 at 31px with open letter-spacing, because it's what you check against the
+  terminal. Approve and Deny sit side by side below a sentence saying whose token it makes. Nothing is
+  decided on load.
+- **Sign-in confirm:** "Sign in as emmz@example.com?" when this browser asked for the link, otherwise
+  "Sign in to a PANOPTICON?" (the server can't say whose link it is before the confirm). One "Sign in"
+  button. A used or expired link explains which, with a "Send me a new link" link.
 
 ## Accessibility floor
 

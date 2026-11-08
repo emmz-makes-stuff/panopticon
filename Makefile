@@ -8,7 +8,7 @@ SHELL := /bin/bash
 
 CHANGES := $(notdir $(patsubst %/,%,$(filter-out %/archive/,$(wildcard openspec/changes/*/))))
 
-.PHONY: build test format aot web-install web-build web-test web-format web-lint validate changes gates deps
+.PHONY: build test format aot web-install web-build web-test web-format web-lint validate changes gates deps e2e
 
 build:
 	@dotnet build Panopticon.slnx -c Release -warnaserror; code=$$?; echo "BUILD_EXIT:$$code"; exit $$code
@@ -16,7 +16,7 @@ build:
 # Needs Docker (Testcontainers: Postgres, SeaweedFS). Runs aot first: the CLI end-to-end tests drive the
 # published binary in artifacts/cli.
 test: aot
-	@dotnet test --solution Panopticon.slnx -c Release; code=$$?; echo "TEST_EXIT:$$code"; exit $$code
+	@dotnet test --solution Panopticon.slnx -c Release --filter-not-trait "Category=ContainerE2E"; code=$$?; echo "TEST_EXIT:$$code"; exit $$code
 
 format:
 	@dotnet format Panopticon.slnx --verify-no-changes; code=$$?; echo "FORMAT_EXIT:$$code"; exit $$code
@@ -55,6 +55,11 @@ validate:
 
 changes:
 	@echo "$(CHANGES)"
+
+# Not a gate: builds the server image from the Dockerfile (minutes), then runs the whole team flow against it
+# (ContainerEndToEndTests). Needs Docker.
+e2e: aot
+	@dotnet test --project tests/Panopticon.Cli.IntegrationTests -c Release --filter-trait "Category=ContainerE2E"; code=$$?; echo "E2E_EXIT:$$code"; exit $$code
 
 gates:
 	@$(MAKE) --no-print-directory -k build test format aot web-build web-test web-format web-lint validate; code=$$?; \

@@ -37,6 +37,7 @@ internal sealed partial class ProgressReporter(
                 endpoint,
                 token,
                 new ReportProgressArguments(repo, change, agent, tasks, section),
+                settings.TokenFromEnvironment,
                 cancellationToken);
 
             LogReported(change, result.Overall.Done, result.Overall.Total, result.CurrentSection?.Number);

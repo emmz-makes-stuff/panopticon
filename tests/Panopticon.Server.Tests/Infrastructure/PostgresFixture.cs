@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Panopticon.Server.Data;
 using Testcontainers.PostgreSql;
@@ -13,14 +15,22 @@ namespace Panopticon.Server.Tests.Infrastructure;
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17.11-alpine").Build();
+    // Each test database has its own connection pool, so tests running in parallel hold many connections at once:
+    // the default limit of 100 isn't enough.
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17.11-alpine")
+        .WithCommand("-c", "max_connections=300")
+        .Build();
 
     public async ValueTask InitializeAsync() => await _container.StartAsync();
 
     public async ValueTask DisposeAsync() => await _container.DisposeAsync();
 
     /// <summary>Creates an empty, migrated database and returns its connection string.</summary>
-    public async Task<string> CreateDatabaseAsync(CancellationToken cancellationToken = default)
+    public Task<string> CreateDatabaseAsync(CancellationToken cancellationToken = default) =>
+        CreateDatabaseAsync(targetMigration: null, cancellationToken);
+
+    /// <summary>Creates a database migrated up to <paramref name="targetMigration"/> (null: the latest).</summary>
+    public async Task<string> CreateDatabaseAsync(string? targetMigration, CancellationToken cancellationToken)
     {
         var name = "test_" + Guid.NewGuid().ToString("N");
 
@@ -34,10 +44,14 @@ public sealed class PostgresFixture : IAsyncLifetime
         var connectionString = new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
         {
             Database = name,
+
+            // A finished test's pool would otherwise keep its idle connections for five minutes.
+            ConnectionIdleLifetime = 2,
+            ConnectionPruningInterval = 1,
         }.ConnectionString;
 
         await using var db = CreateDb(connectionString);
-        await db.Database.MigrateAsync(cancellationToken);
+        await db.GetService<IMigrator>().MigrateAsync(targetMigration, cancellationToken);
 
         return connectionString;
     }

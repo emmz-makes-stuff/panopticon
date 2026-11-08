@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Contracts;
 using Panopticon.Server.Dashboard;
@@ -19,6 +20,10 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         new AgentRef("claude-code", "vm-1"),
         tasks);
 
+    // Outside Development: there, static web assets would serve the project's built wwwroot instead of this web root.
+    private static PanopticonFactory WebRootFactory(string connectionString, Documents.S3Options s3, string webRoot) =>
+        new(connectionString, s3, bootstrapToken: null) { WebRoot = webRoot, Environment = "Testing" };
+
     [Fact]
     public async Task Changes_lists_one_card_per_change_most_recent_first_without_signing_in()
     {
@@ -30,7 +35,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
             await mcp.CallToolAsync("report_progress", Report("emmz", "other", "add-auth", "## 1. A\n- [ ] a").ToToolArguments(), cancellationToken: ct);
         }
 
-        using var http = factory.CreateClient();
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
         var cards = await http.GetFromJsonAsync<JsonElement>(DashboardEndpoints.ChangesPath, ct);
 
         Assert.Collection(
@@ -47,12 +52,62 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
             });
     }
 
+    // --- specs/dashboard-sign-in: Dashboard requires sign-in ---
+
+    [Theory]
+    [InlineData(DashboardEndpoints.ChangesPath)]
+    [InlineData(DashboardEndpoints.EventsPath)]
+    public async Task Not_signed_in_gets_a_401_and_no_change_data(string path)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        await using (var mcp = await factory.CreateMcpClientAsync(cancellationToken: ct))
+        {
+            await mcp.CallToolAsync("report_progress", Report("emmz", "panopticon", "walking-skeleton", "## 1. A\n- [x] a").ToToolArguments(), cancellationToken: ct);
+        }
+
+        using var http = factory.CreateBrowserClient();
+        using var response = await http.GetAsync(path, HttpCompletionOption.ResponseHeadersRead, ct);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+        Assert.DoesNotContain("walking-skeleton", await response.Content.ReadAsStringAsync(ct), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_stale_cookie_gets_a_401_too()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        using var http = factory.CreateBrowserClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, DashboardEndpoints.ChangesPath);
+        request.Headers.Add("Cookie", "panopticon_session=not-a-session");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(request, ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Health_and_sign_in_stay_open()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
+        using var http = factory.CreateBrowserClient();
+
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/healthz", ct)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Accepted,
+            (await http.PostApiAsync(Panopticon.Server.Auth.SignInEndpoints.SignInPath, new { email = PanopticonFactory.MemberEmail }, ct)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (await http.PostApiAsync(Panopticon.Server.Auth.SignInEndpoints.ConfirmPath, new { secret = "x" }, ct)).StatusCode);
+    }
+
     [Fact]
     public async Task Changes_is_an_empty_list_before_any_report()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
-        using var http = factory.CreateClient();
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
 
         var cards = await http.GetFromJsonAsync<JsonElement>(DashboardEndpoints.ChangesPath, ct);
 
@@ -65,7 +120,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var ct = TestContext.Current.CancellationToken;
         await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
         var broadcaster = factory.Services.GetRequiredService<ChangeBroadcaster>();
-        using var http = factory.CreateClient();
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(20));
 
@@ -109,7 +164,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var ct = TestContext.Current.CancellationToken;
         await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, ct);
         var broadcaster = factory.Services.GetRequiredService<ChangeBroadcaster>();
-        using var http = factory.CreateClient();
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
 
@@ -127,7 +182,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var broadcaster = new ChangeBroadcaster();
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, DashboardEndpoints.DefaultKeepAlive, cancel.Token)
+        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, DashboardEndpoints.DefaultKeepAlive, stillAllowed: null, cancel.Token)
             .GetAsyncEnumerator(ct);
         var moving = enumerator.MoveNextAsync();
         Assert.Equal(1, broadcaster.SubscriberCount);
@@ -153,7 +208,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
             new CardProgress(0, 1),
             DateTimeOffset.UnixEpoch);
 
-        await using var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, TimeSpan.FromMilliseconds(50), ct)
+        await using var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, TimeSpan.FromMilliseconds(50), stillAllowed: null, ct)
             .GetAsyncEnumerator(ct);
 
         Assert.True(await enumerator.MoveNextAsync());
@@ -174,7 +229,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         {
             Settings = new Dictionary<string, string> { [DashboardEndpoints.KeepAliveConfigKey] = "00:00:00.100" },
         };
-        using var http = factory.CreateClient();
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
 
@@ -184,13 +239,49 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("event: ping", await reader.ReadLineAsync(timeout.Token));
     }
 
+    // specs/dashboard-sign-in "Session ends while watching" (design D11): the stream ends within a keep-alive tick.
+    [Theory]
+    [InlineData("sign-out")]
+    [InlineData("removal")]
+    public async Task An_open_stream_ends_when_its_session_does(string how)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct))
+        {
+            Settings = new Dictionary<string, string> { [DashboardEndpoints.KeepAliveConfigKey] = "00:00:00.100" },
+        };
+        using var http = await factory.CreateSignedInClientAsync(cancellationToken: ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        using var response = await http.GetAsync(DashboardEndpoints.EventsPath, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(timeout.Token));
+        Assert.Equal("event: ping", await reader.ReadLineAsync(timeout.Token));
+
+        if (how == "sign-out")
+        {
+            (await http.PostApiAsync(Panopticon.Server.Auth.SessionEndpoints.SignOutPath, null, ct)).Dispose();
+        }
+        else
+        {
+            await using var db = factory.NewDb();
+            await db.Members.ExecuteUpdateAsync(m => m.SetProperty(x => x.RemovedAt, DateTimeOffset.UtcNow), ct);
+        }
+
+        // Read until the server ends the stream; the timeout fails the test if it never does.
+        while (await reader.ReadLineAsync(timeout.Token) is not null)
+        {
+        }
+
+        Assert.False(timeout.IsCancellationRequested);
+    }
+
     [Fact]
     public async Task App_shell_is_served_at_the_root_and_for_client_routes_but_not_api_paths()
     {
         var ct = TestContext.Current.CancellationToken;
         var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         Assert.Contains("<title>Panopticon</title>", await http.GetStringAsync("/", ct), StringComparison.Ordinal);
@@ -209,7 +300,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var ct = TestContext.Current.CancellationToken;
         var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         using var response = await http.GetAsync(path, ct);
@@ -227,7 +318,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var ct = TestContext.Current.CancellationToken;
         var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         Assert.Contains("<title>Panopticon</title>", await http.GetStringAsync(path, ct), StringComparison.Ordinal);
@@ -242,7 +333,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>shell</title>", ct);
         await File.WriteAllTextAsync(Path.Combine(webRoot, "assets", "index-abc.js"), "console.log(1);", ct);
         await File.WriteAllTextAsync(Path.Combine(webRoot, "assets", "index-abc.css"), "body{}", ct);
-        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct)) { WebRoot = webRoot };
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
         using var http = factory.CreateClient();
 
         using var script = await http.GetAsync("/assets/index-abc.js", ct);

@@ -9,6 +9,7 @@ using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Live;
 using Panopticon.Server.Reporting;
+using Resend;
 
 namespace Panopticon.Server;
 
@@ -24,10 +25,46 @@ public static class ServerSetup
         var configuration = builder.Configuration;
 
         // Settings, validated when the host starts so a misconfigured server fails naming the setting.
+        // The shared bootstrap token is a Development convenience only (team-auth D5): anywhere else it must not be set.
+        var isDevelopment = builder.Environment.IsDevelopment();
         services.AddOptions<BootstrapTokenOptions>()
             .Configure(o => o.Token = configuration[BootstrapTokenOptions.ConfigKey])
-            .Validate(o => !string.IsNullOrWhiteSpace(o.Token), $"{BootstrapTokenOptions.ConfigKey} is not configured.")
+            .Validate(
+                o => isDevelopment || string.IsNullOrWhiteSpace(o.Token),
+                $"{BootstrapTokenOptions.ConfigKey} is only allowed in the Development environment. Remove it, and use per-user API tokens from `panopticon login`.")
             .ValidateOnStart();
+
+        services.AddOptions<PublicUrlOptions>()
+            .Configure(o => o.Value = configuration[PublicUrlOptions.ConfigKey] is { } url && !string.IsNullOrWhiteSpace(url) ? url : null)
+            .Validate(o => isDevelopment || o.Value is not null, $"{PublicUrlOptions.ConfigKey} is not configured.")
+            .Validate(o => o.Value is null || o.TryGetUri(out _), $"{PublicUrlOptions.ConfigKey} must be an absolute http or https URL.")
+            .ValidateOnStart();
+
+        // Email (team-auth D9): Resend, except in Development with no key, where emails are logged instead.
+        services.AddOptions<EmailOptions>()
+            .Configure(o =>
+            {
+                o.ResendApiKey = configuration[EmailOptions.ApiKeyConfigKey];
+                o.From = configuration[EmailOptions.FromConfigKey];
+            })
+            .Validate(o => isDevelopment || o.HasResendKey, $"{EmailOptions.ApiKeyConfigKey} is not configured.")
+            .Validate(o => !o.HasResendKey || !string.IsNullOrWhiteSpace(o.From), $"{EmailOptions.FromConfigKey} is not configured.")
+            .ValidateOnStart();
+
+        var resendApiKey = configuration[EmailOptions.ApiKeyConfigKey];
+        if (isDevelopment && string.IsNullOrWhiteSpace(resendApiKey))
+        {
+            services.AddSingleton<IEmailSender, LoggingEmailSender>();
+        }
+        else
+        {
+            services.AddResend(o =>
+            {
+                o.ApiToken = resendApiKey ?? string.Empty;
+                o.ThrowExceptions = true;
+            });
+            services.AddTransient<IEmailSender, ResendEmailSender>();
+        }
 
         services.AddOptions<S3Options>()
             .Bind(configuration.GetSection(S3Options.Section))
@@ -54,15 +91,35 @@ public static class ServerSetup
             sp.GetRequiredService<IOptions<S3Options>>().Value.Bucket!));
         services.AddSingleton(TimeProvider.System);
 
+        // Members (team-auth): the first ones come from configuration.
+        services.AddHostedService<InitialMembers>();
+
+        // Sign-in: rate limits and the background email queue.
+        services.AddSingleton<AuthLimits>();
+        services.AddSingleton<EmailOutbox>();
+        services.AddHostedService(sp => sp.GetRequiredService<EmailOutbox>());
+        services.AddSingleton<AuthCleanup>();
+        services.AddHostedService(sp => sp.GetRequiredService<AuthCleanup>());
+
         // Reporting and live updates.
         services.AddScoped<ReportRecorder>();
         services.AddScoped<ChangeCards>();
         services.AddSingleton<ChangeBroadcaster>();
 
-        // Auth: the walking skeleton's bootstrap bearer token (design D5).
-        services.AddAuthentication(BootstrapTokenHandler.SchemeName)
-            .AddScheme<AuthenticationSchemeOptions, BootstrapTokenHandler>(BootstrapTokenHandler.SchemeName, _ => { });
-        services.AddAuthorization();
+        // Auth (team-auth D4): no default scheme, so nothing is looked up unless an endpoint's policy asks for it.
+        // Dashboard and /api: the session cookie. /mcp: a bearer token.
+        services.AddScoped<SessionStore>();
+        services.AddAuthentication()
+            .AddScheme<AuthenticationSchemeOptions, SessionHandler>(SessionHandler.SchemeName, _ => { })
+            .AddScheme<AuthenticationSchemeOptions, ApiTokenHandler>(ApiTokenHandler.SchemeName, _ => { });
+        services.AddAuthorizationBuilder()
+            .AddPolicy(AuthPolicies.Member, policy => policy
+                .AddAuthenticationSchemes(SessionHandler.SchemeName)
+                .RequireAuthenticatedUser()
+                .RequireClaim(PanopticonClaims.SessionId))
+            .AddPolicy(AuthPolicies.Reporter, policy => policy
+                .AddAuthenticationSchemes(ApiTokenHandler.SchemeName)
+                .RequireAuthenticatedUser());
 
         services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
@@ -77,11 +134,17 @@ public static class ServerSetup
         app.UseDefaultFiles();
         app.UseStaticFiles();
 
+        app.UseMiddleware<RequestHeaderMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
 
         app.MapGet("/healthz", () => TypedResults.Ok("ok"));
-        app.MapMcp(McpPath).RequireAuthorization();
+        app.MapMcp(McpPath).RequireAuthorization(AuthPolicies.Reporter);
+        app.MapSignIn();
+        app.MapSession();
+        app.MapMembers();
+        app.MapDevice();
+        app.MapTokens();
         app.MapDashboard();
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file

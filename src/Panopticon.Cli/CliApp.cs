@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Panopticon.Cli.Bridge;
+using Panopticon.Cli.Config;
+using Panopticon.Cli.Login;
 
 namespace Panopticon.Cli;
 
@@ -14,11 +16,14 @@ internal static class CliApp
             stdout.WriteLine("Usage: panopticon <command>");
             stdout.WriteLine();
             stdout.WriteLine("Commands:");
-            stdout.WriteLine("  mcp    Run the local MCP bridge over stdio");
+            stdout.WriteLine("  login [--server <url>]  Log this machine in: approve a code in the dashboard, and save a token");
+            stdout.WriteLine("  mcp                     Run the local MCP bridge over stdio");
             stdout.WriteLine();
-            stdout.WriteLine("Environment (mcp):");
+            stdout.WriteLine("Environment (each overrides the login 'panopticon login' saved):");
             stdout.WriteLine($"  {BridgeSettings.ServerUrlVariable}  The Panopticon server's base URL");
-            stdout.WriteLine($"  {BridgeSettings.TokenVariable}       The bearer token for the server");
+            stdout.WriteLine($"  {BridgeSettings.TokenVariable}       The API token for the server");
+            stdout.WriteLine();
+            stdout.WriteLine($"Saved login: {CliConfigFile.ForCurrentUser().Path}");
             return 0;
         }
 
@@ -26,12 +31,40 @@ internal static class CliApp
         {
             // stdout carries the MCP protocol from here on; everything else goes to stderr.
             using var host = BridgeHost.Build(
-                BridgeSettings.FromEnvironment(),
+                BridgeSettings.FromEnvironment(stderr),
                 static () => new HttpClient(),
                 static mcp => mcp.WithStdioServerTransport(),
                 stderr);
             await host.RunAsync();
             return 0;
+        }
+
+        if (args[0] == "login")
+        {
+            using var cancel = new CancellationTokenSource();
+            ConsoleCancelEventHandler onCancel = (_, e) =>
+            {
+                // Ctrl+C ends the wait cleanly, with exit code 130, rather than killing the process.
+                e.Cancel = true;
+                cancel.Cancel();
+            };
+            Console.CancelKeyPress += onCancel;
+            try
+            {
+                var login = new LoginCommand(
+                    static () => new HttpClient(),
+                    Environment.GetEnvironmentVariable,
+                    CliConfigFile.ForCurrentUser(),
+                    Environment.MachineName,
+                    Task.Delay,
+                    stdout,
+                    stderr);
+                return await login.RunAsync(args[1..], cancel.Token);
+            }
+            finally
+            {
+                Console.CancelKeyPress -= onCancel;
+            }
         }
 
         await stderr.WriteLineAsync($"Unknown command '{args[0]}'. Run 'panopticon --help'.");
