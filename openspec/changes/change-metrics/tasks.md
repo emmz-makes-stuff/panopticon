@@ -28,8 +28,8 @@
 
 ## 6. Integration and human verification
 
-- [ ] 6.1 Run `make gates` and `make e2e` (the image runs the new migration and the backfill), and verify `GATES_EXIT:0` and `E2E_EXIT:0`.
-- [ ] 6.2 Write the human verification recipe in a devlog note, then stop for Emmz to run it:
+- [x] 6.1 Run `make gates` and `make e2e` (the image runs the new migration and the backfill), and verify `GATES_EXIT:0` and `E2E_EXIT:0`.
+- [x] 6.2 Write the human verification recipe in a devlog note, then stop for Emmz to run it:
   - the change page's panel on an active and an archived change, live as a section finishes;
   - the metrics page and its filters;
   - the backfill having filled older changes after a restart;
