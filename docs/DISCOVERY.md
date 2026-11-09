@@ -88,7 +88,57 @@ Panopticon is two things:
 
 ### Later
 
-_Nothing named yet. Items above marked out of v1 are candidates._
+Items above marked out of v1 are also candidates.
+
+#### Projects (big)
+
+_Source: Emmz, 2026-11-09._
+
+- **A Project:** it has three properties, an `Id`, a `Name` and a `Code`. For example: a UUIDv4, `Panopticon` and
+  `PAN`.
+- **Linking work:** a Project's `Id` goes in the local settings, which links that work to the Project.
+- **The MCP tool:** the MCP server lists the Projects I own or have joined, with their `Id`s, so an agent can set
+  up the link.
+- **Members:** I can invite people to join a Project. There are three levels of membership:
+  - **`owner`:** can invite and remove people.
+  - **`editor`:** can edit the Project's tags.
+  - **`viewer`:** can see the cards, use the MCP server, and so on.
+
+#### Tags (small)
+
+_Source: Emmz, 2026-11-09._
+
+- **What a tag is:** an arbitrary dimension to filter on. A tag has an optional value, so there could be a `dev` tag
+  and a `language: csharp` tag.
+- **Personal tags:** these are kept in the local settings and sent with reports. Only I can see my own tags.
+- **Project tags:** for example, `PAN/bug` or `PAN/area: onboarding`. They're managed on the Project's properties
+  page, and every member of the Project can see them.
+
+#### Decided (Emmz, 2026-11-09)
+
+- **Needed before going live.** Emmz will work on three Projects with different people, and their work mustn't mix.
+- **Who sees what:** only a Project's members see its cards. Work linked to no Project is seen only by the person who
+  reported it.
+- **The link:** the Project `Id` lives in a file committed to the repo (e.g. `.panopticon.json`), so everyone working
+  in that repo reports into the same Project. Personal tags, being one person's own, live in the machine's CLI
+  config.
+- **Invites:** an owner invites by email address. That also lets the person sign in, if they couldn't already. So
+  server-wide membership becomes "can sign in", and Projects decide what each person sees.
+- **Reporting:** all three roles can report into a Project. A viewer's agents work in it, and a viewer only can't
+  manage its tags or people.
+- **Two changes:** Projects first (what going live needs), then tags.
+- **Creating:** anyone who can sign in can create a Project, and becomes its owner.
+- **The code:** unique on the server, and fixed once created, so project tags can rely on it. The name can change.
+
+#### Open questions (not yet asked)
+
+- **Tags in reports:** where do project tags get attached: in the local settings like personal ones, or on the
+  dashboard? A report would carry both personal and project tags. Does each report carry its tags, or the change?
+- **The code:** is it unique, and can it change? It prefixes project tags, so renaming it would rename them.
+- **Owners:** can a Project have more than one owner? Can the last owner leave? Who creates a Project: any member
+  of the deployment?
+- **Viewers and the MCP server:** does "use the MCP server" mean a viewer can report into the Project, or only read?
+- **Filters:** do tags join the existing filter bar (dashboard, history and metrics) as one more dimension?
 
 ## Hard constraints
 
