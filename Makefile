@@ -8,7 +8,7 @@ SHELL := /bin/bash
 
 CHANGES := $(notdir $(patsubst %/,%,$(filter-out %/archive/,$(wildcard openspec/changes/*/))))
 
-.PHONY: build test format aot web-install web-build web-test web-format web-lint validate changes gates deps e2e
+.PHONY: build test format aot install web-install web-build web-test web-format web-lint validate changes gates deps e2e
 
 build:
 	@dotnet build Panopticon.slnx -c Release -warnaserror; code=$$?; echo "BUILD_EXIT:$$code"; exit $$code
@@ -24,6 +24,18 @@ format:
 # Native AOT publish of the CLI — AOT problems only surface at publish time.
 aot:
 	@dotnet publish src/Panopticon.Cli/Panopticon.Cli.csproj -c Release --use-current-runtime -warnaserror -o artifacts/cli; code=$$?; echo "AOT_EXIT:$$code"; exit $$code
+
+# Not a gate: a fresh AOT build of the CLI, copied onto this machine (default ~/.local/bin; override with
+# INSTALL_DIR=...). Restart any running `panopticon mcp` bridge to pick up the new build.
+INSTALL_DIR ?= $(HOME)/.local/bin
+
+install: aot
+	@install -d "$(INSTALL_DIR)" && install -m 755 artifacts/cli/panopticon "$(INSTALL_DIR)/panopticon"; code=$$?; \
+	if [ $$code -eq 0 ]; then \
+		echo "Installed $(INSTALL_DIR)/panopticon"; \
+		case ":$$PATH:" in *":$(INSTALL_DIR):"*) ;; *) echo "Note: $(INSTALL_DIR) isn't on your PATH. Add it to run panopticon by name.";; esac; \
+	fi; \
+	echo "INSTALL_EXIT:$$code"; exit $$code
 
 # Prerequisite for the web gates, not a gate itself (make runs it once per invocation).
 web-install:

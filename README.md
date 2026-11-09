@@ -56,10 +56,11 @@ Rename yourself on the Members page: the name appears on the cards next to every
 
 ### Reporting progress
 
-Build the CLI with `make aot`, then give this machine a token:
+Build and install the CLI with `make install` (it puts `panopticon` in `~/.local/bin`; set `INSTALL_DIR` for
+elsewhere), then give this machine a token:
 
 ```sh
-artifacts/cli/panopticon login --server http://localhost:7480
+panopticon login --server http://localhost:7480
 ```
 
 It prints a code and a link. Open the link while signed in, check the code, and choose **Approve**. The CLI saves

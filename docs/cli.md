@@ -58,8 +58,11 @@ change later created with the same name starts a fresh card.
 ## Install
 
 The CLI is one native executable with no .NET runtime needed. Until releases are published, build it from
-this repo with `make aot`. That writes `artifacts/cli/panopticon`. Put it on your `PATH`, or use its full
-path as the `command` below.
+this repo with `make install`. That builds it (`make aot`, which writes `artifacts/cli/panopticon`) and copies
+it to `~/.local/bin/panopticon`, or to another directory with `make install INSTALL_DIR=…`. It says if that
+directory isn't on your `PATH`. Run it again after pulling to update, then restart your agent so its
+`panopticon mcp` bridge runs the new build. You can also use `artifacts/cli/panopticon`'s full path as the
+`command` below.
 
 ## Log in
 

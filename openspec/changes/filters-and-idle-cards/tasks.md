@@ -36,13 +36,18 @@
 
 ## 7. Integration and human verification
 
-- [ ] 7.1 Run `make gates` and `make e2e` (the image's new settings endpoint and options), and verify `GATES_EXIT:0` and `E2E_EXIT:0`.
+- [x] 7.1 Run `make gates` and `make e2e` (the image's new settings endpoint and options), and verify `GATES_EXIT:0` and `E2E_EXIT:0`.
 - [ ] 7.2 Write the human verification recipe in a devlog note, then stop for Emmz to run it:
   - the filter bar and the quiet states, in light and dark, at desktop and phone width;
   - filtering the live dashboard while an agent reports, including a change outside the filter;
   - a card going idle in a real browser (with `IdleAfter` set to 1 minute locally);
   - a shared filtered link opened in another browser;
   - filtering the history and "Show more".
+
+## 8. Tooling: make install
+
+- [x] 8.1 Add a `make install` target that runs `aot`, then copies `artifacts/cli/panopticon` to `$(INSTALL_DIR)` (default `~/.local/bin`, created if missing), prints `INSTALL_EXIT:<n>`, and warns when that directory isn't on `PATH`. Verify by running it and `~/.local/bin/panopticon --version` (or `--help`).
+- [x] 8.2 Document `make install` in the README (reporting progress) and `docs/cli.md`.
 
 ## Workflow follow-up
 
