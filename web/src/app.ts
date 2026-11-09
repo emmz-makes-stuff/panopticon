@@ -1,5 +1,15 @@
 import { createApi, fetchChanges, type Api, type FetchLike } from "./api";
 import { applyQuiet, renderCard } from "./card";
+import { button, el } from "./dom";
+import { createFilterBar } from "./filterBar";
+import {
+  filterChoices,
+  filterOptions,
+  hasFilters,
+  matches,
+  type Filters,
+  type ParsedFilters,
+} from "./filters";
 import { DEFAULT_QUIET, type QuietSettings } from "./quiet";
 import type { ChangeCard } from "./types";
 
@@ -23,6 +33,13 @@ export interface AppDeps {
   statusSlot?: HTMLElement;
   /** When cards go idle and stale (`GET /api/settings`). Without them, the server's defaults. */
   quiet?: QuietSettings;
+  /** The filters to start with (from the address), and any the address had that didn't parse. */
+  filters?: ParsedFilters;
+  /**
+   * A choice in the filter bar or a "Clear filters" button. The cards view writes the filters to the address, and the
+   * router hands them back through `setFilters`. Without it, the filters apply straight away.
+   */
+  onFiltersChange?: (filters: Filters) => void;
 }
 
 export interface App {
@@ -44,9 +61,15 @@ export interface App {
   setStatus(status: LiveStatus): void;
   /**
    * Re-reads every card's "last reported" time and quiet state against the clock (the cards view calls it every
-   * 30 s), so a card goes idle, then stale, with no report or reload.
+   * 30 s), so a card goes idle, then stale, with no report or reload. Under a status filter, a card that changes
+   * state comes in or goes out.
    */
   updateTimes(): void;
+  /**
+   * Shows the cards that match `filters` (spec change-filters), keeping every card: a live update for a hidden change
+   * is still applied, ready for when the filters change.
+   */
+  setFilters(filters: ParsedFilters): void;
 }
 
 interface Shown {
@@ -93,18 +116,64 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
   grid.setAttribute("aria-label", "Changes");
   root.replaceChildren(...(deps.statusSlot ? [content] : [header, content]));
 
-  // Most recently reported first, as the server orders them.
+  let filters = deps.filters ?? { filters: {}, dropped: [] };
+  /** Whether a load has rendered: until then, the tick and filter changes leave a load error in place. */
+  let loaded = false;
+  const changeFilters =
+    deps.onFiltersChange ?? ((next) => app.setFilters({ filters: next, dropped: [] }));
+  const bar = createFilterBar({
+    keys: ["repo", "owner", "member", "machine", "client", "status"],
+    onChange: (next) => changeFilters(next),
+  });
+  const noMatch = el(
+    "section",
+    "no-match",
+    el("h2", undefined, "No changes match these filters"),
+    el("p", undefined, "Choose other filters, or clear them to see every change."),
+    button("Clear filters", () => changeFilters({}), "link-button"),
+  );
+
+  /**
+   * Shows the cards that match the filters, most recently reported first (the server's order), after bringing each
+   * card's quiet state up to date. The grid is only rebuilt when what it shows changes, so the clock's tick doesn't
+   * replay a card's motion.
+   */
   function layout(): void {
+    const at = now();
     const ordered = [...shown.values()].sort((a, b) => reportedAt(b.card) - reportedAt(a.card));
-    count.textContent = ordered.length === 1 ? "1 change" : `${ordered.length} changes`;
-    if (ordered.length === 0) {
+    const visible = ordered.filter(({ card, element }) =>
+      matches(card, filters.filters, applyQuiet(element, card, at, quiet)),
+    );
+
+    const total = ordered.length;
+    const hidden = total - visible.length;
+    const noun = (n: number) => (n === 1 ? "change" : "changes");
+    count.textContent =
+      hidden > 0 ? `${visible.length} of ${total} ${noun(total)}` : `${total} ${noun(total)}`;
+    count.title = hidden > 0 ? `${hidden} hidden by the filters` : "";
+
+    const filtered = hasFilters(filters.filters) || filters.dropped.length > 0;
+    if (total === 0 && !filtered) {
       content.replaceChildren(renderEmptyState());
       return;
     }
 
-    grid.replaceChildren(...ordered.map((entry) => entry.element));
-    if (grid.parentElement !== content) {
-      content.replaceChildren(grid);
+    bar.update(
+      filterOptions(filterChoices(ordered.map((e) => e.card)), filters.filters),
+      filters.filters,
+      filters.dropped,
+    );
+    const body = visible.length === 0 ? noMatch : grid;
+    const elements = visible.map((entry) => entry.element);
+    if (
+      grid.children.length !== elements.length ||
+      elements.some((element, index) => grid.children[index] !== element)
+    ) {
+      grid.replaceChildren(...elements);
+    }
+
+    if (content.firstElementChild !== bar.element || bar.element.nextElementSibling !== body) {
+      content.replaceChildren(bar.element, body);
     }
   }
 
@@ -123,6 +192,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
       shown.clear();
       next.forEach((entry, id) => shown.set(id, entry));
+      loaded = true;
       layout();
     },
 
@@ -161,9 +231,15 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     },
 
     updateTimes() {
-      const at = now();
-      for (const { card, element } of shown.values()) {
-        applyQuiet(element, card, at, quiet);
+      if (loaded) {
+        layout();
+      }
+    },
+
+    setFilters(next) {
+      filters = next;
+      if (loaded) {
+        layout();
       }
     },
 

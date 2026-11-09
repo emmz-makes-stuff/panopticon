@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { mountApp, PRODUCT_NAME } from "./app";
-import { card, fakeFetch, NOW } from "./testing";
+import { parseFilters } from "./filters";
+import { card, fakeFetch, NOW, q } from "./testing";
+import type { ChangeCard } from "./types";
 
 async function mount(cards = [card()], status = 200) {
   const root = document.createElement("main");
@@ -157,5 +159,180 @@ describe("mountApp quiet cards", () => {
     });
 
     expect(stateOf(root).quiet).toBe("stale");
+  });
+});
+
+const EMMZ_ID = "0190f5a2-0000-7000-8000-000000000001";
+const repoCard = (changeId: string, name: string, reportedAt = minutesAgo(3)) =>
+  card({
+    changeId,
+    change: name,
+    repo: { host: "github.com", owner: "emmz", name },
+    lastReportedAt: reportedAt,
+  });
+const filtered = (query: string) => parseFilters(new URLSearchParams(query));
+
+// Spec change-filters: Live updates respect filters, Filter by status, Filters combine, Filter choices (dashboard).
+describe("mountApp filters", () => {
+  async function mountFiltered(cards: ChangeCard[], query: string, clock = () => NOW) {
+    const root = document.createElement("main");
+    const app = await mountApp(root, {
+      fetch: fakeFetch(cards),
+      now: clock,
+      filters: filtered(query),
+    });
+    return { root, app };
+  }
+
+  const names = (root: HTMLElement) => cardsIn(root).map((c) => text(c, ".card-change"));
+
+  it("Report outside the filter: no card appears, and the count says one more is hidden", async () => {
+    const { root, app } = await mountFiltered(
+      [repoCard("a", "panopticon")],
+      "repo=github.com/emmz/panopticon",
+    );
+
+    app.upsert(repoCard("b", "other", NOW.toISOString()));
+
+    expect(names(root)).toEqual(["panopticon"]);
+    expect(text(root, ".change-count")).toBe("1 of 2 changes");
+    expect(root.querySelector(".change-count")?.getAttribute("title")).toBe(
+      "1 hidden by the filters",
+    );
+  });
+
+  it("A new agent joins a change: once an agent on the filtered machine reports, the card appears", async () => {
+    const before = card({ lastReportedAt: minutesAgo(10) });
+    const { root, app } = await mountFiltered([before], "machine=vm-2");
+    expect(names(root)).toEqual([]);
+
+    app.upsert({
+      ...before,
+      lastReportedAt: NOW.toISOString(),
+      agents: [
+        ...before.agents,
+        { client: "claude-code", machine: "vm-2", lastReportedAt: NOW.toISOString() },
+      ],
+    });
+
+    expect(names(root)).toEqual(["walking-skeleton"]);
+  });
+
+  it("Only stale cards: filtering by status shows the stale card alone", async () => {
+    const { root } = await mountFiltered(
+      [
+        repoCard("a", "active", minutesAgo(5)),
+        repoCard("i", "idle", minutesAgo(60)),
+        repoCard("s", "stale", minutesAgo(300)),
+      ],
+      "status=stale",
+    );
+
+    expect(names(root)).toEqual(["stale"]);
+  });
+
+  it("A card goes stale while filtered: it appears on the next tick, with no reload", async () => {
+    let clock = NOW;
+    const fetch = fakeFetch([repoCard("i", "idle", minutesAgo(200))]);
+    const root = document.createElement("main");
+    const app = await mountApp(root, {
+      fetch,
+      now: () => clock,
+      filters: filtered("status=stale"),
+    });
+    expect(names(root)).toEqual([]);
+
+    clock = new Date(NOW.getTime() + 60 * 60_000);
+    app.updateTimes();
+
+    expect(names(root)).toEqual(["idle"]);
+    expect(fetch.urls).toEqual(["/api/changes"]);
+  });
+
+  it("A filter value that matches nothing: says so, with a way to clear the filters", async () => {
+    const { root } = await mountFiltered(
+      [repoCard("a", "panopticon")],
+      "repo=github.com/emmz/nothing-here",
+    );
+
+    expect(names(root)).toEqual([]);
+    expect(text(root, ".no-match h2")).toBe("No changes match these filters");
+    q<HTMLButtonElement>(root, ".no-match button").click();
+
+    expect(names(root)).toEqual(["panopticon"]);
+    expect(root.querySelector(".no-match")).toBeNull();
+  });
+
+  it("matches nothing even with no changes at all, rather than the getting-started page", async () => {
+    const { root } = await mountFiltered([], "machine=vm-1");
+
+    expect(text(root, ".no-match h2")).toBe("No changes match these filters");
+    expect(root.querySelector(".empty-state")).toBeNull();
+  });
+
+  it("Owner and person, then Clear all: every card is shown again", async () => {
+    const mine = card({
+      changeId: "m",
+      change: "mine",
+      agents: [
+        {
+          client: "claude-code",
+          machine: "vm-1",
+          lastReportedAt: NOW.toISOString(),
+          member: "Emmz",
+          memberId: EMMZ_ID,
+        },
+      ],
+    });
+    const theirs = card({ changeId: "t", change: "theirs" });
+    const acme = card({
+      changeId: "x",
+      change: "acme",
+      repo: { host: "github.com", owner: "acme", name: "site" },
+    });
+    const { root } = await mountFiltered(
+      [mine, theirs, acme],
+      `owner=github.com/emmz&member=${EMMZ_ID}&machine=vm-1`,
+    );
+    expect(names(root)).toEqual(["mine"]);
+
+    q<HTMLButtonElement>(root, ".filter-clear").click();
+
+    expect(names(root).sort()).toEqual(["acme", "mine", "theirs"]);
+    expect(text(root, ".change-count")).toBe("3 changes");
+  });
+
+  it("Dashboard choices follow the cards: a report in a third repo adds it to the repo filter", async () => {
+    const { root, app } = await mountFiltered([repoCard("a", "one"), repoCard("b", "two")], "");
+    const repoOptions = () =>
+      [...q<HTMLSelectElement>(root, "select[name=repo]").options].map((o) => o.textContent);
+    expect(repoOptions()).toEqual(["All repos", "github.com/emmz/one", "github.com/emmz/two"]);
+
+    app.upsert(repoCard("c", "three", NOW.toISOString()));
+
+    expect(repoOptions()).toEqual([
+      "All repos",
+      "github.com/emmz/one",
+      "github.com/emmz/three",
+      "github.com/emmz/two",
+    ]);
+  });
+
+  it("keeps a load error up through the clock's tick and a filter change", async () => {
+    const { root, app } = await mount([], 500);
+
+    app.updateTimes();
+    app.setFilters(filtered("machine=vm-1"));
+
+    expect(root.querySelector("[role=alert]")?.textContent).toContain("answered 500");
+  });
+
+  it("says when the address had a filter that didn't make sense", async () => {
+    const { root } = await mountFiltered([card()], "repo=nope&machine=vm-1");
+
+    expect(text(root, ".filter-note")).toBe(
+      "Ignored a filter in the address that didn't make sense: repo.",
+    );
+    expect(q<HTMLSelectElement>(root, "select[name=machine]").value).toBe("vm-1");
   });
 });
