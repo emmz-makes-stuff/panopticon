@@ -42,7 +42,7 @@ export function renderChangeMetrics(metrics: ChangeMetrics): Node[] {
   list.setAttribute("aria-label", "Time per section");
   const longest = Math.max(...metrics.sections.map((s) => s.durationSeconds));
   for (const section of metrics.sections) {
-    list.append(sectionRow(section, longest));
+    list.append(sectionRow(section, longest, metrics.active));
   }
 
   return [total, note, list];
@@ -60,26 +60,38 @@ export function durationRule(seconds: number, longest: number, running = false):
   return rule;
 }
 
-function sectionRow(section: SectionMetric, longest: number): HTMLElement {
+/**
+ * A section's row. One not finished is "in progress, 1h so far" while the change is active, and "unfinished, 3h" once
+ * it's archived, since its clock stopped at the archive (spec: A section unfinished at archive).
+ */
+function sectionRow(section: SectionMetric, longest: number, active: boolean): HTMLElement {
+  const state = !section.inProgress ? undefined : active ? "in-progress" : "unfinished";
   const row = el(
     "li",
-    section.inProgress ? "metrics-section in-progress" : "metrics-section",
+    state ? `metrics-section ${state}` : "metrics-section",
     el("span", "metrics-section-number", String(section.number)),
     el("span", "metrics-section-title", section.title),
     durationRule(section.durationSeconds, longest, section.inProgress),
   );
   // The state and the time joined by a comma, not a middot (DESIGN.md principle 5).
-  row.append(
-    section.inProgress
-      ? el(
-          "span",
-          "metrics-section-time",
-          el("span", "metrics-in-progress", "in progress"),
-          ", ",
-          durationText(section.durationSeconds),
-          " so far",
-        )
-      : el("span", "metrics-section-time", durationText(section.durationSeconds)),
-  );
+  const time = el("span", "metrics-section-time");
+  if (state === "in-progress") {
+    time.append(
+      el("span", "metrics-state", "in progress"),
+      ", ",
+      durationText(section.durationSeconds),
+      " so far",
+    );
+  } else if (state === "unfinished") {
+    time.append(
+      el("span", "metrics-state", "unfinished"),
+      ", ",
+      durationText(section.durationSeconds),
+    );
+  } else {
+    time.append(durationText(section.durationSeconds));
+  }
+
+  row.append(time);
   return row;
 }

@@ -34,6 +34,24 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
         - [x] 2.2
         """;
 
+    private const string ThreeOfFour = """
+        ## 1. Setup
+        - [x] 1.1
+        - [x] 1.2
+        ## 2. Core
+        - [x] 2.1
+        - [ ] 2.2
+        """;
+
+    private const string OneOfFour = """
+        ## 1. Setup
+        - [x] 1.1
+        - [ ] 1.2
+        ## 2. Core
+        - [ ] 2.1
+        - [ ] 2.2
+        """;
+
     private static readonly string _missingHash = new('f', 64);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -49,7 +67,7 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
 
         var result = await harness.Backfill().RunAsync(Ct);
 
-        Assert.Equal(new BackfillResult(Filled: 2, Unreadable: 0, Stopped: false), result);
+        Assert.Equal(new BackfillResult(Filled: 2, Unreadable: 0, Skipped: 0, Stopped: false), result);
         Assert.Equal(recorded, await harness.ProgressAsync());
         Assert.Collection(
             recorded,
@@ -73,7 +91,7 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
 
         var result = await harness.Backfill().RunAsync(Ct);
 
-        Assert.Equal(new BackfillResult(Filled: 2, Unreadable: 1, Stopped: false), result);
+        Assert.Equal(new BackfillResult(Filled: 2, Unreadable: 1, Skipped: 0, Stopped: false), result);
         Assert.Equal(["2/5 current 2 [1 Setup 2/2, 2 Core 0/2]", "unreadable", "4/4 current 2 [1 Setup 2/2, 2 Core 2/2]"], await harness.ProgressAsync());
         var warning = Assert.Single(harness.Logger.Entries, e => e.Level == LogLevel.Warning);
         Assert.Contains($"report event {missingId} ", warning.Message, StringComparison.Ordinal);
@@ -96,7 +114,7 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
         var afterFirst = await harness.ProgressAsync();
         var second = await harness.Backfill().RunAsync(Ct);
 
-        Assert.Equal(new BackfillResult(Filled: 0, Unreadable: 0, Stopped: false), second);
+        Assert.Equal(new BackfillResult(Filled: 0, Unreadable: 0, Skipped: 0, Stopped: false), second);
         Assert.Equal(afterFirst, await harness.ProgressAsync());
         Assert.Equal(0, harness.Store.Gets);
     }
@@ -109,30 +127,64 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
 
         var result = await harness.Backfill().RunAsync(Ct);
 
-        Assert.Equal(new BackfillResult(0, 0, false), result);
+        Assert.Equal(new BackfillResult(0, 0, 0, false), result);
         Assert.Equal(0, harness.Store.Gets);
     }
 
+    // spec: A tasks.md that fails to read. An object that always fails (a 403, say) mustn't stop every start there.
     [Fact]
-    public async Task A_store_error_stops_the_run_keeping_what_was_filled_and_the_next_run_finishes()
+    public async Task A_report_whose_tasks_fail_to_read_is_skipped_the_rest_are_filled_and_the_next_run_fills_it()
+    {
+        var harness = await Harness.CreateAsync(postgres, s3);
+        await harness.RecordAsync(TwoOfFour, reportedSection: 2);
+        var failingId = await harness.RecordAsync(FourOfFour, reportedSection: null);
+        await harness.RecordAsync(ThreeOfFour, reportedSection: null);
+        await harness.RecordAsync(FourOfFour, reportedSection: null);
+        await harness.ForgetProgressAsync();
+        var failing = S3DocumentStore.Hash(FourOfFour);
+        harness.Fails = hash => hash == failing;
+
+        var first = await harness.Backfill().RunAsync(Ct);
+
+        Assert.Equal(new BackfillResult(Filled: 2, Unreadable: 0, Skipped: 2, Stopped: false), first);
+        Assert.Equal(
+            ["2/5 current 2 [1 Setup 2/2, 2 Core 0/2]", "pending", "3/4 current 2 [1 Setup 2/2, 2 Core 1/2]", "pending"],
+            await harness.ProgressAsync());
+        Assert.Equal(3, harness.Store.Gets); // The failing object is read once, not once per report.
+        var warning = Assert.Single(harness.Logger.Entries, e => e.Level == LogLevel.Warning);
+        Assert.Contains($"report event {failingId}'s", warning.Message, StringComparison.Ordinal);
+
+        harness.Fails = null;
+        var next = await harness.Backfill().RunAsync(Ct);
+
+        Assert.Equal(new BackfillResult(Filled: 2, Unreadable: 0, Skipped: 0, Stopped: false), next);
+        Assert.DoesNotContain("pending", await harness.ProgressAsync());
+    }
+
+    [Fact]
+    public async Task Read_errors_in_a_row_stop_the_run_keeping_what_was_filled_and_the_next_run_finishes()
     {
         var harness = await Harness.CreateAsync(postgres, s3);
         await harness.RecordAsync(TwoOfFour, reportedSection: 2);
         await harness.RecordAsync(FourOfFour, reportedSection: null);
+        await harness.RecordAsync(ThreeOfFour, reportedSection: null);
+        await harness.RecordAsync(OneOfFour, reportedSection: null);
+        await harness.RecordAsync(TwoOfFour, reportedSection: 2);
         await harness.ForgetProgressAsync();
-        harness.FailOn = S3DocumentStore.Hash(FourOfFour);
+        var first = S3DocumentStore.Hash(TwoOfFour);
+        harness.Fails = hash => hash != first; // The store goes down after the first read.
 
         var stopped = await harness.Backfill().RunAsync(Ct);
 
-        Assert.Equal(new BackfillResult(Filled: 1, Unreadable: 0, Stopped: true), stopped);
-        Assert.Equal(["2/5 current 2 [1 Setup 2/2, 2 Core 0/2]", "pending"], await harness.ProgressAsync());
-        Assert.Contains(harness.Logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("stopped", StringComparison.Ordinal));
+        Assert.Equal(new BackfillResult(Filled: 1, Unreadable: 0, Skipped: ProgressBackfill.MaxFailuresInARow, Stopped: true), stopped);
+        Assert.Equal(["2/5 current 2 [1 Setup 2/2, 2 Core 0/2]", "pending", "pending", "pending", "pending"], await harness.ProgressAsync());
+        Assert.Contains(harness.Logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("stopped after 3 read errors", StringComparison.Ordinal));
 
-        harness.FailOn = null;
+        harness.Fails = null;
         var next = await harness.Backfill().RunAsync(Ct);
 
-        Assert.Equal(new BackfillResult(Filled: 1, Unreadable: 0, Stopped: false), next);
-        Assert.Equal(["2/5 current 2 [1 Setup 2/2, 2 Core 0/2]", "4/4 current 2 [1 Setup 2/2, 2 Core 2/2]"], await harness.ProgressAsync());
+        Assert.Equal(new BackfillResult(Filled: 4, Unreadable: 0, Skipped: 0, Stopped: false), next);
+        Assert.DoesNotContain("pending", await harness.ProgressAsync());
     }
 
     [Fact]
@@ -152,7 +204,7 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
 
         var result = await harness.Backfill().RunAsync(Ct);
 
-        Assert.Equal(new BackfillResult(Filled: ProgressBackfill.BatchSize + 50, Unreadable: 0, Stopped: false), result);
+        Assert.Equal(new BackfillResult(Filled: ProgressBackfill.BatchSize + 50, Unreadable: 0, Skipped: 0, Stopped: false), result);
         Assert.All(await harness.ProgressAsync(), e => Assert.Equal("2/5 current 2 [1 Setup 2/2, 2 Core 0/2]", e));
         Assert.Equal(2, harness.Store.Gets);
     }
@@ -186,8 +238,8 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
 
         public required S3DocumentStore Documents { get; init; }
 
-        /// <summary>A hash the next backfill's store fails to read.</summary>
-        public string? FailOn { get; set; }
+        /// <summary>Which hashes the next backfill's store fails to read.</summary>
+        public Func<string, bool>? Fails { get; set; }
 
         public FlakyStore Store { get; private set; } = null!;
 
@@ -237,7 +289,7 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
         /// <summary>A fresh backfill over a store that counts its reads and can be made to fail.</summary>
         public ProgressBackfill Backfill()
         {
-            Store = new FlakyStore(Documents) { FailOn = FailOn };
+            Store = new FlakyStore(Documents) { Fails = Fails };
             Logger = new ListLogger<ProgressBackfill>();
             var services = new ServiceCollection()
                 .AddScoped(_ => NewDb())
@@ -260,15 +312,15 @@ public class ProgressBackfillTests(PostgresFixture postgres, S3Fixture s3)
 
         public int Gets => _gets;
 
-        /// <summary>A hash whose read fails as a transient store error would.</summary>
-        public string? FailOn { get; set; }
+        /// <summary>Which hashes' reads fail, as a store error would.</summary>
+        public Func<string, bool>? Fails { get; set; }
 
         public Task<string> PutAsync(string content, CancellationToken cancellationToken) => inner.PutAsync(content, cancellationToken);
 
         public Task<string?> GetAsync(string sha256, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _gets);
-            return sha256 == FailOn
+            return Fails?.Invoke(sha256) == true
                 ? throw new AmazonS3Exception("Service unavailable") { StatusCode = HttpStatusCode.ServiceUnavailable }
                 : inner.GetAsync(sha256, cancellationToken);
         }

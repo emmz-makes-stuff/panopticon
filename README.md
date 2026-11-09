@@ -94,7 +94,8 @@ The server keeps the progress each report saw, so it can say how long changes an
   - **Start:** the first report in which the section has a ticked task, or is the current section.
   - **Finish:** the first report from which every one of its tasks stays ticked, through the change's last report.
     A section that's reopened, by unticking a task, finishes again later.
-  - **Not measured:** a section that's started but not finished is in progress, with its time so far. A section
+  - **Not measured:** a section that's started but not finished is in progress, with its time so far. Once the
+    change is archived, it's unfinished, with its time up to the archive. A section
     never started, or with no tasks, has no time. Sections without a number aren't measured.
   - **Matching:** sections are matched by their number, and show their latest title. A change that renumbers its
     sections part-way joins different sections under one number.
@@ -109,7 +110,9 @@ filtered like the history:
 background at start-up. It reads each one's stored `tasks.md`, a batch at a time, while it carries on serving.
 - **While it runs:** the metrics cover what it has filled in so far.
 - **A missing `tasks.md`:** that report is left out of the metrics, and the server logs its event id.
-- **A storage error:** it stops with a warning, and the next start carries on from there.
+- **A storage error reading one report's `tasks.md`:** it logs that report and skips it, carrying on with the rest,
+  and the next start tries it again. Three errors in a row mean the store is down: it stops with a warning, and the
+  next start carries on from there.
 - **Afterwards:** nothing is read twice, so a restart once it's done does nothing.
 
 ### Working on the dashboard

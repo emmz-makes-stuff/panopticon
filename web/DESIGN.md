@@ -246,6 +246,8 @@ Wall-clock time, first report to archive.        (small, muted)
     - **Long form:** "5 days 6 hours", used as the tooltip and as the screen-reader text (Emmz, 2026-11-09).
     - **In progress:** a running section reads "in progress, 1h so far". The state and the time are joined by a comma,
       not a middot (principle 5). "in progress" is in `--ink` 600 and the rest is muted.
+    - **Unfinished:** on an archived change, a section that never finished reads "unfinished, 3h", styled the same,
+      with its rule still dashed. Its clock stopped at the archive, so it isn't "so far" (Emmz, 2026-11-09).
 - **The change page's panel:**
     - **Placement:** it sits between the header and the documents, 38rem wide, and ends with a hairline.
     - **The headline:** "Took 5d 6h" for an archived change, or "Running for 2d" for an active one, then the

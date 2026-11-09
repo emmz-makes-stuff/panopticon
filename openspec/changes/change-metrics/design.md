@@ -63,7 +63,11 @@ Null means "not filled in yet" (backfill pending) or "couldn't be read" (see D3)
 - **Failures:**
   - A missing object or a parse failure stamps `overall_total = -1`, meaning "unreadable". Metrics skip those rows,
     and the server logs the event id.
-  - A transient S3 error stops the batch with a warning, and the next start retries it.
+  - Any other read error (a transient S3 error, or one object that always fails, like a 403) skips that report for
+    this run with a warning naming it. Its counts stay null, so the next start retries it, and the reports after it
+    are still filled. Three such errors in a row (`MaxFailuresInARow`) mean the store is down: the run stops with a
+    warning, keeping what it filled. (Changed in §7: a single object that always failed used to stop every start at
+    the same report.)
 - **Safety:** it's idempotent and only touches rows with null counts. It's off the request path, so it never stops
   serving.
 - **The metrics while it runs:** they cover what has been filled so far.

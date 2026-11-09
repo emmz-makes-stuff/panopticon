@@ -40,6 +40,14 @@ with its time so far.
 - **WHEN** section 1 was all ticked at 11:00, a task in it was unticked at 12:00, and it was all ticked again at 14:00
 - **THEN** section 1 finished at 14:00
 
+### Requirement: Sections unfinished at archive
+On an archived change, a started section that never finished SHALL be marked unfinished, with its time up to the
+archive.
+
+#### Scenario: A section unfinished at archive
+- **WHEN** a change was archived 2 hours after section 4 started, with section 4 not all ticked
+- **THEN** section 4 is unfinished, at 2 hours
+
 ### Requirement: Sections not measured
 A section with no tasks, or one never started, SHALL have no time. Sections without a number SHALL NOT be measured.
 
@@ -64,6 +72,10 @@ be left out of the metrics, and not fail the rest.
 #### Scenario: A missing tasks.md
 - **WHEN** an older report's stored `tasks.md` can't be found
 - **THEN** that report is left out of the metrics, the server logs which one, and the other reports are filled in
+
+#### Scenario: A tasks.md that fails to read
+- **WHEN** reading an older report's stored `tasks.md` fails with a storage error
+- **THEN** the server logs which report, fills in the reports after it, and tries that report again on its next start
 
 ### Requirement: Change page metrics
 A change's page SHALL show its time to archive, or its time so far while active, and each measured section's time,

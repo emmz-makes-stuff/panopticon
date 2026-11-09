@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { countText, formatDuration, formatDurationLong, percent, relativeTime } from "./format";
+import {
+  calendarDate,
+  countText,
+  formatDuration,
+  formatDurationLong,
+  percent,
+  relativeTime,
+} from "./format";
 import { NOW } from "./testing";
 
 describe("percent and countText", () => {
@@ -53,5 +60,12 @@ describe("formatDuration and formatDurationLong", () => {
   ])("%i seconds reads %s, or %s", (seconds, short, long) => {
     expect(formatDuration(seconds)).toBe(short);
     expect(formatDurationLong(seconds)).toBe(long);
+  });
+});
+
+describe("calendarDate", () => {
+  it("reads as a UTC date, with the year unless it's left out", () => {
+    expect(calendarDate("2026-11-08T23:30:00-02:00")).toBe("9 Nov 2026");
+    expect(calendarDate("2026-11-02T00:00:00Z", { year: false })).toBe("2 Nov");
   });
 });

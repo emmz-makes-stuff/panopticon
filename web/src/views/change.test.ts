@@ -324,6 +324,35 @@ describe("change page metrics", () => {
     );
   });
 
+  it("A section unfinished at archive: marked unfinished, at its time up to the archive", async () => {
+    const server = serverFor(
+      changePage({ archivedAt: "2026-11-08T15:00:00Z", archiveFolder: "2026-11-08-team-auth" }),
+    ).on("GET", "/api/changes/c1/metrics", {
+      status: 200,
+      body: metrics({
+        archivedAt: "2026-11-08T15:00:00Z",
+        active: false,
+        sections: [
+          section({
+            number: 4,
+            title: "Docs",
+            finishedAt: null,
+            inProgress: true,
+            durationSeconds: 2 * 3600,
+          }),
+        ],
+      }),
+    });
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".metrics-section") !== null);
+
+    const row = q(root, ".metrics-section");
+    expect(row.classList.contains("unfinished")).toBe(true);
+    expect(row.classList.contains("in-progress")).toBe(false);
+    expect(shown(q(row, ".metrics-section-time"))).toBe("unfinished, 2h");
+    expect(q(row, ".metrics-section-time .visually-hidden").textContent).toBe("2 hours");
+  });
+
   it("Live while open: a report finishing section 3 shows it finished, without a reload", async () => {
     let finished = false;
     const server = serverFor().on("GET", "/api/changes/c1/metrics", () => ({

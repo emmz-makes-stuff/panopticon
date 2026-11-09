@@ -1083,15 +1083,15 @@ body {
   white-space: nowrap;
 }
 
-.metrics-in-progress {
+.metrics-state {
   font-weight: 600;
 }
 
-.metrics-section.in-progress .metrics-section-time {
+.metrics-section:is(.in-progress, .unfinished) .metrics-section-time {
   color: var(--ink-muted);
 }
 
-.metrics-section.in-progress .metrics-in-progress {
+.metrics-section:is(.in-progress, .unfinished) .metrics-state {
   color: var(--ink);
 }
 

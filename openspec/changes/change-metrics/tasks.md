@@ -35,6 +35,12 @@
   - the backfill having filled older changes after a restart;
   - light and dark, desktop and phone.
 
+## 7. Review fixes: backfill, unfinished sections, week labels
+
+- [x] 7.1 Change `ProgressBackfill` so a report whose `tasks.md` fails to read is skipped for this run with a warning, leaving it pending for the next start, and the run carries on. It stops only after `MaxFailuresInARow` (3) read errors in a row. `BackfillResult` gains `Skipped`. Update the tests (a failing object is skipped and the rest filled, the next run fills it; an outage stops the run), the README and design D3.
+- [x] 7.2 On an archived change's page, mark a section that never finished as "unfinished, 3h" rather than "in progress, 3h so far" (spec: A section unfinished at archive). Test it, and update `web/DESIGN.md` and the README.
+- [x] 7.3 Give `calendarDate` in `format.ts` a way to leave out the year, and use it for `weekLabel` in `views/metrics.ts` instead of the copy.
+
 ## Workflow follow-up
 
 - Run the whole-change review and offer `/code-review` before archiving.

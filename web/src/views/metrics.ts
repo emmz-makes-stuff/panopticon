@@ -10,7 +10,7 @@ import {
   type FilterChoices,
   type Filters,
 } from "../filters";
-import { formatDuration } from "../format";
+import { calendarDate, formatDuration } from "../format";
 import { changeHref } from "../links";
 import { durationRule, durationText } from "../metricsPanel";
 import type { View } from "../router";
@@ -25,11 +25,7 @@ const failureText = (failure: unknown) =>
 
 /** A week's label on the chart and in its table, e.g. "2 Nov" (UTC, as the weeks are). */
 export function weekLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+  return calendarDate(iso, { year: false });
 }
 
 /**
