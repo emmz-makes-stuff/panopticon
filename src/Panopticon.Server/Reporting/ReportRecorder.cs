@@ -98,7 +98,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             {
                 // One transaction, so the change row locked in FindOrAddChangeAsync stays locked until the write.
                 await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-                var recorded = await UpsertAsync(report, snapshot, tasksSha256, manifest, receivedAt, cancellationToken);
+                var recorded = await UpsertAsync(report, snapshot, parsed, current, tasksSha256, manifest, receivedAt, cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return recorded;
             }
@@ -113,6 +113,8 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
     private async Task<RecordedReport> UpsertAsync(
         ReportInput report,
         ProgressSnapshot snapshot,
+        ParsedTasks parsed,
+        SectionProgress? current,
         string tasksSha256,
         IReadOnlyList<StoredDocument> manifest,
         DateTimeOffset receivedAt,
@@ -176,6 +178,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             TasksSha256 = tasksSha256,
             ReceivedAt = receivedAt,
         };
+        ReportProgress.Fill(reportEvent, parsed, current);
         db.ReportEvents.Add(reportEvent);
 
         // The event's id comes from the database, so its manifest is written after it, in the same transaction.

@@ -438,6 +438,18 @@ namespace Panopticon.Server.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("change_id");
 
+                    b.Property<int?>("CurrentSection")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_section");
+
+                    b.Property<int?>("OverallDone")
+                        .HasColumnType("integer")
+                        .HasColumnName("overall_done");
+
+                    b.Property<int?>("OverallTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("overall_total");
+
                     b.Property<DateTimeOffset>("ReceivedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("received_at");
@@ -458,6 +470,10 @@ namespace Panopticon.Server.Data.Migrations
 
                     b.HasIndex("AgentId")
                         .HasDatabaseName("ix_report_events_agent_id");
+
+                    b.HasIndex("Id")
+                        .HasDatabaseName("ix_report_events_progress_pending")
+                        .HasFilter("overall_total IS NULL");
 
                     b.HasIndex("ChangeId", "ReceivedAt")
                         .HasDatabaseName("ix_report_events_change_id_received_at");
@@ -690,6 +706,38 @@ namespace Panopticon.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_report_events_changes_change_id");
+
+                    b.OwnsMany("Panopticon.Server.Data.SectionCounts", "Sections", b1 =>
+                        {
+                            b1.Property<long>("ReportEventId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<int>("Done");
+
+                            b1.Property<int>("Number");
+
+                            b1.Property<string>("Title")
+                                .IsRequired();
+
+                            b1.Property<int>("Total");
+
+                            b1.HasKey("ReportEventId", "__synthesizedOrdinal")
+                                .HasName("pk_report_events");
+
+                            b1.ToTable("report_events");
+
+                            b1
+                                .ToJson("sections")
+                                .HasColumnType("jsonb");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ReportEventId")
+                                .HasConstraintName("fk_report_events_report_events_report_event_id");
+                        });
+
+                    b.Navigation("Sections");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Session", b =>

@@ -185,6 +185,39 @@ public class MigrationTests(PostgresFixture postgres)
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
     }
 
+    [Fact]
+    public async Task Older_report_events_survive_the_metrics_migration_with_no_progress_yet()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await postgres.CreateDatabaseAsync(DocumentsMigration, ct);
+        var (repoId, changeId, agentId) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await using (var before = PostgresFixture.CreateDb(connectionString))
+        {
+            await before.Database.ExecuteSqlAsync(
+                $"INSERT INTO repos (id, host, owner, name, host_key, owner_key, name_key) VALUES ({repoId}, 'github.com', 'emmz', 'panopticon', 'github.com', 'emmz', 'panopticon')",
+                ct);
+            await before.Database.ExecuteSqlAsync(
+                $$"""INSERT INTO changes (id, repo_id, name, name_key, last_reported_at, snapshot) VALUES ({{changeId}}, {{repoId}}, 'team-auth', 'team-auth', now(), '{"OverallDone":3,"OverallTotal":5,"CurrentSectionDone":0,"CurrentSectionTotal":0}')""",
+                ct);
+            await before.Database.ExecuteSqlAsync(
+                $"INSERT INTO agents (id, client_name, machine_name, client_name_key, machine_name_key) VALUES ({agentId}, 'claude-code', 'vm-1', 'claude-code', 'vm-1')",
+                ct);
+            await before.Database.ExecuteSqlAsync(
+                $"INSERT INTO report_events (change_id, agent_id, tasks_sha256, received_at) VALUES ({changeId}, {agentId}, {new string('a', 64)}, now())",
+                ct);
+        }
+
+        await using var db = PostgresFixture.CreateDb(connectionString);
+        await db.Database.MigrateAsync(ct);
+
+        var reportEvent = await db.ReportEvents.SingleAsync(ct);
+        Assert.Equal(changeId, reportEvent.ChangeId);
+        Assert.Equal((null, null, null), (reportEvent.OverallDone, reportEvent.OverallTotal, reportEvent.CurrentSection));
+        Assert.Null(reportEvent.Sections);
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync(ct));
+    }
+
+    private const string DocumentsMigration = "20261108184053_ChangeDocumentsAndHistory";
     private const string InitialMigration = "20261108001226_Initial";
     private const string TeamAuthMigration = "20261108150815_TeamAuth";
 

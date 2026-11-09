@@ -98,6 +98,10 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
             reportEvent.HasIndex(e => new { e.ChangeId, e.ReceivedAt });
             reportEvent.HasOne<Change>().WithMany().HasForeignKey(e => e.ChangeId);
             reportEvent.HasOne<Agent>().WithMany().HasForeignKey(e => e.AgentId);
+            reportEvent.OwnsMany(e => e.Sections, sections => sections.ToJson("sections"));
+
+            // change-metrics D3: the backfill looks for the rows it hasn't filled in yet.
+            reportEvent.HasIndex(e => e.Id).HasFilter("overall_total IS NULL").HasDatabaseName("ix_report_events_progress_pending");
         });
 
         modelBuilder.Entity<ReportDocument>(document =>

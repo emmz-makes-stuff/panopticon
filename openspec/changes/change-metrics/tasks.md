@@ -2,8 +2,8 @@
 
 ## 1. Server: per-report progress
 
-- [ ] 1.1 Add the migration for `report_events.overall_done`, `overall_total`, `current_section` and `sections` (jsonb), with `ReportRecorder` filling them from the parsed `tasks.md` (D1). Verify with a recorder test that a report stores its counts and its numbered sections only, and with a migration test that the new migration applies.
-- [ ] 1.2 Add the `ProgressBackfill` hosted service (D3). It fills events with null counts in batches from S3, stamps an unreadable one with `overall_total = -1` and logs it, and stops a batch on a transient error. Verify "Older reports filled in" and "A missing tasks.md" with server tests (seeded null rows, and one hash with no object), and that a second run touches nothing.
+- [x] 1.1 Add the migration for `report_events.overall_done`, `overall_total`, `current_section` and `sections` (jsonb), with `ReportRecorder` filling them from the parsed `tasks.md` (D1). Verify with a recorder test that a report stores its counts and its numbered sections only, and with a migration test that the new migration applies.
+- [x] 1.2 Add the `ProgressBackfill` hosted service (D3). It fills events with null counts in batches from S3, stamps an unreadable one with `overall_total = -1` and logs it, and stops a batch on a transient error. Verify "Older reports filled in" and "A missing tasks.md" with server tests (seeded null rows, and one hash with no object), and that a second run touches nothing.
 
 ## 2. Server: metrics
 

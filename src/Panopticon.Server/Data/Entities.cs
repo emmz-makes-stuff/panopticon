@@ -68,6 +68,30 @@ public sealed class ReportEvent
     public required string TasksSha256 { get; set; }
 
     public DateTimeOffset ReceivedAt { get; set; }
+
+    // change-metrics D1: the progress this report saw. All null until filled in, by the recorder for a new report or by
+    // ProgressBackfill for an older one. OverallTotal = -1 (Unreadable) marks one whose tasks.md couldn't be read.
+
+    public int? OverallDone { get; set; }
+    public int? OverallTotal { get; set; }
+
+    /// <summary>The current section's number, when that section is numbered.</summary>
+    public int? CurrentSection { get; set; }
+
+    /// <summary>The numbered sections' counts, in document order.</summary>
+    public List<SectionCounts>? Sections { get; set; }
+
+    /// <summary>The <see cref="OverallTotal"/> that marks a report whose <c>tasks.md</c> couldn't be read.</summary>
+    public const int Unreadable = -1;
+}
+
+/// <summary>One numbered <c>tasks.md</c> section as a report saw it (change-metrics D1).</summary>
+public sealed class SectionCounts
+{
+    public int Number { get; set; }
+    public required string Title { get; set; }
+    public int Done { get; set; }
+    public int Total { get; set; }
 }
 
 /// <summary>One line of a report's manifest: a synced document's path and the hash of the content it carried.</summary>

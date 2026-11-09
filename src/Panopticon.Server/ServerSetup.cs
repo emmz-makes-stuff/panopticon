@@ -9,6 +9,7 @@ using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Live;
+using Panopticon.Server.Progress;
 using Panopticon.Server.Reporting;
 using Resend;
 
@@ -110,6 +111,10 @@ public static class ServerSetup
 
         // Reporting and live updates.
         services.AddScoped<ReportRecorder>();
+
+        // change-metrics D3: older reports get their progress filled in once, in the background.
+        services.AddSingleton<ProgressBackfill>();
+        services.AddHostedService(sp => sp.GetRequiredService<ProgressBackfill>());
         services.AddScoped<ChangeCards>();
         services.AddScoped<ChangePages>();
         services.AddSingleton<DocumentRenderer>();
