@@ -111,6 +111,7 @@ export function createFilterBar(bar: FilterBarOptions): FilterBar {
 
         entry.select.value =
           chosenOption(choices, filterValue(filters, dimension.key))?.value ?? "";
+        entry.select.classList.toggle("filter-select--set", entry.select.value !== "");
       }
 
       clear.hidden = !hasFilters(filters, bar.keys);

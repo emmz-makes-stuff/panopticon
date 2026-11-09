@@ -21,11 +21,11 @@ export function renderCard(
 
   const repoLine = element("div", "card-repo");
   repoLine.append(element("span", "card-repo-name", `${card.repo.owner}/${card.repo.name}`));
-  // When it last reported, after its quiet state when it has one: "Idle · 1h ago", "Stale · last seen 5h ago".
+  // When it last reported, after its quiet state when it has one: "Idle, 1h ago", "Stale, last seen 5h ago".
   const when = element("span", "card-when");
   const state = element("span", "card-state");
-  const separator = element("span", "card-state-separator", " · ");
-  separator.setAttribute("aria-hidden", "true");
+  // A comma, not a middot (web/DESIGN.md, principle 5), and read aloud like the rest.
+  const separator = element("span", "card-state-separator", ", ");
   const time = element("time", "card-time");
   time.dateTime = card.lastReportedAt;
   time.title = new Date(card.lastReportedAt).toLocaleString();

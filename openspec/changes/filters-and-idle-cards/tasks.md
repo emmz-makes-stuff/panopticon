@@ -32,7 +32,7 @@
 
 ## 6. Design pass
 
-- [ ] 6.1 Run the `frontend-design` skill for the filter bar (desktop, and phone collapsing or wrapping) and the quiet states (idle muted, stale dimmed, the lit cells still readable), within `web/DESIGN.md`. Add a "Filters and quiet cards" section to `web/DESIGN.md`, and apply the styles. Verify that `make web-build` and `make web-lint` pass, and record the choices in a devlog note.
+- [x] 6.1 Run the `frontend-design` skill for the filter bar (desktop, and phone collapsing or wrapping) and the quiet states (idle muted, stale dimmed, the lit cells still readable), within `web/DESIGN.md`. Add a "Filters and quiet cards" section to `web/DESIGN.md`, and apply the styles. Verify that `make web-build` and `make web-lint` pass, and record the choices in a devlog note.
 
 ## 7. Integration and human verification
 

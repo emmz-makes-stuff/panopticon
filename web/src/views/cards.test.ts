@@ -71,6 +71,8 @@ describe("cardsView filters", () => {
 
     expect(names(root)).toEqual(["team-auth"]);
     expect(q<HTMLSelectElement>(root, "select[name=owner]").value).toBe("github.com/emmz");
+    expect(q(root, "select[name=owner]").classList).toContain("filter-select--set");
+    expect(q(root, "select[name=repo]").classList).not.toContain("filter-select--set");
     expect(q(root, ".change-count").textContent).toBe("1 of 2 changes");
   });
 

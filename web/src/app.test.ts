@@ -124,7 +124,7 @@ describe("mountApp quiet cards", () => {
       time: "last seen 5h ago",
     });
     expect(state.label?.textContent).toBe("Stale");
-    expect(text(root, ".card-when")).toBe("Stale · last seen 5h ago");
+    expect(text(root, ".card-when")).toBe("Stale, last seen 5h ago");
   });
 
   it("Goes idle while watching: one tick after 30 minutes pass, with no report or reload", async () => {
