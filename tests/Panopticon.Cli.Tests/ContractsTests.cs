@@ -24,6 +24,53 @@ public class ContractsTests
     }
 
     [Fact]
+    public void Arguments_without_documents_serialize_exactly_as_before()
+    {
+        var json = JsonSerializer.Serialize(_arguments, ContractsJsonContext.Default.ReportProgressArguments);
+
+        Assert.Equal(
+            """{"repo":{"host":"dev.azure.com","owner":"acme/Nova","name":"nova-api"},"change":"walking-skeleton","agent":{"client":"claude-code","machine":"vm-1"},"tasksMarkdown":"## 1. Setup\n- [x] 1.1\n","section":2}""",
+            json);
+    }
+
+    [Fact]
+    public void Arguments_with_documents_and_an_archive_round_trip()
+    {
+        var arguments = _arguments with
+        {
+            Documents = [new ChangeDocument("tasks.md", _arguments.TasksMarkdown), new ChangeDocument("specs/cli-bridge/spec.md", "# Spec\n")],
+            Archive = "2026-11-08-walking-skeleton",
+        };
+
+        var json = JsonSerializer.Serialize(arguments, ContractsJsonContext.Default.ReportProgressArguments);
+        var back = JsonSerializer.Deserialize(json, ContractsJsonContext.Default.ReportProgressArguments);
+
+        Assert.NotNull(back);
+        Assert.Equal(arguments.Documents, back.Documents);
+        Assert.Equal(arguments, back with { Documents = arguments.Documents });
+        Assert.Contains(
+            ""","documents":[{"path":"tasks.md","content":"## 1. Setup\n- [x] 1.1\n"},{"path":"specs/cli-bridge/spec.md","content":"# Spec\n"}],"archive":"2026-11-08-walking-skeleton"}""",
+            json,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tool_arguments_carry_documents_and_the_archive_by_their_wire_names()
+    {
+        var arguments = (_arguments with
+        {
+            Documents = [new ChangeDocument("design.md", "# Design\n")],
+            Archive = "2026-11-08-walking-skeleton",
+        }).ToToolArguments();
+
+        Assert.Equal(["repo", "change", "agent", "tasksMarkdown", "section", "documents", "archive"], arguments.Keys);
+        var document = Assert.Single(Assert.IsType<JsonElement>(arguments["documents"]).EnumerateArray());
+        Assert.Equal("design.md", document.GetProperty("path").GetString());
+        Assert.Equal("# Design\n", document.GetProperty("content").GetString());
+        Assert.Equal("2026-11-08-walking-skeleton", Assert.IsType<JsonElement>(arguments["archive"]).GetString());
+    }
+
+    [Fact]
     public void Result_round_trips_and_omits_a_missing_section()
     {
         var result = new ReportProgressResult("c1", new ProgressCount(0, 0), CurrentSection: null);

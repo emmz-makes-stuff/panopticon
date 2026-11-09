@@ -20,9 +20,13 @@ public sealed class S3Fixture : IAsyncLifetime
     private readonly IContainer _container = new ContainerBuilder("chrislusf/seaweedfs:4.50")
         // Every test makes its own bucket, and each bucket is a SeaweedFS collection that claims volumes.
         // The default `-volume.max=8` runs out after a few buckets ("internal error" on PutObject), so
-        // size the limit from free disk and keep each volume small.
+        // size the limit from free disk and keep each volume small. Free disk / volume size can still be only a few
+        // hundred volumes on a full Docker disk, and a single-copy collection grows 7 volumes at a time by default, so
+        // a few dozen written buckets used them all up (change-documents-and-history §2). Growing one volume per
+        // collection, with 8 MB volumes, keeps every bucket's footprint small; test objects are at most 4 MB.
+        .WithEnvironment("WEED_MASTER_VOLUME_GROWTH_COPY_1", "1")
         .WithCommand(
-            "server", "-dir=/data", "-volume.max=0", "-master.volumeSizeLimitMB=64",
+            "server", "-dir=/data", "-volume.max=0", "-master.volumeSizeLimitMB=8",
             "-s3", $"-s3.port={S3Port}", "-s3.config=/etc/seaweedfs/s3.json")
         .WithResourceMapping(
             new FileInfo(Path.Combine(AppContext.BaseDirectory, "Infrastructure", "seaweedfs-s3.json")),

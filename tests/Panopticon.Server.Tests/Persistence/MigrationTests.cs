@@ -100,7 +100,104 @@ public class MigrationTests(PostgresFixture postgres)
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
     }
 
+    [Fact]
+    public async Task Documents_migration_creates_the_document_tables()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+
+        var tables = await db.Database
+            .SqlQuery<string>($"SELECT table_name AS \"Value\" FROM information_schema.tables WHERE table_schema = 'public'")
+            .ToListAsync(ct);
+
+        Assert.Superset(new HashSet<string>(["report_documents", "change_documents"]), tables.ToHashSet());
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync(ct));
+    }
+
+    [Fact]
+    public async Task Team_auth_data_survives_the_documents_migration_as_active_changes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await postgres.CreateDatabaseAsync(TeamAuthMigration, ct);
+        var (repoId, changeId) = (Guid.NewGuid(), Guid.NewGuid());
+        await using (var before = PostgresFixture.CreateDb(connectionString))
+        {
+            await before.Database.ExecuteSqlAsync(
+                $"INSERT INTO repos (id, host, owner, name, host_key, owner_key, name_key) VALUES ({repoId}, 'github.com', 'emmz', 'panopticon', 'github.com', 'emmz', 'panopticon')",
+                ct);
+            await before.Database.ExecuteSqlAsync(
+                $$"""INSERT INTO changes (id, repo_id, name, name_key, last_reported_at, snapshot) VALUES ({{changeId}}, {{repoId}}, 'team-auth', 'team-auth', now(), '{"OverallDone":3,"OverallTotal":5,"CurrentSectionDone":0,"CurrentSectionTotal":0}')""",
+                ct);
+        }
+
+        await using var db = PostgresFixture.CreateDb(connectionString);
+        await db.Database.MigrateAsync(ct);
+
+        var change = await db.Changes.SingleAsync(ct);
+        Assert.Equal((changeId, "team-auth", 3), (change.Id, change.Name, change.Snapshot.OverallDone));
+        Assert.Null(change.ArchivedAt);
+        Assert.Null(change.ArchiveFolder);
+    }
+
+    [Fact]
+    public async Task Two_active_changes_with_one_name_are_still_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var repo = NewRepo();
+        db.Repos.Add(repo);
+        db.Changes.Add(NewChange(repo.Id));
+        await db.SaveChangesAsync(ct);
+
+        db.Changes.Add(NewChange(repo.Id));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+    }
+
+    [Fact]
+    public async Task An_archived_change_and_an_active_one_can_share_a_name()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var repo = NewRepo();
+        db.Repos.Add(repo);
+        db.Changes.Add(NewChange(repo.Id, "2026-03-01-cleanup"));
+        db.Changes.Add(NewChange(repo.Id, "2026-11-08-cleanup"));
+        db.Changes.Add(NewChange(repo.Id));
+
+        await db.SaveChangesAsync(ct);
+
+        Assert.Equal(3, await db.Changes.CountAsync(ct));
+    }
+
+    [Fact]
+    public async Task An_archive_folder_is_unique_per_repo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var repo = NewRepo();
+        db.Repos.Add(repo);
+        db.Changes.Add(NewChange(repo.Id, "2026-11-08-cleanup"));
+        await db.SaveChangesAsync(ct);
+
+        db.Changes.Add(NewChange(repo.Id, "2026-11-08-cleanup"));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+    }
+
     private const string InitialMigration = "20261108001226_Initial";
+    private const string TeamAuthMigration = "20261108150815_TeamAuth";
+
+    private static Change NewChange(Guid repoId, string? archiveFolder = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        RepoId = repoId,
+        Name = "cleanup",
+        NameKey = "cleanup",
+        Snapshot = new ProgressSnapshot(),
+        ArchivedAt = archiveFolder is null ? null : DateTimeOffset.UnixEpoch,
+        ArchiveFolder = archiveFolder,
+    };
 
     private static Member NewMember(string email) => new()
     {

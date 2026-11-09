@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mountApp } from "./app";
-import { CHANGE_UPDATED, connectLive } from "./live";
+import { CHANGE_ARCHIVED, CHANGE_UPDATED, connectLive } from "./live";
 import { card, FakeEventSource, fakeFetch, NOW, settle } from "./testing";
 import type { ChangeCard } from "./types";
 
@@ -207,5 +207,37 @@ describe("App.render after a reconnect", () => {
     app.render([card({ lastReportedAt: later(5) })]);
 
     expect(root.querySelector(".bar-overall .bar-count")?.textContent).toBe("9/20 (45%)");
+  });
+});
+
+// change-documents-and-history: live-dashboard "Archived card leaves".
+describe("connectLive, archived changes", () => {
+  it("Archive while watching: the archived change's card leaves, with no reload", async () => {
+    const { fetch, cards } = await start([
+      card({ changeId: "team-auth", change: "team-auth" }),
+      card({ changeId: "other", change: "other", lastReportedAt: later(-1) }),
+    ]);
+    FakeEventSource.latest().open();
+    await settle();
+    const fetchesBefore = fetch.urls.length;
+
+    FakeEventSource.latest().emit(CHANGE_ARCHIVED, JSON.stringify({ changeId: "team-auth" }));
+
+    expect(cards().map((c) => c.querySelector(".card-change")?.textContent)).toEqual(["other"]);
+    expect(fetch.urls).toHaveLength(fetchesBefore);
+  });
+
+  it("shows the empty state once the last card leaves, and ignores unknown or malformed events", async () => {
+    const { root, cards } = await start([card({ changeId: "team-auth" })]);
+    FakeEventSource.latest().open();
+    await settle();
+
+    FakeEventSource.latest().emit(CHANGE_ARCHIVED, JSON.stringify({ changeId: "someone-else" }));
+    FakeEventSource.latest().emit(CHANGE_ARCHIVED, "not json");
+    expect(cards()).toHaveLength(1);
+
+    FakeEventSource.latest().emit(CHANGE_ARCHIVED, JSON.stringify({ changeId: "team-auth" }));
+    expect(cards()).toHaveLength(0);
+    expect(root.querySelector(".empty-state")).not.toBeNull();
   });
 });

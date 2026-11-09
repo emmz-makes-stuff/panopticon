@@ -1,4 +1,4 @@
-import type { ChangeCard } from "./types";
+import type { ChangeCard, ChangePage, HistoryPage, RenderedDocument } from "./types";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -90,6 +90,26 @@ async function readProblem(
 /** Every change the server knows about, most recently reported first (the server's order). */
 export function fetchChanges(api: Api): Promise<ChangeCard[]> {
   return api.get<ChangeCard[]>("/api/changes");
+}
+
+/** A change's page: its card, archive state and document list. A 404 (an unknown change) rejects with an ApiError. */
+export function fetchChange(api: Api, changeId: string): Promise<ChangePage> {
+  return api.get<ChangePage>(`/api/changes/${encodeURIComponent(changeId)}`);
+}
+
+/** One of a change's documents, rendered by the server. Each path segment is encoded; the '/'s between them stay. */
+export function fetchDocument(api: Api, changeId: string, path: string): Promise<RenderedDocument> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return api.get<RenderedDocument>(
+    `/api/changes/${encodeURIComponent(changeId)}/documents/${encoded}`,
+  );
+}
+
+/** A page of archived changes, newest first; pass the previous page's `nextBefore` for the next one. */
+export function fetchHistory(api: Api, before?: string | null): Promise<HistoryPage> {
+  return api.get<HistoryPage>(
+    before ? `/api/history?before=${encodeURIComponent(before)}` : "/api/history",
+  );
 }
 
 /** The signed-in member (`GET /api/session`). */

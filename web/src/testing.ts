@@ -97,6 +97,8 @@ export const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 export interface ServerCall {
   method: string;
   path: string;
+  /** The path with its query, as asked for. */
+  url: string;
   headers: Record<string, string>;
   body: unknown;
 }
@@ -125,6 +127,7 @@ export function fakeServer(): FakeServer {
       const call: ServerCall = {
         method,
         path,
+        url: input,
         headers: { ...(init?.headers as Record<string, string> | undefined) },
         body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
       };

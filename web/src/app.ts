@@ -34,6 +34,8 @@ export interface App {
    * no newer than the card already shown. Returns whether it was applied.
    */
   upsert(card: ChangeCard): boolean;
+  /** Takes a change's card away: it was archived, and lives in the history now. Returns whether it was shown. */
+  remove(changeId: string): boolean;
   /** Loads every card from the server and renders them. Throws if the load fails, leaving the cards as they were. */
   refresh(): Promise<void>;
   /** Shows whether the live connection is up. */
@@ -135,6 +137,15 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
       element.classList.add("updated");
       shown.set(card.changeId, { card, element });
+      layout();
+      return true;
+    },
+
+    remove(changeId) {
+      if (!shown.delete(changeId)) {
+        return false;
+      }
+
       layout();
       return true;
     },

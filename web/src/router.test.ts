@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRouter, type View } from "./router";
+import { createRouter, match, type View } from "./router";
 import { fakeNavigation } from "./testing";
 
 function setup(url: string, guard?: (path: string, search: string) => string | undefined) {
@@ -90,6 +90,48 @@ describe("createRouter", () => {
     expect(root.textContent).toBe("members");
   });
 
+  it("ignores a popstate that leaves the path and query as shown (an in-page anchor)", async () => {
+    const { root, events, left, router } = setup("/members?tab=all");
+    await router.start();
+    root.textContent = "scrolled to #fn-1";
+
+    events.dispatchEvent(new Event("popstate"));
+    await Promise.resolve();
+
+    expect(left).not.toHaveBeenCalled();
+    expect(root.textContent).toBe("scrolled to #fn-1");
+  });
+
+  it("updates a view in place when only the query changes, if the view can", async () => {
+    const nav = fakeNavigation("/changes/c1?doc=a.md");
+    const root = document.createElement("main");
+    const shows = vi.fn();
+    const teardown = vi.fn();
+    const update = vi.fn();
+    const changeView: View = ({ params }) => {
+      shows(params.get("doc"));
+      return { teardown, update: (next) => update(next.get("doc")) };
+    };
+    const router = createRouter({
+      root,
+      routes: { "/": () => undefined, "/changes/:id": changeView },
+      fallback: "/",
+      history: nav.history,
+      location: nav.location,
+      events: document.createElement("div"),
+    });
+    await router.start();
+
+    await router.navigate("/changes/c1?doc=b.md");
+    expect(update).toHaveBeenCalledWith("b.md");
+    expect(shows).toHaveBeenCalledTimes(1);
+    expect(teardown).not.toHaveBeenCalled();
+
+    await router.navigate("/changes/c2");
+    expect(teardown).toHaveBeenCalledTimes(1);
+    expect(shows).toHaveBeenLastCalledWith(null);
+  });
+
   it("lets a guard redirect before a view shows", async () => {
     const { root, nav, router } = setup("/members", (path) =>
       path === "/members" ? "/device?code=X" : undefined,
@@ -99,5 +141,59 @@ describe("createRouter", () => {
 
     expect(nav.path()).toBe("/device?code=X");
     expect(root.textContent).toBe("device?code=X");
+  });
+});
+
+// change-documents-and-history D11: `/changes/<id>` routes by a named segment.
+describe("match", () => {
+  const view =
+    (name: string): View =>
+    () => {
+      void name;
+      return undefined;
+    };
+  const changes = view("change");
+  const history = view("history");
+  const routes = { "/": view("cards"), "/history": history, "/changes/:id": changes };
+
+  it("prefers an exact path, then matches named segments, decoded", () => {
+    expect(match(routes, "/history")).toEqual({ view: history, route: {} });
+    expect(match(routes, "/changes/c1")).toEqual({ view: changes, route: { id: "c1" } });
+    expect(match(routes, "/changes/a%20b")).toEqual({ view: changes, route: { id: "a b" } });
+  });
+
+  it("doesn't match an empty, extra, undecodable or slash-hiding segment", () => {
+    for (const path of [
+      "/changes/",
+      "/changes",
+      "/changes/c1/more",
+      "/changes/%E0%A4%A",
+      "/changes/a%2Fb",
+    ]) {
+      expect(match(routes, path), path).toBeUndefined();
+    }
+  });
+
+  it("gives a matched view its named segments through the router", async () => {
+    const nav = fakeNavigation("/changes/c1?doc=design.md");
+    const root = document.createElement("main");
+    const router = createRouter({
+      root,
+      routes: {
+        "/": () => undefined,
+        "/changes/:id": ({ root: target, route, params }) => {
+          target.textContent = `${route["id"]} ${params.get("doc")}`;
+          return undefined;
+        },
+      },
+      fallback: "/",
+      history: nav.history,
+      location: nav.location,
+      events: document.createElement("div"),
+    });
+
+    await router.start();
+
+    expect(root.textContent).toBe("c1 design.md");
   });
 });

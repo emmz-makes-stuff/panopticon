@@ -3,18 +3,31 @@
  * `<a data-route>`. There's no framework (ADR-0002).
  */
 
-/** What a view gets: where to render, the query string, and a way to move on. */
+/** What a view gets: where to render, the query string, the path's named segments, and a way to move on. */
 export interface ViewContext {
   root: HTMLElement;
   params: URLSearchParams;
+  /** The `:name` segments of the matched route, decoded, e.g. `{ id: "c1" }` for `/changes/:id`. */
+  route: Readonly<Record<string, string>>;
   navigate(path: string, options?: { replace?: boolean }): void;
 }
 
-/** What a view may return: a teardown, run when the router leaves it. */
+/** Run when the router leaves a view. */
 export type Teardown = () => void;
 
-/** A view renders into `ctx.root`, and may return a teardown. */
-export type View = (ctx: ViewContext) => Teardown | undefined | Promise<Teardown | undefined>;
+/**
+ * What a view may return besides a bare teardown: an `update`, called instead of a rebuild when the router moves to
+ * the same path with another query (e.g. `?doc=` on a change page), so the view can change what it shows in place.
+ */
+export interface ViewHandle {
+  teardown: Teardown;
+  update?: ((params: URLSearchParams) => void) | undefined;
+}
+
+/** A view renders into `ctx.root`, and may return a teardown or a handle. */
+export type View = (
+  ctx: ViewContext,
+) => Teardown | ViewHandle | undefined | Promise<Teardown | ViewHandle | undefined>;
 
 /** The parts of `window.history` and `window.location` the router uses, so tests can supply fakes. */
 export interface HistoryLike {
@@ -29,6 +42,7 @@ export interface LocationLike {
 
 export interface RouterOptions {
   root: HTMLElement;
+  /** Exact paths, or patterns with `:name` segments (`/changes/:id`). An exact path wins over a pattern. */
   routes: Readonly<Record<string, View>>;
   /** The path an unknown path shows instead. */
   fallback: string;
@@ -58,11 +72,12 @@ export function createRouter(options: RouterOptions): Router {
   const events = options.events ?? window;
   let teardown: (() => void) | undefined;
   let rendering = 0;
+  /** What is shown now: its path and query, its view, and the view's `update` once it has loaded. */
+  let shown:
+    { path: string; search: string; view: View; update?: ViewHandle["update"] } | undefined;
 
   async function show(): Promise<void> {
     const ticket = ++rendering;
-    teardown?.();
-    teardown = undefined;
 
     let path = location.pathname;
     const redirect = options.guard?.(path, location.search);
@@ -71,23 +86,37 @@ export function createRouter(options: RouterOptions): Router {
       path = location.pathname;
     }
 
-    const view = options.routes[path];
-    if (!view) {
+    const matched = match(options.routes, path);
+    if (!matched) {
       history.replaceState(null, "", options.fallback);
       return show();
     }
 
-    const result = await view({
+    // Same path and view, another query: the view changes what it shows in place, if it can.
+    if (shown?.update && shown.view === matched.view && shown.path === path) {
+      shown.search = location.search;
+      shown.update(new URLSearchParams(location.search));
+      return;
+    }
+
+    teardown?.();
+    teardown = undefined;
+    shown = { path, search: location.search, view: matched.view };
+    const current = shown;
+    const result = await matched.view({
       root: options.root,
       params: new URLSearchParams(location.search),
+      route: matched.route,
       navigate: (to, opts) => void router.navigate(to, opts),
     });
-    if (typeof result === "function") {
+    const handle = typeof result === "function" ? { teardown: result } : result;
+    if (handle) {
       // A newer navigation started while this view was loading: tear this one down at once.
       if (ticket === rendering) {
-        teardown = result;
+        teardown = handle.teardown;
+        current.update = handle.update;
       } else {
-        result();
+        handle.teardown();
       }
     }
   }
@@ -113,7 +142,14 @@ export function createRouter(options: RouterOptions): Router {
     }
   }
 
-  const onPopState = () => void show();
+  // A popstate that leaves the path and query as shown only moved the hash (an in-page anchor): nothing to show.
+  const onPopState = () => {
+    if (shown && location.pathname === shown.path && location.search === shown.search) {
+      return;
+    }
+
+    void show();
+  };
 
   const router: Router = {
     async start() {
@@ -136,8 +172,60 @@ export function createRouter(options: RouterOptions): Router {
       events.removeEventListener("popstate", onPopState);
       teardown?.();
       teardown = undefined;
+      shown = undefined;
     },
   };
 
   return router;
+}
+
+/**
+ * The view for `path`: its exact route, or else the first pattern whose `:name` segments each match one non-empty
+ * segment of the path. Named segments are URI-decoded; one that doesn't decode, or decodes to a '/', doesn't match.
+ */
+export function match(
+  routes: Readonly<Record<string, View>>,
+  path: string,
+): { view: View; route: Record<string, string> } | undefined {
+  const exact = routes[path];
+  if (exact) {
+    return { view: exact, route: {} };
+  }
+
+  const segments = path.split("/");
+  for (const [pattern, view] of Object.entries(routes)) {
+    const parts = pattern.split("/");
+    if (!pattern.includes("/:") || parts.length !== segments.length) {
+      continue;
+    }
+
+    const route: Record<string, string> = {};
+    const matches = parts.every((part, index) => {
+      const segment = segments[index] ?? "";
+      if (!part.startsWith(":")) {
+        return part === segment;
+      }
+
+      const value = decode(segment);
+      if (!value || value.includes("/")) {
+        return false;
+      }
+
+      route[part.slice(1)] = value;
+      return true;
+    });
+    if (matches) {
+      return { view, route };
+    }
+  }
+
+  return undefined;
+}
+
+function decode(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
 }

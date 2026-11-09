@@ -4,6 +4,9 @@ import type { ChangeCard } from "./types";
 /** The SSE event the server sends for every changed card (server: Dashboard/DashboardEndpoints). */
 export const CHANGE_UPDATED = "change-updated";
 
+/** The SSE event the server sends when a change is archived: its card leaves (change-documents-and-history D10). */
+export const CHANGE_ARCHIVED = "change-archived";
+
 /** The parts of the browser's EventSource this module uses, so tests can supply a fake. */
 export interface EventSourceLike {
   readonly readyState: number;
@@ -67,6 +70,13 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
       }
     });
 
+    current.addEventListener(CHANGE_ARCHIVED, (event) => {
+      const changeId = parseArchivedId(event.data);
+      if (changeId) {
+        app.remove(changeId);
+      }
+    });
+
     current.onerror = () => {
       app.setStatus("offline");
       if (options.checkSignedIn) {
@@ -108,7 +118,18 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
   };
 }
 
-function parseCard(data: string): ChangeCard | null {
+/** The `changeId` of a `change-archived` event's data, or null when it isn't one. */
+export function parseArchivedId(data: string): string | null {
+  try {
+    const value = JSON.parse(data) as { changeId?: unknown } | null;
+    return typeof value?.changeId === "string" ? value.changeId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A `change-updated` event's card, or null when the data isn't one. */
+export function parseCard(data: string): ChangeCard | null {
   try {
     const card = JSON.parse(data) as Partial<ChangeCard> | null;
     return card && typeof card.changeId === "string" && typeof card.lastReportedAt === "string"

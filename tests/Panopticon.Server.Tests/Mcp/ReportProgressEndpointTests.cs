@@ -46,7 +46,7 @@ public class ReportProgressEndpointTests(PostgresFixture postgres, S3Fixture s3)
 
         var tool = Assert.Single(tools, t => t.Name == "report_progress");
         var properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
-        foreach (var name in new[] { "repo", "change", "agent", "tasksMarkdown", "section" })
+        foreach (var name in new[] { "repo", "change", "agent", "tasksMarkdown", "section", "documents", "archive" })
         {
             Assert.True(properties.TryGetProperty(name, out _), $"schema lacks '{name}'");
         }
@@ -216,7 +216,7 @@ public class ReportProgressEndpointTests(PostgresFixture postgres, S3Fixture s3)
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
-        var card = await subscription.Reader.ReadAsync(timeout.Token);
+        var card = Assert.IsType<ChangeEvent.Updated>(await subscription.Reader.ReadAsync(timeout.Token)).Card;
         Assert.Equal("walking-skeleton", card.Change);
         Assert.Equal(("github.com", "emmz", "panopticon"), (card.Repo.Host, card.Repo.Owner, card.Repo.Name));
         Assert.Equal((3, 5), (card.Overall.Done, card.Overall.Total));

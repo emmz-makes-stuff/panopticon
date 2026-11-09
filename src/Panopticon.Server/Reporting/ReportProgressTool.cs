@@ -30,10 +30,12 @@ public sealed class ReportProgressTool
         [Description("Required. The reporting agent: MCP client name and machine name.")] AgentRef? agent = null,
         [Description("Required. The content of openspec/changes/<change>/tasks.md.")] string? tasksMarkdown = null,
         [Description("Optional. The section number the agent is working on.")] int? section = null,
+        [Description("Optional. The change folder's Markdown and YAML files: each a path relative to the folder, with '/' separators, and its content. Include tasks.md.")] IReadOnlyList<ChangeDocument>? documents = null,
+        [Description("Optional. The archive folder's name, e.g. 2026-11-08-team-auth, when the change has been archived.")] string? archive = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var input = Validate(repo, change, agent, tasksMarkdown, section);
+        var input = Validate(repo, change, agent, tasksMarkdown, section, documents, archive);
 
         // The member comes from the bearer token (design D16): the SDK carries the request's authenticated user into
         // the tool as RequestContext.User. A bootstrap-token report has no member.
@@ -49,9 +51,15 @@ public sealed class ReportProgressTool
             throw new McpException(ex.Message, ex);
         }
 
-        if (await cards.GetAsync(recorded.ChangeId, cancellationToken) is { } card)
+        // D7: an archived report removes the card; a repeat of it (AlreadyArchived) changed nothing, so says nothing.
+        switch (recorded.Archive)
         {
-            broadcaster.Publish(card);
+            case ArchiveOutcome.Archived:
+                broadcaster.PublishArchived(recorded.ChangeId);
+                break;
+            case ArchiveOutcome.None when await cards.GetAsync(recorded.ChangeId, cancellationToken) is { } card:
+                broadcaster.Publish(card);
+                break;
         }
 
         var snapshot = recorded.Snapshot;
@@ -72,8 +80,18 @@ public sealed class ReportProgressTool
         };
     }
 
-    /// <summary>Rejects missing or blank fields, naming each one, and trims what it keeps.</summary>
-    internal static ReportInput Validate(RepoRef? repo, string? change, AgentRef? agent, string? tasksMarkdown, int? section)
+    /// <summary>
+    /// Rejects missing or blank fields, naming each one, and trims what it keeps. Then checks the documents and the
+    /// archive folder (<see cref="DocumentChecks"/>).
+    /// </summary>
+    internal static ReportInput Validate(
+        RepoRef? repo,
+        string? change,
+        AgentRef? agent,
+        string? tasksMarkdown,
+        int? section,
+        IReadOnlyList<ChangeDocument?>? documents = null,
+        string? archive = null)
     {
         var missing = new List<string>();
         Require(repo?.Host, "repo.host", missing);
@@ -92,12 +110,23 @@ public sealed class ReportProgressTool
             throw new McpException($"Missing required field(s): {string.Join(", ", missing)}.");
         }
 
+        var changeName = change!.Trim();
+        var checkedDocuments = DocumentChecks.Check(documents, tasksMarkdown!);
+        if (archive is not null)
+        {
+            DocumentChecks.CheckArchive(archive, changeName);
+        }
+
         return new ReportInput(
             new RepoIdentity(repo!.Host.Trim(), repo.Owner.Trim(), repo.Name.Trim()),
-            change!.Trim(),
+            changeName,
             new AgentIdentity(agent!.Client.Trim(), agent.Machine.Trim()),
             section,
-            tasksMarkdown!);
+            tasksMarkdown!)
+        {
+            Documents = checkedDocuments,
+            Archive = archive,
+        };
     }
 
     private static void Require(string? value, string name, List<string> missing)

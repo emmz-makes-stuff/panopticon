@@ -8,12 +8,18 @@ using Panopticon.Server.Live;
 
 namespace Panopticon.Server.Dashboard;
 
+/// <summary>The data of a <c>change-archived</c> event.</summary>
+public sealed record ArchivedChange(Guid ChangeId);
+
 /// <summary>The dashboard's read API and live stream (spec: live-dashboard), for signed-in members only (dashboard-sign-in).</summary>
 public static class DashboardEndpoints
 {
     public const string ChangesPath = "/api/changes";
     public const string EventsPath = "/api/events";
     public const string ChangeUpdatedEvent = "change-updated";
+
+    /// <summary>A change was archived: its card leaves (change-documents-and-history D10). Data is <see cref="ArchivedChange"/>.</summary>
+    public const string ChangeArchivedEvent = "change-archived";
 
     /// <summary>Sent on an idle stream so proxies and browsers don't drop it; the dashboard doesn't listen for it.</summary>
     public const string PingEvent = "ping";
@@ -68,7 +74,7 @@ public static class DashboardEndpoints
     /// <paramref name="stillAllowed"/> re-checks the viewer (team-auth D11): once it says no (signed out, removed), the
     /// stream ends, and the browser's reconnect gets a 401.
     /// </summary>
-    internal static async IAsyncEnumerable<SseItem<ChangeCard?>> StreamAsync(
+    internal static async IAsyncEnumerable<SseItem<object?>> StreamAsync(
         ChangeBroadcaster broadcaster,
         Func<CancellationToken, Task>? subscribed,
         TimeSpan keepAlive,
@@ -100,7 +106,7 @@ public static class DashboardEndpoints
                     }
 
                     lastCheck = Stopwatch.GetTimestamp();
-                    yield return new SseItem<ChangeCard?>(null, PingEvent);
+                    yield return new SseItem<object?>(null, PingEvent);
                     continue;
                 }
 
@@ -123,11 +129,16 @@ public static class DashboardEndpoints
                 lastCheck = Stopwatch.GetTimestamp();
             }
 
-            while (reader.TryRead(out var card))
+            while (reader.TryRead(out var change))
             {
-                yield return new SseItem<ChangeCard?>(card, ChangeUpdatedEvent)
+                yield return change switch
                 {
-                    EventId = card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
+                    ChangeEvent.Updated(var card) => new SseItem<object?>(card, ChangeUpdatedEvent)
+                    {
+                        EventId = card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
+                    },
+                    ChangeEvent.Archived(var changeId) => new SseItem<object?>(new ArchivedChange(changeId), ChangeArchivedEvent),
+                    _ => throw new UnreachableException(),
                 };
             }
 

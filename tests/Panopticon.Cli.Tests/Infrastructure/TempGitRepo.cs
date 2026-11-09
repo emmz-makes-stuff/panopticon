@@ -39,6 +39,15 @@ public sealed class TempGitRepo : IDisposable
         return path;
     }
 
+    /// <summary>Writes a file at a path relative to the root ('/' separators), creating its folders, and returns its path.</summary>
+    public string WriteFile(string relativePath, string content)
+    {
+        var path = Path.Combine(Root, Path.Combine(relativePath.Split('/')));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
     public string CreateSubdirectory(string relativePath)
     {
         var path = Path.Combine(Root, relativePath);

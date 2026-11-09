@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Panopticon.Cli.Git;
 using Panopticon.Contracts;
@@ -5,17 +6,41 @@ using Panopticon.Contracts;
 namespace Panopticon.Cli.Bridge;
 
 /// <summary>
-/// Builds a report from the local working copy (repo identity, the change's tasks.md, the agent) and forwards it.
+/// Builds a report from the local working copy (repo identity, the change's folder or its archive, the agent) and
+/// forwards it.
 /// </summary>
 internal sealed partial class ProgressReporter(
     BridgeSettings settings,
     ServerForwarder forwarder,
+    ReportedChanges reported,
     ILogger<ProgressReporter> logger)
 {
     /// <summary>Used when the agent gave no client name at initialisation.</summary>
     public const string UnknownClient = "unknown-client";
 
+    // One report at a time per change (spec cli-bridge, One report at a time per change): the watcher's archived report
+    // waits for a report already read from the active folder, so it can't overtake it and leave a fresh active change.
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _changeLocks = new(StringComparer.Ordinal);
+
     public async Task<ReportProgressResult> ReportAsync(
+        string? clientName,
+        string change,
+        int? section,
+        CancellationToken cancellationToken)
+    {
+        var gate = _changeLocks.GetOrAdd(change, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await ReportLockedAsync(clientName, change, section, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<ReportProgressResult> ReportLockedAsync(
         string? clientName,
         string change,
         int? section,
@@ -28,7 +53,7 @@ internal sealed partial class ProgressReporter(
 
             var root = await GitRepository.FindRootAsync(settings.WorkingDirectory, cancellationToken);
             var repo = ParseRemote(await GitRepository.GetOriginUrlAsync(root, cancellationToken));
-            var tasks = await ChangeDocuments.ReadTasksAsync(root, change, cancellationToken);
+            var folder = await ChangeDocuments.ReadAsync(root, change, cancellationToken);
             var agent = new AgentRef(
                 string.IsNullOrWhiteSpace(clientName) ? UnknownClient : clientName.Trim(),
                 settings.MachineName);
@@ -36,11 +61,22 @@ internal sealed partial class ProgressReporter(
             var result = await forwarder.ForwardAsync(
                 endpoint,
                 token,
-                new ReportProgressArguments(repo, change, agent, tasks, section),
+                new ReportProgressArguments(repo, change, agent, folder.Tasks, section, folder.Documents, folder.Archive),
                 settings.TokenFromEnvironment,
                 cancellationToken);
 
-            LogReported(change, result.Overall.Done, result.Overall.Total, result.CurrentSection?.Number);
+            // The archive watcher follows active changes reported in this session, and lets go once one is archived.
+            if (folder.Archive is { } archive)
+            {
+                reported.Forget(change);
+                LogReportedArchived(change, archive, result.Overall.Done, result.Overall.Total);
+                return result with { Archived = archive };
+            }
+            else
+            {
+                reported.Record(root, change, agent.Client);
+                LogReported(change, result.Overall.Done, result.Overall.Total, result.CurrentSection?.Number);
+            }
 
             return result;
         }
@@ -65,6 +101,9 @@ internal sealed partial class ProgressReporter(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Reported change {Change}: overall {Done}/{Total}, current section {Section}")]
     private partial void LogReported(string change, int done, int total, int? section);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Reported change {Change} archived as {Archive}: overall {Done}/{Total}")]
+    private partial void LogReportedArchived(string change, string archive, int done, int total);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Report for change {Change} failed: {Reason}")]
     private partial void LogFailed(string change, string reason);

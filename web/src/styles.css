@@ -534,3 +534,343 @@ body {
     animation: none;
   }
 }
+
+/* Card link (change-documents-and-history D11): the change name keeps its look; the focus ring shows it's a link. */
+
+.card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.card-link:focus-visible {
+  border-radius: 2px;
+}
+
+/* The change page: a quiet header, a document list, and the rendered document. Lists, not cards. */
+
+.change-page {
+  max-width: none;
+}
+
+.change-head {
+  max-width: 38rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.back-link,
+.change-repo,
+.change-when {
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--ink-muted);
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.2em;
+}
+
+.change-repo {
+  overflow-wrap: anywhere;
+}
+
+.change-repo-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.page .change-name {
+  margin: 0.2rem 0 0.25rem;
+  font: 700 var(--step-3) / 1.15 var(--font-display);
+}
+
+.page .change-when {
+  margin: 0 0 1rem;
+}
+
+.change-bars {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.change-archived-status:empty {
+  display: none;
+}
+
+.page .change-archived-status {
+  margin: 1rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--ink-muted);
+  color: var(--ink);
+}
+
+.change-body {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 56rem) {
+  .change-body {
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 3rem;
+    align-items: start;
+  }
+
+  .doc-nav {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+  }
+}
+
+.page .doc-group {
+  margin: 1.25rem 0 0.35rem;
+  font: 600 var(--step--1) / 1.4 var(--font-body);
+  color: var(--ink-muted);
+}
+
+.page .doc-group:first-child {
+  margin-top: 0;
+}
+
+.doc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-link {
+  display: block;
+  padding: 0.3rem 0 0.3rem 0.75rem;
+  border-left: 3px solid transparent;
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.doc-devlog .doc-link {
+  font-size: var(--step--1);
+}
+
+.doc-link[aria-current="page"] {
+  border-left-color: var(--ink);
+  font-weight: 600;
+}
+
+.doc-pane {
+  min-width: 0;
+}
+
+.doc-notice:empty {
+  display: none;
+}
+
+.page .doc-notice {
+  color: var(--ink-muted);
+  font-size: var(--step--1);
+}
+
+/* Rendered Markdown: comfortable reading, ~70 characters a line. */
+
+.doc {
+  max-width: 44rem;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+.doc > :first-child {
+  margin-top: 0;
+}
+
+.doc h1,
+.doc h2,
+.doc h3,
+.doc h4 {
+  margin: 2rem 0 0.5rem;
+  line-height: 1.2;
+}
+
+.doc h1 {
+  font: 700 var(--step-2) / 1.15 var(--font-display);
+}
+
+.doc h2 {
+  font: 700 var(--step-1) / 1.2 var(--font-display);
+}
+
+.doc h3,
+.doc h4 {
+  font-size: var(--step-0);
+  font-weight: 600;
+}
+
+.page .doc p,
+.doc ul,
+.doc ol,
+.doc pre,
+.doc table,
+.doc blockquote {
+  margin: 0 0 1rem;
+}
+
+.doc ul,
+.doc ol {
+  padding-left: 1.5rem;
+}
+
+.doc li + li {
+  margin-top: 0.2rem;
+}
+
+.doc a {
+  color: var(--ink);
+  text-decoration-color: var(--ink-muted);
+  text-underline-offset: 0.2em;
+}
+
+.doc code {
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+  background: var(--paper);
+  font:
+    0.9em / 1.5 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+}
+
+.doc pre {
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--card);
+}
+
+.doc pre code {
+  padding: 0;
+  background: none;
+}
+
+.doc blockquote {
+  padding-left: 1rem;
+  border-left: 3px solid var(--rule);
+  color: var(--ink-muted);
+}
+
+.doc table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--step--1);
+}
+
+.doc th,
+.doc td {
+  padding: 0.4rem 0.75rem 0.4rem 0;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc th {
+  font-weight: 600;
+}
+
+.doc hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+/* Task lists are lit cells: a ticked task is a lit cell, an unticked one an unlit cell, as in the bars. */
+
+.doc .contains-task-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+.doc .task-list-item {
+  position: relative;
+  padding-left: 1.6rem;
+}
+
+.doc .task-list-item input[type="checkbox"] {
+  appearance: none;
+  position: absolute;
+  top: 0.4em;
+  left: 0;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin: 0;
+  border-radius: 2px;
+  background: var(--rule);
+  box-shadow: inset 0 0 0 1px var(--ink-muted);
+}
+
+.doc .task-list-item input[type="checkbox"]:checked {
+  background: var(--lit);
+  box-shadow: none;
+}
+
+.doc .task-list-item .contains-task-list {
+  margin: 0.2rem 0 0;
+}
+
+/* History: rows between hairlines, like Members. */
+
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+
+.history-item {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.page .history-change {
+  margin: 0;
+  font: 700 var(--step-1) / 1.2 var(--font-display);
+  overflow-wrap: anywhere;
+}
+
+.history-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.page .history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1rem;
+  margin: 0.2rem 0 0;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.history-agents {
+  margin-top: 0.5rem;
+}
+
+.page .history-empty p:last-child {
+  color: var(--ink-muted);
+}
+
+.show-more[hidden] {
+  display: none;
+}
+
+.page .show-more {
+  margin-top: 1rem;
+}

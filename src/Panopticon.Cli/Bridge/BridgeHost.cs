@@ -38,7 +38,9 @@ internal static class BridgeHost
 
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton(new ServerForwarder(createHttpClient));
+        builder.Services.AddSingleton<ReportedChanges>();
         builder.Services.AddSingleton<ProgressReporter>();
+        builder.Services.AddHostedService<ArchiveWatcher>();
 
         var mcp = builder.Services
             .AddMcpServer(options => options.ServerInfo = new() { Name = "panopticon", Version = Version })

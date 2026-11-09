@@ -11,7 +11,9 @@ import {
   type View,
 } from "./router";
 import { cardsView } from "./views/cards";
+import { changeView } from "./views/change";
 import { deviceView } from "./views/device";
+import { historyView } from "./views/history";
 import { membersView } from "./views/members";
 import { confirmView, signInView } from "./views/signIn";
 import { tokensView } from "./views/tokens";
@@ -132,6 +134,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     account.replaceChildren(
       name,
       routeLink("/members", "Members"),
+      routeLink("/history", "History"),
       routeLink("/tokens", "Tokens"),
       signOut,
       failure,
@@ -190,6 +193,8 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     "/members": membersView(env),
     "/tokens": tokensView(env),
     "/device": deviceView(env),
+    "/history": historyView(env),
+    "/changes/:id": changeView(env),
   };
 
   try {

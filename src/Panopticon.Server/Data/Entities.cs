@@ -26,6 +26,12 @@ public sealed class Change
     public required ProgressSnapshot Snapshot { get; set; }
     public DateTimeOffset LastReportedAt { get; set; }
 
+    /// <summary>When the change was archived; null while it is active (change-documents-and-history D5).</summary>
+    public DateTimeOffset? ArchivedAt { get; set; }
+
+    /// <summary>The archive folder's name, e.g. <c>2026-11-08-team-auth</c>; set together with <see cref="ArchivedAt"/>.</summary>
+    public string? ArchiveFolder { get; set; }
+
     public List<ChangeAgent> Agents { get; } = [];
 }
 
@@ -62,6 +68,35 @@ public sealed class ReportEvent
     public required string TasksSha256 { get; set; }
 
     public DateTimeOffset ReceivedAt { get; set; }
+}
+
+/// <summary>One line of a report's manifest: a synced document's path and the hash of the content it carried.</summary>
+public sealed class ReportDocument
+{
+    public long ReportEventId { get; set; }
+
+    /// <summary>Relative to the change's folder, with '/' separators.</summary>
+    public required string Path { get; set; }
+
+    /// <summary>Hex SHA-256 of the content; the object is <c>documents/sha256/&lt;hex&gt;</c>.</summary>
+    public required string Sha256 { get; set; }
+
+    public int SizeBytes { get; set; }
+}
+
+/// <summary>A change's latest synced document, as the change page lists it; replaced whole by each newer report.</summary>
+public sealed class LatestDocument
+{
+    public Guid ChangeId { get; set; }
+
+    /// <summary>Relative to the change's folder, with '/' separators.</summary>
+    public required string Path { get; set; }
+
+    /// <summary>Hex SHA-256 of the content; the object is <c>documents/sha256/&lt;hex&gt;</c>.</summary>
+    public required string Sha256 { get; set; }
+
+    public int SizeBytes { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 /// <summary>The latest computed progress of a change, stored as <c>jsonb</c>.</summary>
