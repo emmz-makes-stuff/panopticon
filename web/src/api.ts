@@ -1,5 +1,12 @@
 import type { FilterChoices } from "./filters";
-import type { ChangeCard, ChangePage, HistoryPage, RenderedDocument } from "./types";
+import type {
+  ChangeCard,
+  ChangeMetrics,
+  ChangePage,
+  HistoryPage,
+  RenderedDocument,
+  TeamMetrics,
+} from "./types";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -118,6 +125,16 @@ export function fetchHistory(api: Api, before?: string | null, filters = ""): Pr
 
   const query = params.toString();
   return api.get<HistoryPage>(query ? `/api/history?${query}` : "/api/history");
+}
+
+/** A change's metrics: its time to archive (or so far) and each measured section's time (change-metrics D4). */
+export function fetchChangeMetrics(api: Api, changeId: string): Promise<ChangeMetrics> {
+  return api.get<ChangeMetrics>(`/api/changes/${encodeURIComponent(changeId)}/metrics`);
+}
+
+/** The team's metrics over archived changes. `filters` is a query string of history filters (from `toQuery`). */
+export function fetchMetrics(api: Api, filters = ""): Promise<TeamMetrics> {
+  return api.get<TeamMetrics>(filters ? `/api/metrics?${filters}` : "/api/metrics");
 }
 
 /** The history's filter choices: the values among archived changes. */

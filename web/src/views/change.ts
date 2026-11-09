@@ -1,8 +1,9 @@
-import { ApiError, fetchChange, fetchDocument } from "../api";
+import { ApiError, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
 import { el, page, routeLink } from "../dom";
 import { agentName, calendarDate, relativeTime } from "../format";
 import { changeHref } from "../links";
 import { CHANGE_ARCHIVED, CHANGE_UPDATED, parseArchivedId, parseCard } from "../live";
+import { renderChangeMetrics } from "../metricsPanel";
 import { renderProgressBar } from "../progressBar";
 import type { View } from "../router";
 import type { Env } from "../shell";
@@ -48,6 +49,10 @@ export function changeView(env: Env): View {
     const article = el("article", "doc");
     article.setAttribute("aria-live", "polite");
     const body = el("div", "change-body", nav, el("div", "doc-pane", notice, article));
+    // change-metrics D5: under the header, loaded with the page and again on each live refresh.
+    const metricsPanel = el("section", "change-metrics");
+    metricsPanel.setAttribute("aria-label", "Metrics");
+    let metricsTicket = 0;
     const archivedStatus = el("p", "change-archived-status");
     archivedStatus.setAttribute("role", "status");
 
@@ -65,8 +70,11 @@ export function changeView(env: Env): View {
       return undefined;
     }
 
-    root.replaceChildren(el("section", "page change-page", head, archivedStatus, body));
+    root.replaceChildren(
+      el("section", "page change-page", head, metricsPanel, archivedStatus, body),
+    );
     let latest = first;
+    void loadMetrics();
     await show(first, ++ticket);
     if (!first.archivedAt) {
       closeStream = follow();
@@ -75,6 +83,7 @@ export function changeView(env: Env): View {
     return {
       teardown: () => {
         ticket++;
+        metricsTicket++;
         closeStream?.();
         closeStream = undefined;
       },
@@ -188,6 +197,24 @@ export function changeView(env: Env): View {
       });
     }
 
+    async function loadMetrics(): Promise<void> {
+      const mine = ++metricsTicket;
+      try {
+        const metrics = await fetchChangeMetrics(env.api, changeId);
+        if (mine === metricsTicket) {
+          metricsPanel.replaceChildren(...renderChangeMetrics(metrics));
+        }
+      } catch (failure) {
+        // The panel keeps what it shows; the next refresh tries again. A 401 is the shell's to handle.
+        const signedOut = failure instanceof ApiError && failure.status === 401;
+        if (mine === metricsTicket && !signedOut && metricsPanel.childElementCount === 0) {
+          metricsPanel.replaceChildren(
+            el("p", "metrics-error", "Couldn't load this change's metrics."),
+          );
+        }
+      }
+    }
+
     // --- live ---
 
     function follow(): () => void {
@@ -199,6 +226,7 @@ export function changeView(env: Env): View {
       let refreshing = 0;
       const refresh = () => {
         const mine = ++refreshing;
+        void loadMetrics();
         fetchChange(env.api, changeId).then(
           (next) => {
             if (mine !== refreshing || closeStream === undefined) {

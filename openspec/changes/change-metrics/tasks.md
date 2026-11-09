@@ -13,8 +13,8 @@
 
 ## 3. Web: change page metrics
 
-- [ ] 3.1 Add `formatDuration`, the metrics API calls and types (D4, D5). Verify `formatDuration` at its boundaries with unit tests.
-- [ ] 3.2 Add the change page's metrics panel (D5): "Took …" or "Running for …", the section rows, and in-progress marks. It refetches on the page's live refresh. Verify "Metrics on an archived change", "Live while open", and a change with no measured sections in `views/change` tests.
+- [x] 3.1 Add `formatDuration`, the metrics API calls and types (D4, D5). Verify `formatDuration` at its boundaries with unit tests.
+- [x] 3.2 Add the change page's metrics panel (D5): "Took …" or "Running for …", the section rows, and in-progress marks. It refetches on the page's live refresh. Verify "Metrics on an archived change", "Live while open", and a change with no measured sections in `views/change` tests.
 
 ## 4. Web: metrics page
 

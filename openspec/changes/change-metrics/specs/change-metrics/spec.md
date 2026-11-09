@@ -72,7 +72,8 @@ measured section SHALL say so.
 
 #### Scenario: Metrics on an archived change
 - **WHEN** a member opens the archived `team-auth`
-- **THEN** its page shows "Took 5 days 6 hours" and each section's time
+- **THEN** its page shows "Took 5d 6h", labelled "5 days 6 hours" for screen readers and as a tooltip, and each
+  section's time
 
 #### Scenario: Live while open
 - **WHEN** a member has an active change's page open and a report finishes section 3

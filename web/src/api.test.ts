@@ -3,8 +3,10 @@ import {
   ApiError,
   createApi,
   fetchChange,
+  fetchChangeMetrics,
   fetchDocument,
   fetchHistory,
+  fetchMetrics,
   REQUEST_HEADER,
 } from "./api";
 import { fakeServer } from "./testing";
@@ -95,12 +97,18 @@ describe("change page and history helpers", () => {
     await fetchDocument(api, "c1", "specs/cli bridge/spec#1.md");
     await fetchHistory(api);
     await fetchHistory(api, "2026-11-08T12:00:00.0000000+00:00");
+    await fetchChangeMetrics(api, "c 1");
+    await fetchMetrics(api);
+    await fetchMetrics(api, "repo=github.com%2Femmz%2Fpanopticon");
 
     expect(urls).toEqual([
       "/api/changes/c1",
       "/api/changes/c1/documents/specs/cli%20bridge/spec%231.md",
       "/api/history",
       "/api/history?before=2026-11-08T12%3A00%3A00.0000000%2B00%3A00",
+      "/api/changes/c%201/metrics",
+      "/api/metrics",
+      "/api/metrics?repo=github.com%2Femmz%2Fpanopticon",
     ]);
   });
 
