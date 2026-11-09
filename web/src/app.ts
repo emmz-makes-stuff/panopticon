@@ -1,6 +1,6 @@
 import { createApi, fetchChanges, type Api, type FetchLike } from "./api";
-import { renderCard } from "./card";
-import { relativeTime } from "./format";
+import { applyQuiet, renderCard } from "./card";
+import { DEFAULT_QUIET, type QuietSettings } from "./quiet";
 import type { ChangeCard } from "./types";
 
 /** The product's name, exactly as written (web/DESIGN.md, "Name"). */
@@ -21,6 +21,8 @@ export interface AppDeps {
    * dashboard draws its own header (wordmark and status).
    */
   statusSlot?: HTMLElement;
+  /** When cards go idle and stale (`GET /api/settings`). Without them, the server's defaults. */
+  quiet?: QuietSettings;
 }
 
 export interface App {
@@ -40,7 +42,10 @@ export interface App {
   refresh(): Promise<void>;
   /** Shows whether the live connection is up. */
   setStatus(status: LiveStatus): void;
-  /** Re-reads every card's "last reported" time against the clock (the main entry calls it every 30 s). */
+  /**
+   * Re-reads every card's "last reported" time and quiet state against the clock (the cards view calls it every
+   * 30 s), so a card goes idle, then stale, with no report or reload.
+   */
   updateTimes(): void;
 }
 
@@ -54,6 +59,7 @@ const reportedAt = (card: ChangeCard) => Date.parse(card.lastReportedAt);
 /** Mounts the dashboard into `root`, then loads the cards. Resolves once the first load has rendered (or failed). */
 export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<App> {
   const now = deps.now ?? (() => new Date());
+  const quiet = deps.quiet ?? DEFAULT_QUIET;
   const api = deps.api ?? createApi({ fetch: deps.fetch });
   const shown = new Map<string, Shown>();
 
@@ -111,7 +117,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
           card.changeId,
           current && reportedAt(current.card) >= reportedAt(card)
             ? current
-            : { card, element: renderCard(card, now()) },
+            : { card, element: renderCard(card, now(), quiet) },
         );
       }
 
@@ -126,7 +132,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
         return false;
       }
 
-      const element = renderCard(card, now());
+      const element = renderCard(card, now(), quiet);
       if (current) {
         lightNewCells(current.element, element);
       }
@@ -155,11 +161,9 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     },
 
     updateTimes() {
+      const at = now();
       for (const { card, element } of shown.values()) {
-        const time = element.querySelector("time");
-        if (time) {
-          time.textContent = relativeTime(card.lastReportedAt, now());
-        }
+        applyQuiet(element, card, at, quiet);
       }
     },
 

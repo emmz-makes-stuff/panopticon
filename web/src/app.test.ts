@@ -78,3 +78,84 @@ describe("mountApp", () => {
     expect(text(root, ".change-count")).toBe("2 changes");
   });
 });
+
+const minutesAgo = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000).toISOString();
+
+// Spec live-dashboard, "Quiet cards" and "Quiet state moves on by itself" (design D2), with the default thresholds.
+describe("mountApp quiet cards", () => {
+  const stateOf = (root: HTMLElement) => {
+    const element = root.querySelector<HTMLElement>("article.card");
+    return {
+      quiet: element?.dataset["quiet"],
+      idle: element?.classList.contains("card--idle"),
+      stale: element?.classList.contains("card--stale"),
+      label: element?.querySelector<HTMLElement>(".card-state"),
+      time: text(root, ".card-time"),
+    };
+  };
+
+  it("Recently reported: a card reported 5 minutes ago is active, with no state label", async () => {
+    const { root } = await mount([card({ lastReportedAt: minutesAgo(5) })]);
+
+    const state = stateOf(root);
+    expect(state).toMatchObject({ quiet: "active", idle: false, stale: false, time: "5m ago" });
+    expect(state.label?.hidden).toBe(true);
+  });
+
+  it("Quiet for an hour: the card is shown as idle, named in text", async () => {
+    const { root } = await mount([card({ lastReportedAt: minutesAgo(60) })]);
+
+    const state = stateOf(root);
+    expect(state).toMatchObject({ quiet: "idle", idle: true, stale: false, time: "1h ago" });
+    expect(state.label?.hidden).toBe(false);
+    expect(state.label?.textContent).toBe("Idle");
+  });
+
+  it("Quiet for a morning: the card is stale, saying when it was last seen", async () => {
+    const { root } = await mount([card({ lastReportedAt: minutesAgo(300) })]);
+
+    const state = stateOf(root);
+    expect(state).toMatchObject({
+      quiet: "stale",
+      idle: false,
+      stale: true,
+      time: "last seen 5h ago",
+    });
+    expect(state.label?.textContent).toBe("Stale");
+    expect(text(root, ".card-when")).toBe("Stale · last seen 5h ago");
+  });
+
+  it("Goes idle while watching: one tick after 30 minutes pass, with no report or reload", async () => {
+    const root = document.createElement("main");
+    let clock = NOW;
+    const fetch = fakeFetch([card({ lastReportedAt: minutesAgo(25) })]);
+    const app = await mountApp(root, { fetch, now: () => clock });
+    expect(stateOf(root).quiet).toBe("active");
+
+    clock = new Date(NOW.getTime() + 6 * 60_000);
+    app.updateTimes();
+
+    expect(stateOf(root)).toMatchObject({ quiet: "idle", time: "31m ago" });
+    expect(fetch.urls).toEqual(["/api/changes"]);
+  });
+
+  it("Report wakes a stale card: it's active as soon as the update arrives", async () => {
+    const { root, app } = await mount([card({ lastReportedAt: minutesAgo(300) })]);
+    expect(stateOf(root).quiet).toBe("stale");
+
+    app.upsert(card({ lastReportedAt: NOW.toISOString() }));
+
+    expect(stateOf(root)).toMatchObject({ quiet: "active", stale: false, time: "just now" });
+  });
+
+  it("uses the deployment's thresholds when given them", async () => {
+    const root = document.createElement("main");
+    await mountApp(root, {
+      fetch: fakeFetch([card({ lastReportedAt: minutesAgo(3) })]),
+      now: () => NOW,
+      quiet: { idleAfterSeconds: 60, staleAfterSeconds: 120 },
+    });
+
+    expect(stateOf(root).quiet).toBe("stale");
+  });
+});

@@ -13,7 +13,12 @@ export const TIMES_REFRESH_MS = 30_000;
  */
 export function cardsView(env: Env): View {
   return async ({ root }) => {
-    const app = await mountApp(root, { api: env.api, now: env.now, statusSlot: env.statusSlot });
+    const app = await mountApp(root, {
+      api: env.api,
+      now: env.now,
+      statusSlot: env.statusSlot,
+      quiet: await env.quietSettings(),
+    });
     const stopLive = connectLive(app, {
       createEventSource: env.createEventSource,
       checkSignedIn: () =>
@@ -23,6 +28,7 @@ export function cardsView(env: Env): View {
             error instanceof ApiError && error.status === 401 ? false : Promise.reject(error),
         ),
     });
+    // Times and quiet states move on with the clock (design D2): a card goes idle within this long of the threshold.
     const timer = setInterval(() => app.updateTimes(), TIMES_REFRESH_MS);
     return () => {
       stopLive();

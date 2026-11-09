@@ -2,6 +2,7 @@ import { ApiError, createApi, type Api, type FetchLike, type SessionMember } fro
 import { PRODUCT_NAME } from "./app";
 import type { EventSourceFactory } from "./live";
 import { el, routeLink } from "./dom";
+import { DEFAULT_QUIET, isQuietSettings, type QuietSettings } from "./quiet";
 import { safeStorage, saveReturnPath, takeReturnPath } from "./returnPath";
 import {
   createRouter,
@@ -34,6 +35,12 @@ export interface Env {
   renamed(displayName: string): void;
   /** Where the cards view shows the live status and change count. */
   statusSlot: HTMLElement;
+  /**
+   * When cards go idle and stale (`GET /api/settings`, filters-and-idle-cards D1), asked for once when the signed-in
+   * shell starts. It never rejects: settings that fail to load, or don't make sense, give the defaults (with a
+   * console warning), and the next call asks again.
+   */
+  quietSettings(): Promise<QuietSettings>;
   /**
    * Per-browser storage, shared by every tab: the address a sign-in link was asked for, and the return path (which
    * has to survive the emailed link opening in a new tab).
@@ -160,6 +167,30 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     void router.navigate("/sign-in", { replace: true });
   }
 
+  let quiet: Promise<QuietSettings> | undefined;
+  function loadQuietSettings(): Promise<QuietSettings> {
+    quiet ??= api.get<unknown>("/api/settings").then(
+      (settings) => {
+        if (isQuietSettings(settings)) {
+          return settings;
+        }
+
+        console.warn(
+          "The server's idle and stale settings don't make sense; using the defaults.",
+          settings,
+        );
+        quiet = undefined;
+        return DEFAULT_QUIET;
+      },
+      (error: unknown) => {
+        console.warn("Couldn't load the idle and stale settings; using the defaults.", error);
+        quiet = undefined;
+        return DEFAULT_QUIET;
+      },
+    );
+    return quiet;
+  }
+
   const env: Env = {
     api,
     member: () => member,
@@ -177,6 +208,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
       }
     },
     statusSlot,
+    quietSettings: loadQuietSettings,
     // Blocked storage (site data off) must not break sign-in: reads give null and writes are dropped.
     local: safeStorage(() => deps.local ?? window.localStorage),
     location,
@@ -217,6 +249,10 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
       view.firstElementChild?.setAttribute("role", "alert");
       return { router: null, member: () => member };
     }
+  }
+
+  if (member) {
+    void loadQuietSettings();
   }
 
   renderAccount();

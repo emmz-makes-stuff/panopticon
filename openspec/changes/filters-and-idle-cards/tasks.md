@@ -15,9 +15,9 @@
 
 ## 3. Web: quiet cards
 
-- [ ] 3.1 Fetch `/api/settings` once when the signed-in shell starts, and pass the thresholds to views in `Env`. Verify with a shell test that the settings reach the cards view, and that a failed settings fetch falls back to the defaults with a console warning, not a broken page.
-- [ ] 3.2 Add `quietState(lastReportedAt, now, settings)` (D2). Verify with unit tests at the boundaries (just under and just over each threshold, and a future timestamp is active).
-- [ ] 3.3 Render the state on each card: the `card--idle` and `card--stale` classes, an "Idle" label, and "Stale · last seen 5h ago" (D2). Re-evaluate on the 30 s tick, and make a card active again on a new report. Verify "Recently reported", "Quiet for an hour", "Quiet for a morning", "Goes idle while watching" (a fake clock moved past 30 min, then one tick) and "Report wakes a stale card" in `app`/`card` tests.
+- [x] 3.1 Fetch `/api/settings` once when the signed-in shell starts, and pass the thresholds to views in `Env`. Verify with a shell test that the settings reach the cards view, and that a failed settings fetch falls back to the defaults with a console warning, not a broken page.
+- [x] 3.2 Add `quietState(lastReportedAt, now, settings)` (D2). Verify with unit tests at the boundaries (just under and just over each threshold, and a future timestamp is active).
+- [x] 3.3 Render the state on each card: the `card--idle` and `card--stale` classes, an "Idle" label, and "Stale · last seen 5h ago" (D2). Re-evaluate on the 30 s tick, and make a card active again on a new report. Verify "Recently reported", "Quiet for an hour", "Quiet for a morning", "Goes idle while watching" (a fake clock moved past 30 min, then one tick) and "Report wakes a stale card" in `app`/`card` tests.
 
 ## 4. Web: the filter model and the dashboard's filters
 
