@@ -320,7 +320,7 @@ describe("change page metrics", () => {
     const rows = [...root.querySelectorAll(".metrics-section")];
     expect(rows.map((row) => row.classList.contains("in-progress"))).toEqual([false, true]);
     expect(shown(q(rows[1] as HTMLElement, ".metrics-section-time"))).toBe(
-      "in progress · 1h so far",
+      "in progress, 1h so far",
     );
   });
 

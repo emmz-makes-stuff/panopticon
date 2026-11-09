@@ -118,8 +118,8 @@ describe("metrics page", () => {
 
     const slowest = [...root.querySelectorAll(".metrics-slow")];
     expect(slowest.map(visible)).toEqual([
-      "Section 1: Serverbeta emmz/panopticon3h",
-      "Section 2: Webgamma emmz/meko2h",
+      "beta emmz/panopticonSection 1: Server3h",
+      "gamma emmz/mekoSection 2: Web2h",
     ]);
     expect(
       [...root.querySelectorAll<HTMLAnchorElement>(".metrics-slow a")].map((a) =>

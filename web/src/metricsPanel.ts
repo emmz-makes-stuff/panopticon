@@ -40,27 +40,42 @@ export function renderChangeMetrics(metrics: ChangeMetrics): Node[] {
 
   const list = el("ol", "metrics-sections");
   list.setAttribute("aria-label", "Time per section");
+  const longest = Math.max(...metrics.sections.map((s) => s.durationSeconds));
   for (const section of metrics.sections) {
-    list.append(sectionRow(section));
+    list.append(sectionRow(section, longest));
   }
 
   return [total, note, list];
 }
 
-function sectionRow(section: SectionMetric): HTMLElement {
+/**
+ * A duration rule (web/DESIGN.md, "Metrics"): a thin line as long as this time is against the longest beside it, so
+ * a slow one stands out. Dashed while still running. Decorative: the time is always printed beside it.
+ */
+export function durationRule(seconds: number, longest: number, running = false): HTMLElement {
+  const rule = el("span", running ? "duration-rule running" : "duration-rule");
+  rule.setAttribute("aria-hidden", "true");
+  const share = longest > 0 ? Math.max(2, Math.round((seconds / longest) * 100)) : 0;
+  rule.style.setProperty("--share", `${share}%`);
+  return rule;
+}
+
+function sectionRow(section: SectionMetric, longest: number): HTMLElement {
   const row = el(
     "li",
     section.inProgress ? "metrics-section in-progress" : "metrics-section",
     el("span", "metrics-section-number", String(section.number)),
     el("span", "metrics-section-title", section.title),
+    durationRule(section.durationSeconds, longest, section.inProgress),
   );
+  // The state and the time joined by a comma, not a middot (DESIGN.md principle 5).
   row.append(
     section.inProgress
       ? el(
           "span",
           "metrics-section-time",
           el("span", "metrics-in-progress", "in progress"),
-          " · ",
+          ", ",
           durationText(section.durationSeconds),
           " so far",
         )

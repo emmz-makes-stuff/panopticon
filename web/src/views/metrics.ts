@@ -12,7 +12,7 @@ import {
 } from "../filters";
 import { formatDuration } from "../format";
 import { changeHref } from "../links";
-import { durationText } from "../metricsPanel";
+import { durationRule, durationText } from "../metricsPanel";
 import type { View } from "../router";
 import type { Env } from "../shell";
 import type { SlowSection, TeamMetrics } from "../types";
@@ -105,7 +105,9 @@ export function metricsView(env: Env): View {
     }
 
     showBar();
-    root.replaceChildren(page("Metrics", bar.element, error.element, body, retry));
+    const metricsPage = page("Metrics", bar.element, error.element, body, retry);
+    metricsPage.classList.add("metrics-page");
+    root.replaceChildren(metricsPage);
     // The choices load beside the numbers; without them the page still shows, and the bar offers only what's chosen.
     const loadingChoices = fetchHistoryChoices(env.api).then(
       (loaded) => {
@@ -154,12 +156,12 @@ function slowest(sections: readonly SlowSection[]): HTMLElement {
   }
 
   const list = el("ol", "metrics-slowest-list");
+  const longest = sections[0]?.durationSeconds ?? 0;
   for (const slow of sections) {
     list.append(
       el(
         "li",
         "metrics-slow",
-        el("span", "metrics-slow-section", `Section ${slow.number}: ${slow.title}`),
         el(
           "span",
           "metrics-slow-change",
@@ -167,6 +169,8 @@ function slowest(sections: readonly SlowSection[]): HTMLElement {
           " ",
           el("span", "metrics-slow-repo", `${slow.repo.owner}/${slow.repo.name}`),
         ),
+        el("span", "metrics-slow-section", `Section ${slow.number}: ${slow.title}`),
+        durationRule(slow.durationSeconds, longest),
         durationText(slow.durationSeconds, "duration metrics-slow-time"),
       ),
     );

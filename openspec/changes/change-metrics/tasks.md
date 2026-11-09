@@ -23,8 +23,8 @@
 
 ## 5. Design pass and docs
 
-- [ ] 5.1 Run the `frontend-design` skill for the change-page panel and the metrics page (figures, chart and list; desktop and phone; light and dark), within `web/DESIGN.md`. Add a "Metrics" section to it and apply the styles. Verify `make web-build` and `make web-lint`, and record the choices in a devlog note.
-- [ ] 5.2 Document the metrics in the README: what time per section and time to archive mean (wall-clock, matched by section number) and the backfill after deploying. Verify that the wording matches the spec.
+- [x] 5.1 Run the `frontend-design` skill for the change-page panel and the metrics page (figures, chart and list; desktop and phone; light and dark), within `web/DESIGN.md`. Add a "Metrics" section to it and apply the styles. Verify `make web-build` and `make web-lint`, and record the choices in a devlog note.
+- [x] 5.2 Document the metrics in the README: what time per section and time to archive mean (wall-clock, matched by section number) and the backfill after deploying. Verify that the wording matches the spec.
 
 ## 6. Integration and human verification
 
