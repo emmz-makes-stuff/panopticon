@@ -18,8 +18,8 @@
 
 ## 4. Web: metrics page
 
-- [ ] 4.1 Add `charts.ts`: an SVG bar chart with `role="img"`, a text summary and a hidden value table (D5). Verify with unit tests (bar heights relative to the largest, the summary text, and the table rows).
-- [ ] 4.2 Add the `/metrics` view, with the history's filter bar from the address, `update(params)` in place, the figures, the weekly chart, the slowest-sections links, and an empty filtered state with Clear, plus the Metrics header link (D5). Verify "Team metrics", "Filtered metrics", "Go to metrics", a failed load, and a filter change without a remount, in view and shell tests.
+- [x] 4.1 Add `charts.ts`: an SVG bar chart with `role="img"`, a text summary and a hidden value table (D5). Verify with unit tests (bar heights relative to the largest, the summary text, and the table rows).
+- [x] 4.2 Add the `/metrics` view, with the history's filter bar from the address, `update(params)` in place, the figures, the weekly chart, the slowest-sections links, and an empty filtered state with Clear, plus the Metrics header link (D5). Verify "Team metrics", "Filtered metrics", "Go to metrics", a failed load, and a filter change without a remount, in view and shell tests.
 
 ## 5. Design pass and docs
 

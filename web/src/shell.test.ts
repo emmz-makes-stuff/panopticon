@@ -31,7 +31,7 @@ describe("startShell", () => {
     expect(FakeEventSource.latest().url).toBe("/api/events");
   });
 
-  it("shows the signed-in header: your name as text, Members, History, Tokens and Sign out", async () => {
+  it("shows the signed-in header: your name as text, Members, History, Metrics, Tokens and Sign out", async () => {
     const { root } = await startTestShell(
       "/",
       signedIn({ ...MEMBER, displayName: "<img src=x onerror=alert(1)>" }),
@@ -47,6 +47,7 @@ describe("startShell", () => {
     ).toEqual([
       ["Members", "/members"],
       ["History", "/history"],
+      ["Metrics", "/metrics"],
       ["Tokens", "/tokens"],
     ]);
     expect(account.querySelector("button")?.textContent).toBe("Sign out");

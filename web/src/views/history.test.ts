@@ -155,7 +155,7 @@ describe("history link and card links", () => {
     const links = [...root.querySelectorAll<HTMLAnchorElement>("nav.account a")].map(
       (a) => a.textContent,
     );
-    expect(links).toEqual(["Members", "History", "Tokens"]);
+    expect(links).toEqual(["Members", "History", "Metrics", "Tokens"]);
     click([...root.querySelectorAll("nav.account a")].find((a) => a.textContent === "History"));
     await until(() => heading() === "History");
 
