@@ -213,8 +213,8 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         IReadOnlyList<StoredDocument> manifest,
         CancellationToken cancellationToken)
     {
-        var (hostKey, ownerKey, repoKey) = (Key(report.Repo.Host), Key(report.Repo.Owner), Key(report.Repo.Name));
-        var changeKey = Key(report.ChangeName);
+        var (hostKey, ownerKey, repoKey) = (IdentityKey.Of(report.Repo.Host), IdentityKey.Of(report.Repo.Owner), IdentityKey.Of(report.Repo.Name));
+        var changeKey = IdentityKey.Of(report.ChangeName);
         var held = (await db.ChangeDocuments
                 .Where(d => db.Changes.Any(c => c.Id == d.ChangeId
                     && c.ArchivedAt == null
@@ -239,7 +239,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
 
     private async Task<Repo> FindOrAddRepoAsync(RepoIdentity identity, CancellationToken cancellationToken)
     {
-        var (hostKey, ownerKey, nameKey) = (Key(identity.Host), Key(identity.Owner), Key(identity.Name));
+        var (hostKey, ownerKey, nameKey) = (IdentityKey.Of(identity.Host), IdentityKey.Of(identity.Owner), IdentityKey.Of(identity.Name));
         var repo = await db.Repos.SingleOrDefaultAsync(
             r => r.HostKey == hostKey && r.OwnerKey == ownerKey && r.NameKey == nameKey,
             cancellationToken);
@@ -271,7 +271,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         // FOR UPDATE: concurrent reports on one change take turns, so the only-if-newer check in UpsertAsync
         // compares against the committed state rather than a stale read. Only active changes take part in identity
         // (D5): a name reused after an archive gets a fresh row.
-        var nameKey = Key(name);
+        var nameKey = IdentityKey.Of(name);
         var change = await db.Changes
             .FromSql($"SELECT * FROM changes WHERE repo_id = {repo.Id} AND name_key = {nameKey} AND archived_at IS NULL FOR UPDATE")
             .SingleOrDefaultAsync(cancellationToken);
@@ -294,7 +294,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
 
     private async Task<Agent> FindOrAddAgentAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
-        var (clientKey, machineKey, memberId) = (Key(identity.ClientName), Key(identity.MachineName), identity.MemberId);
+        var (clientKey, machineKey, memberId) = (IdentityKey.Of(identity.ClientName), IdentityKey.Of(identity.MachineName), identity.MemberId);
         var agent = await db.Agents.SingleOrDefaultAsync(
             a => a.MemberId == memberId && a.ClientNameKey == clientKey && a.MachineNameKey == machineKey,
             cancellationToken);
@@ -315,8 +315,6 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         db.Agents.Add(agent);
         return agent;
     }
-
-    private static string Key(string value) => value.Trim().ToLowerInvariant();
 
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };

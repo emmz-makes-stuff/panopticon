@@ -48,7 +48,15 @@ export async function startTestShell(
 export const signedIn = (member = MEMBER) =>
   fakeServer()
     .on("GET", "/api/session", { status: 200, body: member })
-    .on("GET", "/api/changes", { status: 200, body: [card()] });
+    .on("GET", "/api/changes", { status: 200, body: [card()] })
+    .on("GET", "/api/settings", {
+      status: 200,
+      body: { idleAfterSeconds: 1800, staleAfterSeconds: 14400 },
+    })
+    .on("GET", "/api/history/filters", {
+      status: 200,
+      body: { repos: [], owners: [], members: [], machines: [], clients: [] },
+    });
 
 /** A server with no session. */
 export const signedOut = () => fakeServer().on("GET", "/api/session", { status: 401 });

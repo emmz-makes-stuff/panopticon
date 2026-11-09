@@ -45,7 +45,8 @@ is cool rather than cream.
 
 - Unlit cells use `--rule` with an inset outline, and lit cells are solid `--lit`. The two differ in fill
   _and_ outline, and the counts are printed beside the bar, so state never relies on colour alone.
-- Stale cards drop to 60% opacity, and their lit cells become `--ink-muted`.
+- Stale cards recede and their lit cells become `--ink-muted` (see "Filters and quiet cards": no opacity, so text
+  keeps its contrast).
 
 ## Type
 
@@ -180,6 +181,45 @@ Devlog            ┃
   outlined button. Empty: "No changes have been archived yet", and a muted line on where they come from.
 - **Cards:** the change name is the card's link. It keeps its look (no link colour or underline), and the
   focus ring shows it.
+
+## Filters and quiet cards
+
+Quiet cards carry principle 3, and the filter bar is a tool, in the pages' quieter voice.
+
+```
+Repo              Owner           Person      Machine       Agent type        Status
+[All repos     ▾] [github.com/… ▾] [Everyone ▾] [All machines ▾] [All agent types ▾] [Any status ▾]  Clear filters
+┌──────────────────────────┐ ┌──────────────────────────┐ ┆╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┆
+│ emmz/panopticon   2m ago │ │ acme/site  Idle, 1h ago  │ ┆ emmz/other  Stale, last  ┆
+│ walking-skeleton         │ │ add-auth   (muted)       │ ┆   seen 5h ago            ┆
+│ ▮▮▮▮▯         4/5 (80%) │ │ ▮▮▯       2/3 (67%)     │ ┆ ▮▮▯ (grey)  2/3 (67%)    ┆
+└──────────────────────────┘ └──────────────────────────┘ ┆╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┆
+```
+
+- **Active:** the card as it always was.
+- **Idle:** it loses contrast. The change name and owner/name drop to `--ink-muted`, and the time reads "Idle, 1h
+  ago" with "Idle" in `--ink` 600. The lit cells stay teal: progress is still worth reading.
+- **Stale:** it recedes into the page.
+    - **The surface:** the card takes the `--paper` background and a dashed border (a shape, not only a colour). Its
+      text and agent pills are `--ink-muted`.
+    - **Cells and time:** the lit cells turn `--ink-muted`, so a stale card holds no teal. The time reads "Stale, last
+      seen 5h ago".
+- **No opacity:** this replaces the earlier 60% opacity, which took text below 4.5:1. Everything stays at
+  `--ink-muted` or stronger.
+- **The label:** the state and the time are joined by a comma, not a middot (principle 5), and read aloud that way.
+- **Filter bar:** one row above the grid (and above the history list), wrapping as needed.
+    - **Selects:** each has its label above it (small, 600), as on the forms. The first option is "All repos",
+      "Everyone", "Any status" and so on.
+    - **A set filter:** it shows a 2px `--ink` border and 600 text, so the active filters read by shape and weight,
+      not colour. Teal stays progress.
+    - **Clear filters:** a link button at the row's end, shown only while a filter is set.
+    - **A dropped filter:** when the address held one that didn't parse, a muted line says which.
+- **On a phone:** the selects pair up, two to a row. There's no "Filters" toggle: what's chosen stays in sight, as it
+  does in the address.
+- **The count:** "3 of 7 changes" when filters hide some, with "4 hidden by the filters" as its title.
+- **Nothing matches:** "No changes match these filters" (Gabarito 700, 25px, like the empty state), a muted line,
+  and a Clear filters link button. On the history it's one line, "No archived changes match these filters.", and the
+  getting-started page is only for a dashboard with no changes and no filters.
 
 ## Accessibility floor
 

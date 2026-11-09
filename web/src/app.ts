@@ -1,6 +1,15 @@
 import { createApi, fetchChanges, type Api, type FetchLike } from "./api";
-import { renderCard } from "./card";
-import { relativeTime } from "./format";
+import { applyQuiet, renderCard } from "./card";
+import { createFilterBar, noMatch } from "./filterBar";
+import {
+  filterChoices,
+  filterOptions,
+  hasFilters,
+  matches,
+  type Filters,
+  type ParsedFilters,
+} from "./filters";
+import { DEFAULT_QUIET, type QuietSettings } from "./quiet";
 import type { ChangeCard } from "./types";
 
 /** The product's name, exactly as written (web/DESIGN.md, "Name"). */
@@ -21,6 +30,15 @@ export interface AppDeps {
    * dashboard draws its own header (wordmark and status).
    */
   statusSlot?: HTMLElement;
+  /** When cards go idle and stale (`GET /api/settings`). Without them, the server's defaults. */
+  quiet?: QuietSettings;
+  /** The filters to start with (from the address), and any the address had that didn't parse. */
+  filters?: ParsedFilters;
+  /**
+   * A choice in the filter bar or a "Clear filters" button. The cards view writes the filters to the address, and the
+   * router hands them back through `setFilters`. Without it, the filters apply straight away.
+   */
+  onFiltersChange?: (filters: Filters) => void;
 }
 
 export interface App {
@@ -40,8 +58,19 @@ export interface App {
   refresh(): Promise<void>;
   /** Shows whether the live connection is up. */
   setStatus(status: LiveStatus): void;
-  /** Re-reads every card's "last reported" time against the clock (the main entry calls it every 30 s). */
+  /**
+   * Re-reads every card's "last reported" time and quiet state against the clock (the cards view calls it every
+   * 30 s), so a card goes idle, then stale, with no report or reload. Under a status filter, a card that changes
+   * state comes in or goes out.
+   */
   updateTimes(): void;
+  /**
+   * Shows the cards that match `filters` (spec change-filters), keeping every card: a live update for a hidden change
+   * is still applied, ready for when the filters change.
+   */
+  setFilters(filters: ParsedFilters): void;
+  /** Uses the deployment's idle and stale thresholds from now on (they can arrive after the cards). */
+  setQuiet(settings: QuietSettings): void;
 }
 
 interface Shown {
@@ -54,6 +83,7 @@ const reportedAt = (card: ChangeCard) => Date.parse(card.lastReportedAt);
 /** Mounts the dashboard into `root`, then loads the cards. Resolves once the first load has rendered (or failed). */
 export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<App> {
   const now = deps.now ?? (() => new Date());
+  let quiet = deps.quiet ?? DEFAULT_QUIET;
   const api = deps.api ?? createApi({ fetch: deps.fetch });
   const shown = new Map<string, Shown>();
 
@@ -87,18 +117,74 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
   grid.setAttribute("aria-label", "Changes");
   root.replaceChildren(...(deps.statusSlot ? [content] : [header, content]));
 
-  // Most recently reported first, as the server orders them.
+  let filters = deps.filters ?? { filters: {}, dropped: [] };
+  /**
+   * Whether a load has rendered. Until then, nothing redraws, so a load error stays up: live updates are kept for when
+   * the next refresh renders, and the tick and filter changes just wait.
+   */
+  let loaded = false;
+  /** Whether the filter bar needs redrawing: the cards or the filters changed. The tick alone doesn't. */
+  let barStale = true;
+  let choices = filterChoices([]);
+  const changeFilters =
+    deps.onFiltersChange ?? ((next) => app.setFilters({ filters: next, dropped: [] }));
+  const bar = createFilterBar({
+    keys: ["repo", "owner", "member", "machine", "client", "status"],
+    onChange: (next) => changeFilters(next),
+  });
+  const noMatchBlock = noMatch(
+    "No changes match these filters",
+    "Choose other filters, or clear them to see every change.",
+    () => changeFilters({}),
+  );
+
+  /**
+   * Shows the cards that match the filters, most recently reported first (the server's order), after bringing each
+   * card's quiet state up to date. The grid is only rebuilt when what it shows changes, so the clock's tick doesn't
+   * replay a card's motion.
+   */
+  /** The cards changed: their choices are worked out again, and the bar redrawn at the next layout. */
+  function cardsChanged(): void {
+    choices = filterChoices([...shown.values()].map((entry) => entry.card));
+    barStale = true;
+  }
+
   function layout(): void {
+    const at = now();
     const ordered = [...shown.values()].sort((a, b) => reportedAt(b.card) - reportedAt(a.card));
-    count.textContent = ordered.length === 1 ? "1 change" : `${ordered.length} changes`;
-    if (ordered.length === 0) {
+    const visible = ordered.filter(({ card, element }) =>
+      matches(card, filters.filters, applyQuiet(element, card, at, quiet)),
+    );
+
+    const total = ordered.length;
+    const hidden = total - visible.length;
+    const noun = (n: number) => (n === 1 ? "change" : "changes");
+    count.textContent =
+      hidden > 0 ? `${visible.length} of ${total} ${noun(total)}` : `${total} ${noun(total)}`;
+    count.title = hidden > 0 ? `${hidden} hidden by the filters` : "";
+
+    const filtered = hasFilters(filters.filters) || filters.dropped.length > 0;
+    if (total === 0 && !filtered) {
       content.replaceChildren(renderEmptyState());
       return;
     }
 
-    grid.replaceChildren(...ordered.map((entry) => entry.element));
-    if (grid.parentElement !== content) {
-      content.replaceChildren(grid);
+    if (barStale) {
+      bar.update(filterOptions(choices, filters.filters), filters.filters, filters.dropped);
+      barStale = false;
+    }
+
+    const body = visible.length === 0 ? noMatchBlock : grid;
+    const elements = visible.map((entry) => entry.element);
+    if (
+      grid.children.length !== elements.length ||
+      elements.some((element, index) => grid.children[index] !== element)
+    ) {
+      grid.replaceChildren(...elements);
+    }
+
+    if (content.firstElementChild !== bar.element || bar.element.nextElementSibling !== body) {
+      content.replaceChildren(bar.element, body);
     }
   }
 
@@ -111,12 +197,14 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
           card.changeId,
           current && reportedAt(current.card) >= reportedAt(card)
             ? current
-            : { card, element: renderCard(card, now()) },
+            : { card, element: renderCard(card, now(), quiet) },
         );
       }
 
       shown.clear();
       next.forEach((entry, id) => shown.set(id, entry));
+      cardsChanged();
+      loaded = true;
       layout();
     },
 
@@ -126,7 +214,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
         return false;
       }
 
-      const element = renderCard(card, now());
+      const element = renderCard(card, now(), quiet);
       if (current) {
         lightNewCells(current.element, element);
       }
@@ -137,7 +225,11 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
       element.classList.add("updated");
       shown.set(card.changeId, { card, element });
-      layout();
+      cardsChanged();
+      if (loaded) {
+        layout();
+      }
+
       return true;
     },
 
@@ -146,7 +238,11 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
         return false;
       }
 
-      layout();
+      cardsChanged();
+      if (loaded) {
+        layout();
+      }
+
       return true;
     },
 
@@ -155,11 +251,23 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     },
 
     updateTimes() {
-      for (const { card, element } of shown.values()) {
-        const time = element.querySelector("time");
-        if (time) {
-          time.textContent = relativeTime(card.lastReportedAt, now());
-        }
+      if (loaded) {
+        layout();
+      }
+    },
+
+    setFilters(next) {
+      filters = next;
+      barStale = true;
+      if (loaded) {
+        layout();
+      }
+    },
+
+    setQuiet(settings) {
+      quiet = settings;
+      if (loaded) {
+        layout();
       }
     },
 

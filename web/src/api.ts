@@ -1,3 +1,4 @@
+import type { FilterChoices } from "./filters";
 import type { ChangeCard, ChangePage, HistoryPage, RenderedDocument } from "./types";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -105,11 +106,23 @@ export function fetchDocument(api: Api, changeId: string, path: string): Promise
   );
 }
 
-/** A page of archived changes, newest first; pass the previous page's `nextBefore` for the next one. */
-export function fetchHistory(api: Api, before?: string | null): Promise<HistoryPage> {
-  return api.get<HistoryPage>(
-    before ? `/api/history?before=${encodeURIComponent(before)}` : "/api/history",
-  );
+/**
+ * A page of archived changes, newest first; pass the previous page's `nextBefore` for the next one. `filters` is a
+ * query string of history filters (from `toQuery`), which the server applies (filters-and-idle-cards D3).
+ */
+export function fetchHistory(api: Api, before?: string | null, filters = ""): Promise<HistoryPage> {
+  const params = new URLSearchParams(filters);
+  if (before) {
+    params.set("before", before);
+  }
+
+  const query = params.toString();
+  return api.get<HistoryPage>(query ? `/api/history?${query}` : "/api/history");
+}
+
+/** The history's filter choices: the values among archived changes. */
+export function fetchHistoryChoices(api: Api): Promise<FilterChoices> {
+  return api.get<FilterChoices>("/api/history/filters");
 }
 
 /** The signed-in member (`GET /api/session`). */

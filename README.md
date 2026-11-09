@@ -56,10 +56,11 @@ Rename yourself on the Members page: the name appears on the cards next to every
 
 ### Reporting progress
 
-Build the CLI with `make aot`, then give this machine a token:
+Build and install the CLI with `make install` (it puts `panopticon` in `~/.local/bin`; set `INSTALL_DIR` for
+elsewhere), then give this machine a token:
 
 ```sh
-artifacts/cli/panopticon login --server http://localhost:7480
+panopticon login --server http://localhost:7480
 ```
 
 It prints a code and a link. Open the link while signed in, check the code, and choose **Approve**. The CLI saves
@@ -104,6 +105,7 @@ becomes `__`, e.g. `Panopticon__S3__Bucket`.
 | `Panopticon:Resend:ApiKey` | The [Resend](https://resend.com) API key for sign-in emails. Required outside Development. In Development, leaving it unset logs each email instead of sending it. |
 | `Panopticon:Email:From` | The sender of sign-in emails, e.g. `a PANOPTICON <sign-in@example.com>`, on a domain verified in Resend. Required whenever a Resend key is set. |
 | `Panopticon:BootstrapToken` | A shared bearer token agents can report with, **in Development only**. The server won't start with it set in any other environment. Use `panopticon login` instead. |
+| `Panopticon:Activity:IdleAfter`, `Panopticon:Activity:StaleAfter` | How long after its last report a dashboard card shows as idle, then as stale, as a TimeSpan (e.g. `00:30:00`). The defaults are 30 minutes and 4 hours. Both must be positive, and the server won't start unless `StaleAfter` is longer than `IdleAfter`. |
 | `Panopticon:S3:ServiceUrl` | The S3 endpoint for change documents. Leave it unset for AWS itself. |
 | `Panopticon:S3:Region` | The S3 region. The default is `us-east-1`. |
 | `Panopticon:S3:AccessKey`, `Panopticon:S3:SecretKey` | The S3 credentials. |

@@ -20,6 +20,8 @@ export interface CardAgent {
   lastReportedAt: string;
   /** The display name of the member whose token reported, or null (the Development bootstrap token, or older rows). */
   member?: string | null;
+  /** That member's id, which the person filter matches on (filters-and-idle-cards D6); null with no member. */
+  memberId?: string | null;
 }
 
 export interface CardSection {

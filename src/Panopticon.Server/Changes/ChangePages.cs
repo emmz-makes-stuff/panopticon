@@ -35,6 +35,23 @@ public sealed record HistoryEntry(
 /// <summary>A page of the history, newest archive first; <see cref="NextBefore"/> is the next page's cursor.</summary>
 public sealed record HistoryPage(IReadOnlyList<HistoryEntry> Changes, DateTimeOffset? NextBefore);
 
+/// <summary>An owner choice: a host and an owner (which may contain '/').</summary>
+public sealed record OwnerChoice(string Host, string Owner);
+
+/// <summary>A person choice: the member's id (what the filter matches) and display name (its label).</summary>
+public sealed record MemberChoice(Guid Id, string DisplayName);
+
+/// <summary>
+/// The history's filter choices (filters-and-idle-cards D5; spec: change-filters, Filter choices): the distinct values
+/// among archived changes, each sorted case-insensitively.
+/// </summary>
+public sealed record HistoryChoices(
+    IReadOnlyList<CardRepo> Repos,
+    IReadOnlyList<OwnerChoice> Owners,
+    IReadOnlyList<MemberChoice> Members,
+    IReadOnlyList<string> Machines,
+    IReadOnlyList<string> Clients);
+
 /// <summary>Reads change pages, documents and the history for the read API.</summary>
 public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDocumentStore store, DocumentRenderer renderer)
 {
@@ -78,10 +95,13 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
         return new RenderedDocument(document.Path, renderer.Render(document.Path, document.Sha256, content));
     }
 
-    /// <summary>Archived changes archived strictly before <paramref name="before"/> (all when null), newest first.</summary>
-    public async Task<HistoryPage> HistoryAsync(DateTimeOffset? before, int limit, CancellationToken cancellationToken)
+    /// <summary>
+    /// Archived changes matching <paramref name="filter"/>, archived strictly before <paramref name="before"/> (all when
+    /// null), newest first. The cursor works the same within a filter (filters-and-idle-cards D3).
+    /// </summary>
+    public async Task<HistoryPage> HistoryAsync(HistoryFilter filter, DateTimeOffset? before, int limit, CancellationToken cancellationToken)
     {
-        var query = cards.Query().Where(c => c.ArchivedAt != null);
+        var query = filter.Apply(cards.Query().Where(c => c.ArchivedAt != null));
         if (before is { } given)
         {
             // Npgsql writes only UTC offsets to timestamptz, and a cursor with any other offset is the same instant.
@@ -120,6 +140,49 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
                 return new HistoryEntry(c.Id, card.Repo, card.Change, c.ArchivedAt!.Value, c.ArchiveFolder!, card.Agents);
             })],
             next);
+    }
+
+    /// <summary>
+    /// The filter choices among archived changes only. Values that differ only in case are one choice, shown in one of
+    /// the casings reported. An agent with no member adds no person.
+    /// </summary>
+    public async Task<HistoryChoices> HistoryChoicesAsync(CancellationToken cancellationToken)
+    {
+        var archived = db.Changes.AsNoTracking().Where(c => c.ArchivedAt != null);
+        var repos = await archived
+            .Select(c => new { c.Repo.Host, c.Repo.Owner, c.Repo.Name, c.Repo.HostKey, c.Repo.OwnerKey })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var agents = await archived
+            .SelectMany(c => c.Agents)
+            .Select(a => new
+            {
+                a.Agent.ClientName,
+                a.Agent.ClientNameKey,
+                a.Agent.MachineName,
+                a.Agent.MachineNameKey,
+                a.Agent.MemberId,
+                DisplayName = a.Agent.Member == null ? null : a.Agent.Member.DisplayName,
+            })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var byLabel = StringComparer.OrdinalIgnoreCase;
+        return new HistoryChoices(
+            [.. repos
+                .Select(r => new CardRepo(r.Host, r.Owner, r.Name))
+                .OrderBy(r => r.Host, byLabel).ThenBy(r => r.Owner, byLabel).ThenBy(r => r.Name, byLabel)],
+            [.. repos
+                .DistinctBy(r => (r.HostKey, r.OwnerKey))
+                .Select(r => new OwnerChoice(r.Host, r.Owner))
+                .OrderBy(o => o.Host, byLabel).ThenBy(o => o.Owner, byLabel)],
+            [.. agents
+                .Where(a => a.MemberId is not null)
+                .DistinctBy(a => a.MemberId)
+                .Select(a => new MemberChoice(a.MemberId!.Value, a.DisplayName!))
+                .OrderBy(m => m.DisplayName, byLabel).ThenBy(m => m.Id)],
+            [.. agents.DistinctBy(a => a.MachineNameKey, StringComparer.Ordinal).Select(a => a.MachineName).Order(byLabel)],
+            [.. agents.DistinctBy(a => a.ClientNameKey, StringComparer.Ordinal).Select(a => a.ClientName).Order(byLabel)]);
     }
 
     /// <summary>Proposal, design, tasks, specs by capability, devlog notes newest first, then anything else by path.</summary>

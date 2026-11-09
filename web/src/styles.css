@@ -172,11 +172,127 @@ body {
   overflow-wrap: anywhere;
 }
 
-.card-time {
+.card-when {
   font-size: var(--step--1);
   font-weight: 400;
   color: var(--ink-muted);
   white-space: nowrap;
+}
+
+/*
+ * Quiet cards (web/DESIGN.md, "Filters and quiet cards"): stalls dim, they don't shout. Idle loses contrast; stale
+ * recedes into the page with a dashed edge and grey cells. Text stays at --ink-muted or stronger, so nothing drops
+ * below 4.5:1, and the state is always named in words.
+ */
+.card-state {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.card--idle .card-change,
+.card--idle .card-repo-name {
+  color: var(--ink-muted);
+}
+
+.card--stale {
+  background: var(--paper);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--ink-muted) 45%, var(--rule));
+}
+
+.card--stale .card-change,
+.card--stale .card-repo-name,
+.card--stale .card-agent {
+  color: var(--ink-muted);
+}
+
+.card--stale .cell.lit {
+  background: var(--ink-muted);
+}
+
+/* Filters (filters-and-idle-cards D7): a quiet tool row above the grid and the history list. */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin: 0 0 1.25rem;
+}
+
+.filter {
+  display: flex;
+  flex: 0 1 11rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.filter-label {
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.filter-select {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--ink-muted) 55%, var(--rule));
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--step--1);
+}
+
+/* A filter that's set shows by its edge and weight, not by colour. */
+.filter-select--set {
+  border: 2px solid var(--ink);
+  padding: calc(0.4rem - 1px) calc(0.5rem - 1px);
+  font-weight: 600;
+}
+
+.filter-select:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.filter-clear {
+  align-self: flex-end;
+  padding-bottom: 0.45rem;
+}
+
+.filter-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.no-match {
+  max-width: 38rem;
+  padding: 2rem 0;
+}
+
+.no-match h2 {
+  margin: 0 0 0.5rem;
+  font: 700 var(--step-2) / 1.15 var(--font-display);
+}
+
+.no-match p {
+  margin: 0 0 0.75rem;
+  color: var(--ink-muted);
+}
+
+/* On a phone the selects pair up, two to a row, so every chosen filter stays in sight. */
+@media (max-width: 40rem) {
+  .filter {
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+
+  .filter-clear {
+    align-self: flex-start;
+    padding-bottom: 0;
+  }
 }
 
 .card-change {

@@ -11,6 +11,9 @@ public static class ChangeEndpoints
 {
     public const string HistoryPath = "/api/history";
 
+    /// <summary>The history's filter choices, among archived changes (filters-and-idle-cards D5).</summary>
+    public const string HistoryFiltersPath = "/api/history/filters";
+
     public static string ChangePath(Guid id) => $"/api/changes/{id}";
 
     public static string DocumentPath(Guid id, string path) => $"/api/changes/{id}/documents/{path}";
@@ -31,7 +34,16 @@ public static class ChangeEndpoints
 
         endpoints.MapGet(
             HistoryPath,
-            async Task<Results<Ok<HistoryPage>, BadRequest<string>>> (DateTimeOffset? before, int? limit, ChangePages pages, CancellationToken cancellationToken) =>
+            async Task<Results<Ok<HistoryPage>, BadRequest<string>>> (
+                DateTimeOffset? before,
+                int? limit,
+                string? repo,
+                string? owner,
+                string? member,
+                string? machine,
+                string? client,
+                ChangePages pages,
+                CancellationToken cancellationToken) =>
             {
                 var size = limit ?? ChangePages.HistoryPageSize;
                 if (size is < 1 or > ChangePages.HistoryPageSize)
@@ -39,8 +51,18 @@ public static class ChangeEndpoints
                     return TypedResults.BadRequest($"limit must be between 1 and {ChangePages.HistoryPageSize}.");
                 }
 
-                return TypedResults.Ok(await pages.HistoryAsync(before, size, cancellationToken));
+                if (!HistoryFilter.TryParse(repo, owner, member, machine, client, out var filter, out var error))
+                {
+                    return TypedResults.BadRequest(error);
+                }
+
+                return TypedResults.Ok(await pages.HistoryAsync(filter, before, size, cancellationToken));
             })
+            .RequireAuthorization(AuthPolicies.Member);
+
+        endpoints.MapGet(
+            HistoryFiltersPath,
+            async (ChangePages pages, CancellationToken cancellationToken) => TypedResults.Ok(await pages.HistoryChoicesAsync(cancellationToken)))
             .RequireAuthorization(AuthPolicies.Member);
 
         return endpoints;

@@ -140,3 +140,47 @@ describe("startShell", () => {
     expect(nav.path()).toBe("/");
   });
 });
+
+// Spec live-dashboard, "Quiet thresholds are settings" (design D1): the shell asks once, and passes them on.
+describe("startShell quiet settings", () => {
+  it("asks for the settings once and the cards view uses them", async () => {
+    // The card reported 3 minutes ago: idle with a 1-minute threshold, though the defaults would call it active.
+    const server = signedIn().on("GET", "/api/settings", {
+      status: 200,
+      body: { idleAfterSeconds: 60, staleAfterSeconds: 300 },
+    });
+    const { root, shell } = await startTestShell("/", server);
+
+    expect(q(root, "article.card").classList).toContain("card--idle");
+    await shell.router?.navigate("/history");
+    await shell.router?.navigate("/");
+    await until(() => root.querySelector("article.card") !== null);
+
+    expect(q(root, "article.card").classList).toContain("card--idle");
+    expect(server.to("GET", "/api/settings")).toHaveLength(1);
+  });
+
+  it("falls back to the default thresholds, with a console warning, when the settings can't be loaded", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const server = signedIn().on("GET", "/api/settings", { status: 500 });
+
+    const { root } = await startTestShell("/", server);
+
+    const card = q(root, "article.card");
+    expect(card.dataset["quiet"]).toBe("active");
+    expect(card.querySelector(".card-change")?.textContent).toBe("walking-skeleton");
+    expect(warn).toHaveBeenCalledWith(
+      "Couldn't load the idle and stale settings; using the defaults.",
+      expect.anything(),
+    );
+    warn.mockRestore();
+  });
+
+  it("doesn't ask for the settings before sign-in", async () => {
+    const server = fakeServer().on("GET", "/api/session", { status: 401 });
+
+    await startTestShell("/", server);
+
+    expect(server.to("GET", "/api/settings")).toHaveLength(0);
+  });
+});
