@@ -7,9 +7,9 @@
 
 ## 2. Server: metrics
 
-- [ ] 2.1 Add `SectionTimes.Compute(events)` and time to archive (D2). Verify every "Time per section" and "Time to archive" scenario with unit tests: a finished section, one in progress, one reopened, one never started, and unnumbered sections skipped.
-- [ ] 2.2 Add `GET /api/changes/{id}/metrics` (D4). Verify with endpoint tests for an archived and an active change, a 404 for an unknown id, and a 401 when signed out.
-- [ ] 2.3 Add `GET /api/metrics`, with `HistoryFilter` (D4): counts, medians, 12 weekly buckets and the 10 slowest sections. Verify "Team metrics" and "Filtered metrics" against seeded archived changes, that unreadable events are skipped, a 400 for a malformed filter, and a 401.
+- [x] 2.1 Add `SectionTimes.Compute(events)` and time to archive (D2). Verify every "Time per section" and "Time to archive" scenario with unit tests: a finished section, one in progress, one reopened, one never started, and unnumbered sections skipped.
+- [x] 2.2 Add `GET /api/changes/{id}/metrics` (D4). Verify with endpoint tests for an archived and an active change, a 404 for an unknown id, and a 401 when signed out.
+- [x] 2.3 Add `GET /api/metrics`, with `HistoryFilter` (D4): counts, medians, 12 weekly buckets and the 10 slowest sections. Verify "Team metrics" and "Filtered metrics" against seeded archived changes, that unreadable events are skipped, a 400 for a malformed filter, and a 401.
 
 ## 3. Web: change page metrics
 
