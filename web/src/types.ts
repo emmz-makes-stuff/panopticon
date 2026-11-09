@@ -87,3 +87,63 @@ export interface HistoryPage {
   changes: HistoryEntry[];
   nextBefore: string | null;
 }
+
+// Metrics (server: Panopticon.Server.Metrics, change-metrics D4). Durations are whole seconds, wall-clock.
+
+/** One measured section of a change: from its start to when every task stayed ticked. */
+export interface SectionMetric {
+  number: number;
+  title: string;
+  /** ISO 8601. */
+  startedAt: string;
+  /** ISO 8601, or null while in progress. */
+  finishedAt: string | null;
+  /** Its time, or its time so far while in progress. */
+  durationSeconds: number;
+  inProgress: boolean;
+}
+
+/** `GET /api/changes/{id}/metrics`. */
+export interface ChangeMetrics {
+  /** ISO 8601. */
+  firstReportedAt: string;
+  /** ISO 8601, or null while active. */
+  archivedAt: string | null;
+  /** Its time to archive, or its time so far while active. */
+  durationSeconds: number;
+  active: boolean;
+  /** Measured sections, in number order. */
+  sections: SectionMetric[];
+}
+
+/** One Monday-start UTC week of archives. */
+export interface WeekMetric {
+  /** ISO 8601: Monday 00:00 UTC. */
+  weekStart: string;
+  changes: number;
+  /** Null when no change was archived that week. */
+  medianArchiveSeconds: number | null;
+}
+
+/** One of the slowest finished sections, with the change it belongs to. */
+export interface SlowSection {
+  changeId: string;
+  change: string;
+  repo: CardRepo;
+  number: number;
+  title: string;
+  durationSeconds: number;
+}
+
+/** `GET /api/metrics`: over the archived changes the filters match. */
+export interface TeamMetrics {
+  changes: number;
+  /** Null when no change matches. */
+  medianArchiveSeconds: number | null;
+  /** Null when the matching changes have no finished section. */
+  medianSectionSeconds: number | null;
+  /** The last 12 weeks, oldest first. */
+  weeks: WeekMetric[];
+  /** The 10 slowest, slowest first. */
+  slowestSections: SlowSection[];
+}

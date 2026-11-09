@@ -3,8 +3,8 @@
 A live dashboard of coding agents working through [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes.
 Agents report through a small local MCP bridge (the `panopticon` CLI). The server parses each change's
 `tasks.md`, and the dashboard shows one card per change, with section and whole-change progress updating live.
-Each card opens the change's own page, which shows the documents in its folder. Once a change is archived with
-`/opsx:archive`, it leaves the dashboard for the history.
+Each card opens the change's own page, which shows the documents in its folder and how long it and its sections have
+taken. Once a change is archived with `/opsx:archive`, it leaves the dashboard for the history.
 
 - Requirements: [`docs/DISCOVERY.md`](docs/DISCOVERY.md). Decisions: [`docs/adrs/`](docs/adrs/).
 - Connecting an agent: [`docs/cli.md`](docs/cli.md).
@@ -81,6 +81,39 @@ of that change name archives it instead. How the bridge finds archives is in [`d
 
 **After deploying this version**, changes archived before it are still cards. Report each one once from its repo with
 the new CLI (ask the agent to report it, or call `report_progress` with its name), and it moves to the history.
+
+### Metrics
+
+The server keeps the progress each report saw, so it can say how long changes and their sections take. Every time is
+**wall-clock time**: a change parked over a weekend counts the weekend.
+
+- **Time to archive:** a change's time from its first report to its archive. While the change is active, its page
+  shows its time so far ("Running for 2d").
+- **Time per section:** for each numbered section of `tasks.md` (`## 2. Core`), the time from its start to its
+  finish.
+  - **Start:** the first report in which the section has a ticked task, or is the current section.
+  - **Finish:** the first report from which every one of its tasks stays ticked, through the change's last report.
+    A section that's reopened, by unticking a task, finishes again later.
+  - **Not measured:** a section that's started but not finished is in progress, with its time so far. Once the
+    change is archived, it's unfinished, with its time up to the archive. A section
+    never started, or with no tasks, has no time. Sections without a number aren't measured.
+  - **Matching:** sections are matched by their number, and show their latest title. A change that renumbers its
+    sections part-way joins different sections under one number.
+
+A change's page shows its time and each section's. The **Metrics** page (in the header) covers archived changes,
+filtered like the history:
+- the number of changes, their median time to archive, and the median time per (finished) section;
+- a chart of the weekly median time to archive over the last 12 weeks, in Monday-start weeks (UTC) by archive date;
+- the ten slowest sections, each linking to its change.
+
+**After deploying this version**, the server fills in the progress of reports accepted before it, once, in the
+background at start-up. It reads each one's stored `tasks.md`, a batch at a time, while it carries on serving.
+- **While it runs:** the metrics cover what it has filled in so far.
+- **A missing `tasks.md`:** that report is left out of the metrics, and the server logs its event id.
+- **A storage error reading one report's `tasks.md`:** it logs that report and skips it, carrying on with the rest,
+  and the next start tries it again. Three errors in a row mean the store is down: it stops with a warning, and the
+  next start carries on from there.
+- **Afterwards:** nothing is read twice, so a restart once it's done does nothing.
 
 ### Working on the dashboard
 

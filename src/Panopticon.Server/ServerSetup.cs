@@ -9,6 +9,8 @@ using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Live;
+using Panopticon.Server.Metrics;
+using Panopticon.Server.Progress;
 using Panopticon.Server.Reporting;
 using Resend;
 
@@ -110,8 +112,13 @@ public static class ServerSetup
 
         // Reporting and live updates.
         services.AddScoped<ReportRecorder>();
+
+        // change-metrics D3: older reports get their progress filled in once, in the background.
+        services.AddSingleton<ProgressBackfill>();
+        services.AddHostedService(sp => sp.GetRequiredService<ProgressBackfill>());
         services.AddScoped<ChangeCards>();
         services.AddScoped<ChangePages>();
+        services.AddScoped<MetricsReader>();
         services.AddSingleton<DocumentRenderer>();
         services.AddSingleton<ChangeBroadcaster>();
 
@@ -156,6 +163,7 @@ public static class ServerSetup
         app.MapTokens();
         app.MapDashboard();
         app.MapChanges();
+        app.MapMetrics();
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file
         // extension (the built assets) out of the fallback, so UseStaticFiles serves them: an endpoint matched here would

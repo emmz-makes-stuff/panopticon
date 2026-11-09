@@ -221,6 +221,61 @@ Repo              Owner           Person      Machine       Agent type        St
   and a Clear filters link button. On the history it's one line, "No archived changes match these filters.", and the
   getting-started page is only for a dashboard with no changes and no filters.
 
+## Metrics
+
+How long changes and their sections take: a panel on the change page and the metrics page. They speak in the pages'
+quiet voice. The one bold thing is the **duration rule**: a slow section should stand out after the fact, the way a
+quiet card stands out while it's happening.
+
+```
+Took 5d 6h                                       (Gabarito 700, 20px)
+Wall-clock time, first report to archive.        (small, muted)
+ 1  Server         ━━━━━━━━━━━                    2h
+ 2  Web            ━━━━━━━━━━━━━━━━━━━━━━     3h 30m
+ 3  Docs           ┅┅┅┅┅         in progress, 1h so far
+```
+
+- **Duration rule:** a 3px `--ink-muted` line, as long as its time against the longest time beside it. It's at least
+  a sliver, so a short time still shows. It's dashed while the section is still running, so state is a shape and not
+  only a colour.
+    - **Colour:** time isn't progress, so rules are never teal.
+    - **Accessibility:** a rule is decorative (`aria-hidden`), and the time is always printed beside it.
+- **Durations:**
+    - **Display:** short, in Atkinson 600 with tabular figures: "45m", "3h 30m", "5d 6h". They never read "0m":
+      under a minute is "<1m".
+    - **Long form:** "5 days 6 hours", used as the tooltip and as the screen-reader text (Emmz, 2026-11-09).
+    - **In progress:** a running section reads "in progress, 1h so far". The state and the time are joined by a comma,
+      not a middot (principle 5). "in progress" is in `--ink` 600 and the rest is muted.
+    - **Unfinished:** on an archived change, a section that never finished reads "unfinished, 3h", styled the same,
+      with its rule still dashed. Its clock stopped at the archive, so it isn't "so far" (Emmz, 2026-11-09).
+- **The change page's panel:**
+    - **Placement:** it sits between the header and the documents, 38rem wide, and ends with a hairline.
+    - **The headline:** "Took 5d 6h" for an archived change, or "Running for 2d" for an active one, then the
+      wall-clock note.
+    - **Section rows:** a grid of number (muted, right-aligned), title, rule, then time. On a phone, the rule drops
+      under its title.
+    - **Empty:** with nothing measured yet, it reads "No section has been started yet." It updates with the page's
+      live refresh.
+- **The metrics page:**
+    - **Width:** one column, 44rem wide.
+    - **The filters and the empty state:** the history's filter bar. When nothing matches, the history's no-match
+      block with Clear filters.
+    - **The figures:** three, in a `dl` row between hairlines: changes archived, median time to archive, and median
+      time per section. Each value is Gabarito 700 at 25px over a small muted label. There are no tiles, no shadows
+      and no big-number hero. On a phone they sit two to a row.
+- **The weekly chart:** hand-built inline SVG.
+    - **The marks:** the bars are `--lit` with a 2px radius, the cells' own shape, on a `--rule` baseline. The labels
+      ("2 Nov", the week's Monday in UTC) and the top-of-scale value are `--ink-muted`.
+    - **Width and phones:** it is 40rem at most, and scrolls sideways on a phone rather than shrink its labels below
+      reading size.
+    - **Accessibility:** it's `role="img"`, named by a one-sentence summary, with a visually hidden table of every
+      week's value.
+- **Slowest sections:** rows between hairlines, like the history. Each row reads, in order:
+    - the change name (Gabarito 700) as the link, then its owner/name;
+    - "Section 2: Core", muted;
+    - its time at the right;
+    - a full-width rule against the slowest.
+
 ## Accessibility floor
 
 - Each bar is `role="progressbar"` with `aria-label` (e.g. "Section 6 progress") and `aria-valuenow`,

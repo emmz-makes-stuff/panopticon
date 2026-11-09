@@ -15,6 +15,7 @@ import { cardsView } from "./views/cards";
 import { changeView } from "./views/change";
 import { deviceView } from "./views/device";
 import { historyView } from "./views/history";
+import { metricsView } from "./views/metrics";
 import { membersView } from "./views/members";
 import { confirmView, signInView } from "./views/signIn";
 import { tokensView } from "./views/tokens";
@@ -142,6 +143,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
       name,
       routeLink("/members", "Members"),
       routeLink("/history", "History"),
+      routeLink("/metrics", "Metrics"),
       routeLink("/tokens", "Tokens"),
       signOut,
       failure,
@@ -226,6 +228,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     "/tokens": tokensView(env),
     "/device": deviceView(env),
     "/history": historyView(env),
+    "/metrics": metricsView(env),
     "/changes/:id": changeView(env),
   };
 

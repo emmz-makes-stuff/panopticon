@@ -134,6 +134,55 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
     }
 
     [Fact]
+    public async Task A_report_keeps_its_counts_and_its_numbered_sections_only()
+    {
+        // change-metrics: Per-report progress is kept, Unnumbered section.
+        const string tasks = """
+            - [x] 0.1 before any section
+            ## 1. Setup
+            - [x] 1.1
+            - [x] 1.2
+            ## 2. Core
+            - [x] 2.1
+            - [ ] 2.2
+            ## Workflow follow-up
+            - [ ] archive
+            """;
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+
+        await harness.RecordAsync(new ReportInput(_panopticon, "change-metrics", _claudeOnVm1, 2, tasks), ct);
+
+        await using var db = harness.NewDb();
+        var reportEvent = await db.ReportEvents.SingleAsync(ct);
+        Assert.Equal((4, 6, 2), (reportEvent.OverallDone, reportEvent.OverallTotal, reportEvent.CurrentSection));
+        Assert.Collection(
+            reportEvent.Sections!,
+            s => Assert.Equal((1, "Setup", 2, 2), (s.Number, s.Title, s.Done, s.Total)),
+            s => Assert.Equal((2, "Core", 1, 2), (s.Number, s.Title, s.Done, s.Total)));
+    }
+
+    [Fact]
+    public async Task A_current_section_numbered_only_by_position_is_not_kept()
+    {
+        const string tasks = """
+            ## 1. Setup
+            - [x] 1.1
+            ## Polish
+            - [ ] tidy
+            """;
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+
+        await harness.RecordAsync(new ReportInput(_panopticon, "change-metrics", _claudeOnVm1, null, tasks), ct);
+
+        await using var db = harness.NewDb();
+        var reportEvent = await db.ReportEvents.SingleAsync(ct);
+        Assert.Null(reportEvent.CurrentSection);
+        Assert.Equal([1], reportEvent.Sections!.Select(s => s.Number));
+    }
+
+    [Fact]
     public async Task Each_report_is_an_event_from_its_own_agent()
     {
         var ct = TestContext.Current.CancellationToken;

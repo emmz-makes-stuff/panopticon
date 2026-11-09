@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CHANGE_ARCHIVED, CHANGE_UPDATED } from "../live";
 import { savedReturn, signedIn, signedOut, startTestShell } from "../testShell";
 import { card, FakeEventSource, q, until } from "../testing";
-import type { ChangePage, DocumentEntry } from "../types";
+import type { ChangeMetrics, ChangePage, DocumentEntry, SectionMetric } from "../types";
 import { changeHref } from "../links";
 import { defaultDocument } from "./change";
 
@@ -232,6 +232,182 @@ describe("change page", () => {
     expect(nav.path()).toBe("/sign-in");
     expect(savedReturn(local)).toBe("/changes/c1?doc=design.md");
     expect(server.calls.some((call) => call.path.startsWith("/api/changes"))).toBe(false);
+  });
+});
+
+const section = (
+  overrides: Partial<SectionMetric> & Pick<SectionMetric, "number" | "title">,
+): SectionMetric => ({
+  startedAt: "2026-11-03T10:00:00Z",
+  finishedAt: "2026-11-03T13:30:00Z",
+  durationSeconds: 3 * 3600 + 1800,
+  inProgress: false,
+  ...overrides,
+});
+
+const metrics = (overrides: Partial<ChangeMetrics> = {}): ChangeMetrics => ({
+  firstReportedAt: "2026-11-03T09:00:00Z",
+  archivedAt: null,
+  durationSeconds: 2 * 86400,
+  active: true,
+  sections: [],
+  ...overrides,
+});
+
+const panel = (root: HTMLElement) => root.querySelector<HTMLElement>(".change-metrics");
+// The visible text only: the screen-reader copy is left out, as a sighted reader sees it.
+const shown = (element: Element | null) => {
+  const copy = element?.cloneNode(true) as HTMLElement | undefined;
+  copy?.querySelectorAll(".visually-hidden").forEach((hidden) => hidden.remove());
+  return copy?.textContent ?? "";
+};
+
+// Spec change-metrics: Change page metrics.
+describe("change page metrics", () => {
+  it("Metrics on an archived change: took 5d 6h, labelled in words, and each section's time", async () => {
+    const server = serverFor(
+      changePage({ archivedAt: "2026-11-08T15:00:00Z", archiveFolder: "2026-11-08-team-auth" }),
+    ).on("GET", "/api/changes/c1/metrics", {
+      status: 200,
+      body: metrics({
+        archivedAt: "2026-11-08T15:00:00Z",
+        active: false,
+        durationSeconds: 5 * 86400 + 6 * 3600,
+        sections: [
+          section({ number: 1, title: "Server", durationSeconds: 2 * 3600 }),
+          section({ number: 2, title: "Web" }),
+        ],
+      }),
+    });
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".metrics-total") !== null);
+
+    const total = q(root, ".metrics-total");
+    expect(shown(total)).toBe("Took 5d 6h");
+    expect(q(total, ".visually-hidden").textContent).toBe("5 days 6 hours");
+    expect(q(total, ".duration").title).toBe("5 days 6 hours");
+    expect(q(total, '[aria-hidden="true"]').textContent).toBe("5d 6h");
+    expect(q(root, ".metrics-note").textContent).toBe("Wall-clock time, first report to archive.");
+    expect([...root.querySelectorAll(".metrics-section")].map(shown)).toEqual([
+      "1Server2h",
+      "2Web3h 30m",
+    ]);
+    // Under the header, before the documents.
+    expect(panel(root)?.previousElementSibling?.className).toBe("change-head");
+  });
+
+  it("an active change runs for its time so far, marking a section in progress", async () => {
+    const server = serverFor().on("GET", "/api/changes/c1/metrics", {
+      status: 200,
+      body: metrics({
+        sections: [
+          section({ number: 1, title: "Server" }),
+          section({
+            number: 2,
+            title: "Web",
+            finishedAt: null,
+            inProgress: true,
+            durationSeconds: 3600,
+          }),
+        ],
+      }),
+    });
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".metrics-total") !== null);
+
+    expect(shown(q(root, ".metrics-total"))).toBe("Running for 2d");
+    expect(q(root, ".metrics-note").textContent).toBe("Wall-clock time since the first report.");
+    const rows = [...root.querySelectorAll(".metrics-section")];
+    expect(rows.map((row) => row.classList.contains("in-progress"))).toEqual([false, true]);
+    expect(shown(q(rows[1] as HTMLElement, ".metrics-section-time"))).toBe(
+      "in progress, 1h so far",
+    );
+  });
+
+  it("A section unfinished at archive: marked unfinished, at its time up to the archive", async () => {
+    const server = serverFor(
+      changePage({ archivedAt: "2026-11-08T15:00:00Z", archiveFolder: "2026-11-08-team-auth" }),
+    ).on("GET", "/api/changes/c1/metrics", {
+      status: 200,
+      body: metrics({
+        archivedAt: "2026-11-08T15:00:00Z",
+        active: false,
+        sections: [
+          section({
+            number: 4,
+            title: "Docs",
+            finishedAt: null,
+            inProgress: true,
+            durationSeconds: 2 * 3600,
+          }),
+        ],
+      }),
+    });
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".metrics-section") !== null);
+
+    const row = q(root, ".metrics-section");
+    expect(row.classList.contains("unfinished")).toBe(true);
+    expect(row.classList.contains("in-progress")).toBe(false);
+    expect(shown(q(row, ".metrics-section-time"))).toBe("unfinished, 2h");
+    expect(q(row, ".metrics-section-time .visually-hidden").textContent).toBe("2 hours");
+  });
+
+  it("Live while open: a report finishing section 3 shows it finished, without a reload", async () => {
+    let finished = false;
+    const server = serverFor().on("GET", "/api/changes/c1/metrics", () => ({
+      status: 200,
+      body: metrics({
+        sections: [
+          finished
+            ? section({ number: 3, title: "Web", durationSeconds: 5400 })
+            : section({
+                number: 3,
+                title: "Web",
+                finishedAt: null,
+                inProgress: true,
+                durationSeconds: 3600,
+              }),
+        ],
+      }),
+    }));
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".metrics-section") !== null);
+    expect(q(root, ".metrics-section").classList.contains("in-progress")).toBe(true);
+    const source = FakeEventSource.latest();
+    source.open();
+
+    finished = true;
+    source.emit(CHANGE_UPDATED, JSON.stringify(card({ changeId: "c1" })));
+    await until(() => !q(root, ".metrics-section").classList.contains("in-progress"));
+
+    expect(shown(q(root, ".metrics-section-time"))).toBe("1h 30m");
+    expect(server.to("GET", "/api/changes/c1/metrics")).toHaveLength(2);
+  });
+
+  it("a change with no measured section says so", async () => {
+    const server = serverFor().on("GET", "/api/changes/c1/metrics", {
+      status: 200,
+      body: metrics(),
+    });
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".metrics-empty") !== null);
+
+    expect(q(root, ".metrics-empty").textContent).toBe("No section has been started yet.");
+    expect(root.querySelector(".metrics-sections")).toBeNull();
+  });
+
+  it("a failed metrics load says so in the panel and leaves the documents alone", async () => {
+    const server = serverFor().on("GET", "/api/changes/c1/metrics", {
+      status: 500,
+      body: { detail: "Boom." },
+    });
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(
+      () => root.querySelector(".metrics-error") !== null && shownPath(root) === "proposal.md",
+    );
+
+    expect(q(root, ".metrics-error").textContent).toBe("Couldn't load this change's metrics.");
   });
 });
 
