@@ -217,9 +217,25 @@ export interface FilterChoices {
   clients: string[];
 }
 
-const byLabel = (a: string, b: string) => {
-  const folded = a.toLowerCase().localeCompare(b.toLowerCase());
-  return folded !== 0 ? folded : a.localeCompare(b);
+/**
+ * Case-insensitive ordinal order, as the server sorts the history's choices (.NET `OrdinalIgnoreCase`, which compares
+ * upper-cased code units), so the two pages list the same values in the same order (review fix 10.7).
+ */
+export const byLabel = (a: string, b: string): number => {
+  const [x, y] = [a.toUpperCase(), b.toUpperCase()];
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+
+/** Field by field, as the server does: host, then owner, then name. */
+const byFields = (...pairs: [string, string][]): number => {
+  for (const [a, b] of pairs) {
+    const order = byLabel(a, b);
+    if (order !== 0) {
+      return order;
+    }
+  }
+
+  return 0;
 };
 
 /**
@@ -264,8 +280,10 @@ export function filterChoices(cards: readonly ChangeCard[]): FilterChoices {
   }
 
   return {
-    repos: [...repos.values()].sort((a, b) => byLabel(repoValue(a), repoValue(b))),
-    owners: [...owners.values()].sort((a, b) => byLabel(ownerValue(a), ownerValue(b))),
+    repos: [...repos.values()].sort((a, b) =>
+      byFields([a.host, b.host], [a.owner, b.owner], [a.name, b.name]),
+    ),
+    owners: [...owners.values()].sort((a, b) => byFields([a.host, b.host], [a.owner, b.owner])),
     members: [...members.entries()]
       .map(([id, displayName]) => ({ id, displayName }))
       .sort((a, b) => byLabel(a.displayName, b.displayName) || a.id.localeCompare(b.id)),

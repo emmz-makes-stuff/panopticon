@@ -336,3 +336,69 @@ describe("mountApp filters", () => {
     expect(q<HTMLSelectElement>(root, "select[name=machine]").value).toBe("vm-1");
   });
 });
+
+// Review fixes (filters-and-idle-cards §10).
+describe("mountApp review fixes", () => {
+  it("10.1 a live update after a failed load keeps the error up, and the next refresh shows its card", async () => {
+    const root = document.createElement("main");
+    const fetch = fakeFetch([], 500);
+    const app = await mountApp(root, { fetch, now: () => NOW });
+
+    app.upsert(repoCard("a", "panopticon", NOW.toISOString()));
+    app.remove("nope");
+
+    expect(root.querySelector("[role=alert]")?.textContent).toContain("answered 500");
+    expect(cardsIn(root)).toHaveLength(0);
+
+    fetch.status = 200;
+    fetch.cards = [repoCard("a", "panopticon", NOW.toISOString())];
+    await app.refresh();
+    expect(cardsIn(root).map((c) => text(c, ".card-change"))).toEqual(["panopticon"]);
+  });
+
+  it("10.3 takes the deployment's thresholds when they arrive after the cards", async () => {
+    const { root, app } = await mount([card({ lastReportedAt: minutesAgo(3) })]);
+    expect(q(root, "article.card").dataset["quiet"]).toBe("active");
+
+    app.setQuiet({ idleAfterSeconds: 60, staleAfterSeconds: 600 });
+
+    expect(q(root, "article.card").dataset["quiet"]).toBe("idle");
+  });
+
+  it("10.5 the tick doesn't redraw the filter bar, so a choice in progress survives it", async () => {
+    const { root, app } = await mount([repoCard("a", "one"), repoCard("b", "two")]);
+    const select = q<HTMLSelectElement>(root, "select[name=repo]");
+    const options = [...select.options];
+    select.value = "github.com/emmz/two"; // moving through the select, not chosen yet
+
+    app.updateTimes();
+
+    expect(select.value).toBe("github.com/emmz/two");
+    expect([...select.options]).toEqual(options);
+  });
+
+  it("10.2 a live update that changes nothing for a select leaves its value alone", async () => {
+    const { root, app } = await mount([repoCard("a", "one"), repoCard("b", "two")]);
+    const select = q<HTMLSelectElement>(root, "select[name=repo]");
+    select.value = "github.com/emmz/two";
+
+    app.upsert(repoCard("a", "one", NOW.toISOString()));
+
+    expect(select.value).toBe("github.com/emmz/two");
+  });
+
+  it("10.4 an address with only a malformed filter offers Clear filters", async () => {
+    const root = document.createElement("main");
+    await mountApp(root, {
+      fetch: fakeFetch([card()]),
+      now: () => NOW,
+      filters: filtered("member=not-a-member-id"),
+    });
+
+    expect(q<HTMLButtonElement>(root, ".filter-clear").hidden).toBe(false);
+    q<HTMLButtonElement>(root, ".filter-clear").click();
+
+    expect(q<HTMLButtonElement>(root, ".filter-clear").hidden).toBe(true);
+    expect(q(root, ".filter-note").hidden).toBe(true);
+  });
+});

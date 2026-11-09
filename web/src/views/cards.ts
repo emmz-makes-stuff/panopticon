@@ -22,12 +22,18 @@ export function cardsView(env: Env): View {
       api: env.api,
       now: env.now,
       statusSlot: env.statusSlot,
-      quiet: await env.quietSettings(),
       filters: parseFilters(params),
       onFiltersChange: (filters) => {
         const query = toQuery(filters);
         navigate(query ? `/?${query}` : "/");
       },
+    });
+    // The cards show at once with the default thresholds; the deployment's apply when they arrive (review fix 10.3).
+    let left = false;
+    void env.quietSettings().then((settings) => {
+      if (!left) {
+        app.setQuiet(settings);
+      }
     });
     const stopLive = connectLive(app, {
       createEventSource: env.createEventSource,
@@ -42,6 +48,7 @@ export function cardsView(env: Env): View {
     const timer = setInterval(() => app.updateTimes(), TIMES_REFRESH_MS);
     return {
       teardown: () => {
+        left = true;
         stopLive();
         clearInterval(timer);
         env.statusSlot.replaceChildren();

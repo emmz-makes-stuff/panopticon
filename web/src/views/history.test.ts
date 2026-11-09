@@ -302,7 +302,7 @@ describe("history page filters", () => {
     const { root, nav } = await startTestShell("/history?machine=nowhere", server);
     await until(() => root.querySelector(".no-match") !== null);
 
-    expect(q(root, ".no-match p").textContent).toBe("No archived changes match these filters.");
+    expect(q(root, ".no-match h2").textContent).toBe("No archived changes match these filters");
     q<HTMLButtonElement>(root, ".no-match button").click();
     await until(() => nav.path() === "/history");
 

@@ -230,3 +230,19 @@ describe("filterOptions", () => {
     expect(options.machine).toEqual([{ value: "vm-1", label: "vm-1" }]);
   });
 });
+
+// Review fix 10.7: the same order as the server's OrdinalIgnoreCase, field by field.
+describe("filterChoices order", () => {
+  it("sorts host, owner, then name, comparing upper-cased code units as the server does", () => {
+    const choices = filterChoices([
+      card({ changeId: "1", repo: { host: "github.com", owner: "a/b", name: "x" } }),
+      card({ changeId: "2", repo: { host: "github.com", owner: "a-b", name: "x" } }),
+      card({ changeId: "3", repo: { host: "github.com", owner: "a_b", name: "x" } }),
+      card({ changeId: "4", repo: { host: "github.com", owner: "A", name: "x" } }),
+    ]);
+
+    // Upper-cased: '-' (2D) < '/' (2F) < 'B' (42) < '_' (5F).
+    expect(choices.owners.map((o) => o.owner)).toEqual(["A", "a-b", "a/b", "a_b"]);
+    expect(choices.repos.map((r) => r.owner)).toEqual(["A", "a-b", "a/b", "a_b"]);
+  });
+});

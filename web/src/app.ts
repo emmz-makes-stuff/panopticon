@@ -1,7 +1,6 @@
 import { createApi, fetchChanges, type Api, type FetchLike } from "./api";
 import { applyQuiet, renderCard } from "./card";
-import { button, el } from "./dom";
-import { createFilterBar } from "./filterBar";
+import { createFilterBar, noMatch } from "./filterBar";
 import {
   filterChoices,
   filterOptions,
@@ -70,6 +69,8 @@ export interface App {
    * is still applied, ready for when the filters change.
    */
   setFilters(filters: ParsedFilters): void;
+  /** Uses the deployment's idle and stale thresholds from now on (they can arrive after the cards). */
+  setQuiet(settings: QuietSettings): void;
 }
 
 interface Shown {
@@ -82,7 +83,7 @@ const reportedAt = (card: ChangeCard) => Date.parse(card.lastReportedAt);
 /** Mounts the dashboard into `root`, then loads the cards. Resolves once the first load has rendered (or failed). */
 export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<App> {
   const now = deps.now ?? (() => new Date());
-  const quiet = deps.quiet ?? DEFAULT_QUIET;
+  let quiet = deps.quiet ?? DEFAULT_QUIET;
   const api = deps.api ?? createApi({ fetch: deps.fetch });
   const shown = new Map<string, Shown>();
 
@@ -117,20 +118,24 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
   root.replaceChildren(...(deps.statusSlot ? [content] : [header, content]));
 
   let filters = deps.filters ?? { filters: {}, dropped: [] };
-  /** Whether a load has rendered: until then, the tick and filter changes leave a load error in place. */
+  /**
+   * Whether a load has rendered. Until then, nothing redraws, so a load error stays up: live updates are kept for when
+   * the next refresh renders, and the tick and filter changes just wait.
+   */
   let loaded = false;
+  /** Whether the filter bar needs redrawing: the cards or the filters changed. The tick alone doesn't. */
+  let barStale = true;
+  let choices = filterChoices([]);
   const changeFilters =
     deps.onFiltersChange ?? ((next) => app.setFilters({ filters: next, dropped: [] }));
   const bar = createFilterBar({
     keys: ["repo", "owner", "member", "machine", "client", "status"],
     onChange: (next) => changeFilters(next),
   });
-  const noMatch = el(
-    "section",
-    "no-match",
-    el("h2", undefined, "No changes match these filters"),
-    el("p", undefined, "Choose other filters, or clear them to see every change."),
-    button("Clear filters", () => changeFilters({}), "link-button"),
+  const noMatchBlock = noMatch(
+    "No changes match these filters",
+    "Choose other filters, or clear them to see every change.",
+    () => changeFilters({}),
   );
 
   /**
@@ -138,6 +143,12 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
    * card's quiet state up to date. The grid is only rebuilt when what it shows changes, so the clock's tick doesn't
    * replay a card's motion.
    */
+  /** The cards changed: their choices are worked out again, and the bar redrawn at the next layout. */
+  function cardsChanged(): void {
+    choices = filterChoices([...shown.values()].map((entry) => entry.card));
+    barStale = true;
+  }
+
   function layout(): void {
     const at = now();
     const ordered = [...shown.values()].sort((a, b) => reportedAt(b.card) - reportedAt(a.card));
@@ -158,12 +169,12 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
       return;
     }
 
-    bar.update(
-      filterOptions(filterChoices(ordered.map((e) => e.card)), filters.filters),
-      filters.filters,
-      filters.dropped,
-    );
-    const body = visible.length === 0 ? noMatch : grid;
+    if (barStale) {
+      bar.update(filterOptions(choices, filters.filters), filters.filters, filters.dropped);
+      barStale = false;
+    }
+
+    const body = visible.length === 0 ? noMatchBlock : grid;
     const elements = visible.map((entry) => entry.element);
     if (
       grid.children.length !== elements.length ||
@@ -192,6 +203,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
       shown.clear();
       next.forEach((entry, id) => shown.set(id, entry));
+      cardsChanged();
       loaded = true;
       layout();
     },
@@ -213,7 +225,11 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
       element.classList.add("updated");
       shown.set(card.changeId, { card, element });
-      layout();
+      cardsChanged();
+      if (loaded) {
+        layout();
+      }
+
       return true;
     },
 
@@ -222,7 +238,11 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
         return false;
       }
 
-      layout();
+      cardsChanged();
+      if (loaded) {
+        layout();
+      }
+
       return true;
     },
 
@@ -238,6 +258,14 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
     setFilters(next) {
       filters = next;
+      barStale = true;
+      if (loaded) {
+        layout();
+      }
+    },
+
+    setQuiet(settings) {
+      quiet = settings;
       if (loaded) {
         layout();
       }

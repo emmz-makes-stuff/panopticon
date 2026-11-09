@@ -57,13 +57,13 @@
 
 ## 10. Review fixes: web
 
-- [ ] 10.1 `upsert` and `remove` before a successful load keep their cards but leave the load error in place (code-review 1). Verify that a live event after a failed load still shows the error, and that the next refresh shows the cards.
-- [ ] 10.2 The filter bar doesn't set the value of the select that has focus (code-review 2). Verify that the tick leaves a focused select alone.
-- [ ] 10.3 The cards view mounts with the default thresholds and applies the settings when they arrive (`App.setQuiet`) (code-review 4). Verify that cards show while `/api/settings` is pending, then take the settings.
-- [ ] 10.4 Show "Clear filters" when the address had only malformed filters, and clearing removes them (code-review 6).
-- [ ] 10.5 Choices are worked out only when the cards change (render, upsert, remove), not on the tick (code-review 8). Verify that the tick doesn't rebuild the options.
-- [ ] 10.6 One shared no-match block for the dashboard and the history (`noMatch(heading, hint, clear)`) (code-review 9).
-- [ ] 10.7 The dashboard sorts choices as the server does: field by field (host, owner, name), case-insensitive ordinal (code-review 10). Verify with a punctuation case such as `a-b` against `a/b`.
+- [x] 10.1 `upsert` and `remove` before a successful load keep their cards but leave the load error in place (code-review 1). Verify that a live event after a failed load still shows the error, and that the next refresh shows the cards.
+- [x] 10.2 The filter bar doesn't set the value of the select that has focus (code-review 2). Verify that the tick leaves a focused select alone.
+- [x] 10.3 The cards view mounts with the default thresholds and applies the settings when they arrive (`App.setQuiet`) (code-review 4). Verify that cards show while `/api/settings` is pending, then take the settings.
+- [x] 10.4 Show "Clear filters" when the address had only malformed filters, and clearing removes them (code-review 6).
+- [x] 10.5 Choices are worked out only when the cards change (render, upsert, remove), not on the tick (code-review 8). Verify that the tick doesn't rebuild the options.
+- [x] 10.6 One shared no-match block for the dashboard and the history (`noMatch(heading, hint, clear)`) (code-review 9).
+- [x] 10.7 The dashboard sorts choices as the server does: field by field (host, owner, name), case-insensitive ordinal (code-review 10). Verify with a punctuation case such as `a-b` against `a/b`.
 
 ## Workflow follow-up
 

@@ -102,3 +102,26 @@ describe("cardsView filters", () => {
     expect(nav.path()).toBe("/?machine=vm-1");
   });
 });
+
+// Review fix 10.3: the cards don't wait for /api/settings.
+describe("cardsView settings", () => {
+  it("shows the cards while the settings are pending, then applies them", async () => {
+    let answer: (response: Response) => void = () => undefined;
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
+    const server = signedIn();
+    const slow = Object.assign(
+      (input: string, init?: RequestInit) =>
+        input === "/api/settings" ? pending : server(input, init),
+      { calls: server.calls, on: server.on, to: server.to },
+    );
+
+    const { root } = await startTestShell("/", slow);
+
+    expect(q(root, "article.card").dataset["quiet"]).toBe("active");
+    answer(new Response(JSON.stringify({ idleAfterSeconds: 60, staleAfterSeconds: 600 })));
+    await settle();
+    await settle();
+
+    expect(q(root, "article.card").dataset["quiet"]).toBe("idle");
+  });
+});

@@ -1,6 +1,6 @@
 import { ApiError, fetchHistory, fetchHistoryChoices } from "../api";
 import { alertLine, button, el, page, routeLink } from "../dom";
-import { createFilterBar } from "../filterBar";
+import { createFilterBar, noMatch } from "../filterBar";
 import {
   filterOptions,
   hasFilters,
@@ -161,11 +161,10 @@ function row(entry: HistoryEntry): HTMLLIElement {
 
 function empty(filtered: boolean, clear: () => void): HTMLElement {
   if (filtered) {
-    return el(
-      "div",
-      "history-empty no-match",
-      el("p", undefined, "No archived changes match these filters."),
-      button("Clear filters", clear, "link-button"),
+    return noMatch(
+      "No archived changes match these filters",
+      "Choose other filters, or clear them to see every archived change.",
+      clear,
     );
   }
 
