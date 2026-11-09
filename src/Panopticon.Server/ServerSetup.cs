@@ -81,6 +81,12 @@ public static class ServerSetup
             .Validate(o => !string.IsNullOrWhiteSpace(o.ConnectionString), $"ConnectionStrings:{ConnectionStringName} is not configured.")
             .ValidateOnStart();
 
+        // When cards go idle and stale (filters-and-idle-cards D1).
+        services.AddOptions<ActivityOptions>()
+            .Bind(configuration.GetSection(ActivityOptions.Section))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ActivityOptions>, ActivityOptionsValidation>();
+
         // Storage.
         services.AddDbContext<PanopticonDb>((sp, options) =>
             DbOptions.Configure(

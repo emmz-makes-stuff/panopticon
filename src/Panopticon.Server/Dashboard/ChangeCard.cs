@@ -15,8 +15,11 @@ public sealed record ChangeCard(
 
 public sealed record CardRepo(string Host, string Owner, string Name);
 
-/// <summary>An agent on a card. <see cref="Member"/> is its member's display name, or null for a report with no member.</summary>
-public sealed record CardAgent(string Client, string Machine, DateTimeOffset LastReportedAt, string? Member = null);
+/// <summary>
+/// An agent on a card. <see cref="Member"/> is its member's display name and <see cref="MemberId"/> their id (the person
+/// filter matches on it, filters-and-idle-cards D6); both are null for a report with no member.
+/// </summary>
+public sealed record CardAgent(string Client, string Machine, DateTimeOffset LastReportedAt, string? Member = null, Guid? MemberId = null);
 
 public sealed record CardSection(int Number, string Title, CardProgress Progress);
 
@@ -65,7 +68,7 @@ public sealed class ChangeCards(PanopticonDb db)
             change.Name,
             [.. change.Agents
                 .OrderByDescending(a => a.LastReportedAt)
-                .Select(a => new CardAgent(a.Agent.ClientName, a.Agent.MachineName, a.LastReportedAt, a.Agent.Member?.DisplayName))],
+                .Select(a => new CardAgent(a.Agent.ClientName, a.Agent.MachineName, a.LastReportedAt, a.Agent.Member?.DisplayName, a.Agent.MemberId))],
             section,
             new CardProgress(snapshot.OverallDone, snapshot.OverallTotal),
             change.LastReportedAt);

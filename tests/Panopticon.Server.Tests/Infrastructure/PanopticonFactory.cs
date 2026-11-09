@@ -147,6 +147,16 @@ public sealed class PanopticonFactory(
         return secret;
     }
 
+    /// <summary>A member's id, by email.</summary>
+    public async Task<Guid> MemberIdAsync(string email = MemberEmail, CancellationToken cancellationToken = default)
+    {
+        await using var db = NewDb();
+        return await db.Members
+            .Where(m => m.EmailKey == Panopticon.Server.Auth.MemberEmail.Key(email))
+            .Select(m => m.Id)
+            .SingleAsync(cancellationToken);
+    }
+
     /// <summary>The default member's API token, issued once per test server and reused.</summary>
     public async Task<string> MemberTokenAsync(CancellationToken cancellationToken = default)
     {

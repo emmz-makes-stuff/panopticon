@@ -152,7 +152,9 @@ public class ApiTokenReportTests(PostgresFixture postgres, S3Fixture s3)
         }
 
         using var browser = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
-        Assert.Equal([("claude-code", "vm-1", (string?)null)], Agents(await SingleCardAsync(browser)));
+        var card = await SingleCardAsync(browser);
+        Assert.Equal([("claude-code", "vm-1", (string?)null)], Agents(card));
+        Assert.Equal(JsonValueKind.Null, card.GetProperty("agents")[0].GetProperty("memberId").ValueKind);
     }
 
     // "Two members on one machine", and "Card shows identity and agents" (API side).
@@ -170,9 +172,16 @@ public class ApiTokenReportTests(PostgresFixture postgres, S3Fixture s3)
         await ReportAsync(factory, samToken);
         await ReportAsync(factory, emmzToken);
 
-        var agents = Agents(await SingleCardAsync(browser));
+        var card = await SingleCardAsync(browser);
+        var agents = Agents(card);
         Assert.Equal(2, agents.Count);
         Assert.Equal(["Emmz", "Sam"], agents.Select(a => a.Member).Order());
+
+        // Each agent carries its member's id (filters-and-idle-cards D6), on /api/changes.
+        var ids = card.GetProperty("agents").EnumerateArray()
+            .ToDictionary(a => a.GetProperty("member").GetString()!, a => a.GetProperty("memberId").GetGuid());
+        Assert.Equal(await factory.MemberIdAsync(cancellationToken: Ct), ids["Emmz"]);
+        Assert.Equal(await factory.MemberIdAsync(Sam, Ct), ids["Sam"]);
         Assert.All(agents, a => Assert.Equal(("claude-code", "vm-1"), (a.Client, a.Machine)));
     }
 

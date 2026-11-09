@@ -176,7 +176,9 @@ public class ChangeEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("team-auth", first.GetProperty("change").GetString());
         Assert.Equal("2026-11-08-team-auth", first.GetProperty("archiveFolder").GetString());
         Assert.Equal("panopticon", first.GetProperty("repo").GetProperty("name").GetString());
-        Assert.Equal("vm-1", Assert.Single(first.GetProperty("agents").EnumerateArray()).GetProperty("machine").GetString());
+        var agent = Assert.Single(first.GetProperty("agents").EnumerateArray());
+        Assert.Equal("vm-1", agent.GetProperty("machine").GetString());
+        Assert.Equal((await factory.MemberIdAsync(cancellationToken: ct)).ToString(), agent.GetProperty("memberId").GetString());
         Assert.NotEqual(JsonValueKind.Null, first.GetProperty("archivedAt").ValueKind);
         Assert.Equal(JsonValueKind.Null, history.GetProperty("nextBefore").ValueKind);
 

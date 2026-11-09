@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
+using Microsoft.Extensions.Options;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Live;
 
@@ -15,6 +16,9 @@ public sealed record ArchivedChange(Guid ChangeId);
 public static class DashboardEndpoints
 {
     public const string ChangesPath = "/api/changes";
+
+    /// <summary>The thresholds the web app works out quiet cards with (filters-and-idle-cards D1).</summary>
+    public const string SettingsPath = "/api/settings";
     public const string EventsPath = "/api/events";
     public const string ChangeUpdatedEvent = "change-updated";
 
@@ -37,6 +41,9 @@ public static class DashboardEndpoints
         {
             throw new InvalidOperationException($"{KeepAliveConfigKey} must be a positive TimeSpan.");
         }
+
+        endpoints.MapGet(SettingsPath, (IOptions<ActivityOptions> activity) => TypedResults.Ok(DashboardSettings.From(activity.Value)))
+            .RequireAuthorization(AuthPolicies.Member);
 
         endpoints.MapGet(ChangesPath, async (ChangeCards cards, CancellationToken cancellationToken) =>
             TypedResults.Ok(await cards.ListAsync(cancellationToken)))

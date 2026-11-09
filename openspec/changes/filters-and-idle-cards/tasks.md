@@ -2,10 +2,10 @@
 
 ## 1. Server: quiet thresholds and member ids on cards
 
-- [ ] 1.1 Add `ActivityOptions` (`Panopticon:Activity`: `IdleAfter` 30 min, `StaleAfter` 4 h), bound and validated on start: both must be positive, and `StaleAfter` must exceed `IdleAfter`, with an error naming both keys (D1). Verify the "Default thresholds" and "Thresholds out of order" scenarios with server tests.
-- [ ] 1.2 Add `GET /api/settings` (member-only), returning `idleAfterSeconds` and `staleAfterSeconds`. Verify it with an endpoint test, including a 401 when signed out.
-- [ ] 1.3 Add `MemberId` to `CardAgent`, set in `ChangeCards.ToCard` (D6). Verify that `/api/changes`, a `change-updated` event and `/api/history` all carry `memberId`, and that it's null for a bootstrap-token agent.
-- [ ] 1.4 Document `Panopticon:Activity:IdleAfter` and `StaleAfter` in the README's configuration table, and verify that the setting names match the options section.
+- [x] 1.1 Add `ActivityOptions` (`Panopticon:Activity`: `IdleAfter` 30 min, `StaleAfter` 4 h), bound and validated on start: both must be positive, and `StaleAfter` must exceed `IdleAfter`, with an error naming both keys (D1). Verify the "Default thresholds" and "Thresholds out of order" scenarios with server tests.
+- [x] 1.2 Add `GET /api/settings` (member-only), returning `idleAfterSeconds` and `staleAfterSeconds`. Verify it with an endpoint test, including a 401 when signed out.
+- [x] 1.3 Add `MemberId` to `CardAgent`, set in `ChangeCards.ToCard` (D6). Verify that `/api/changes`, a `change-updated` event and `/api/history` all carry `memberId`, and that it's null for a bootstrap-token agent.
+- [x] 1.4 Document `Panopticon:Activity:IdleAfter` and `StaleAfter` in the README's configuration table, and verify that the setting names match the options section.
 
 ## 2. Server: history filters
 

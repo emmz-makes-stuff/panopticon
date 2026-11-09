@@ -155,6 +155,9 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains(lines, l => l.StartsWith("id: ", StringComparison.Ordinal));
         var data = JsonDocument.Parse(lines.Single(l => l.StartsWith("data: ", StringComparison.Ordinal))["data: ".Length..]);
         Assert.Equal("walking-skeleton", data.RootElement.GetProperty("change").GetString());
+        Assert.Equal(
+            (await factory.MemberIdAsync(cancellationToken: ct)).ToString(),
+            data.RootElement.GetProperty("agents")[0].GetProperty("memberId").GetString());
     }
 
     // change-documents-and-history: Archived card leaves (D10).
