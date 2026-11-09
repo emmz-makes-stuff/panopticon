@@ -35,9 +35,9 @@ public sealed class ActivityOptionsValidation : IValidateOptions<ActivityOptions
         options.Problem() is { } problem ? ValidateOptionsResult.Fail(problem) : ValidateOptionsResult.Success;
 }
 
-/// <summary>The deployment's settings the web app needs (<c>GET /api/settings</c>), in whole seconds.</summary>
-public sealed record DashboardSettings(long IdleAfterSeconds, long StaleAfterSeconds)
+/// <summary>The deployment's settings the web app needs (<c>GET /api/settings</c>), in seconds, fractional so any accepted value arrives unchanged.</summary>
+public sealed record DashboardSettings(double IdleAfterSeconds, double StaleAfterSeconds)
 {
     public static DashboardSettings From(ActivityOptions activity) =>
-        new((long)activity.IdleAfter.TotalSeconds, (long)activity.StaleAfter.TotalSeconds);
+        new(activity.IdleAfter.TotalSeconds, activity.StaleAfter.TotalSeconds);
 }

@@ -15,11 +15,11 @@ public class ActivitySettingsTests(PostgresFixture postgres, S3Fixture s3)
     private async Task<PanopticonFactory> FactoryAsync(Dictionary<string, string> settings) =>
         new(await postgres.CreateDatabaseAsync(Ct), await s3.CreateBucketAsync(Ct)) { Settings = settings };
 
-    private static async Task<(long Idle, long Stale)> SettingsAsync(PanopticonFactory factory)
+    private static async Task<(double Idle, double Stale)> SettingsAsync(PanopticonFactory factory)
     {
         using var http = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
         var settings = await http.GetFromJsonAsync<JsonElement>(DashboardEndpoints.SettingsPath, Ct);
-        return (settings.GetProperty("idleAfterSeconds").GetInt64(), settings.GetProperty("staleAfterSeconds").GetInt64());
+        return (settings.GetProperty("idleAfterSeconds").GetDouble(), settings.GetProperty("staleAfterSeconds").GetDouble());
     }
 
     // "Default thresholds".
@@ -28,7 +28,7 @@ public class ActivitySettingsTests(PostgresFixture postgres, S3Fixture s3)
     {
         await using var factory = await FactoryAsync([]);
 
-        Assert.Equal((1800L, 14400L), await SettingsAsync(factory));
+        Assert.Equal((1800d, 14400d), await SettingsAsync(factory));
     }
 
     [Fact]
@@ -40,7 +40,20 @@ public class ActivitySettingsTests(PostgresFixture postgres, S3Fixture s3)
             [ActivityOptions.StaleAfterKey] = "00:05:00",
         });
 
-        Assert.Equal((60L, 300L), await SettingsAsync(factory));
+        Assert.Equal((60d, 300d), await SettingsAsync(factory));
+    }
+
+    // Review fix 9.2: a threshold the server accepts reaches the browser unchanged, fractions included.
+    [Fact]
+    public async Task Fractional_thresholds_are_served_unchanged()
+    {
+        await using var factory = await FactoryAsync(new()
+        {
+            [ActivityOptions.IdleAfterKey] = "00:00:00.5",
+            [ActivityOptions.StaleAfterKey] = "00:00:01.5",
+        });
+
+        Assert.Equal((0.5, 1.5), await SettingsAsync(factory));
     }
 
     // "Thresholds out of order".

@@ -17,8 +17,6 @@ public sealed record OwnerKey(string Host, string Owner);
 /// </summary>
 public sealed record HistoryFilter(RepoKey? Repo, OwnerKey? Owner, Guid? Member, string? Machine, string? Client)
 {
-    public static readonly HistoryFilter None = new(null, null, null, null, null);
-
     /// <summary>
     /// The filter from the query's values; a blank value means no filter. On a malformed value, <paramref name="error"/>
     /// names the parameter and the filter is null.
@@ -114,7 +112,7 @@ public sealed record HistoryFilter(RepoKey? Repo, OwnerKey? Owner, Guid? Member,
         var segments = value.Trim().Split('/');
         for (var i = 0; i < segments.Length; i++)
         {
-            segments[i] = Key(segments[i]);
+            segments[i] = IdentityKey.Of(segments[i]);
             if (segments[i].Length == 0)
             {
                 return null;
@@ -124,8 +122,5 @@ public sealed record HistoryFilter(RepoKey? Repo, OwnerKey? Owner, Guid? Member,
         return segments;
     }
 
-    private static string? KeyOrNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : Key(value);
-
-    // The same key as ReportRecorder's identity columns.
-    private static string Key(string value) => value.Trim().ToLowerInvariant();
+    private static string? KeyOrNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : IdentityKey.Of(value);
 }

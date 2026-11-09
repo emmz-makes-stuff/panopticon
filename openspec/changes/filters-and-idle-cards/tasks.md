@@ -49,6 +49,22 @@
 - [x] 8.1 Add a `make install` target that runs `aot`, then copies `artifacts/cli/panopticon` to `$(INSTALL_DIR)` (default `~/.local/bin`, created if missing), prints `INSTALL_EXIT:<n>`, and warns when that directory isn't on `PATH`. Verify by running it and `~/.local/bin/panopticon --version` (or `--help`).
 - [x] 8.2 Document `make install` in the README (reporting progress) and `docs/cli.md`.
 
+## 9. Review fixes: server
+
+- [x] 9.1 Remove the unused `HistoryFilter.None`.
+- [x] 9.2 Serve the thresholds as fractional seconds (`DashboardSettings` as `double`), so any value the server accepts reaches the browser unchanged. Verify that `00:00:00.5`/`00:00:01.5` are served as 0.5/1.5 (code-review 3).
+- [x] 9.3 One shared identity-key helper (`IdentityKey.Of`) used by `ReportRecorder` and `HistoryFilter`, in place of two copies (code-review 7). The existing identity and filter tests cover it.
+
+## 10. Review fixes: web
+
+- [ ] 10.1 `upsert` and `remove` before a successful load keep their cards but leave the load error in place (code-review 1). Verify that a live event after a failed load still shows the error, and that the next refresh shows the cards.
+- [ ] 10.2 The filter bar doesn't set the value of the select that has focus (code-review 2). Verify that the tick leaves a focused select alone.
+- [ ] 10.3 The cards view mounts with the default thresholds and applies the settings when they arrive (`App.setQuiet`) (code-review 4). Verify that cards show while `/api/settings` is pending, then take the settings.
+- [ ] 10.4 Show "Clear filters" when the address had only malformed filters, and clearing removes them (code-review 6).
+- [ ] 10.5 Choices are worked out only when the cards change (render, upsert, remove), not on the tick (code-review 8). Verify that the tick doesn't rebuild the options.
+- [ ] 10.6 One shared no-match block for the dashboard and the history (`noMatch(heading, hint, clear)`) (code-review 9).
+- [ ] 10.7 The dashboard sorts choices as the server does: field by field (host, owner, name), case-insensitive ordinal (code-review 10). Verify with a punctuation case such as `a-b` against `a/b`.
+
 ## Workflow follow-up
 
 - Run the whole-change review and offer `/code-review` before archiving.
