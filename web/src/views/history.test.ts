@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signedIn, signedOut, savedReturn, startTestShell } from "../testShell";
 import { card, FakeEventSource, q, until } from "../testing";
 import type { HistoryEntry } from "../types";
@@ -198,5 +198,147 @@ describe("history link and card links", () => {
     await until(() => heading() === "team-auth");
     expect(nav.path()).toBe("/changes/c1");
     events.remove();
+  });
+});
+
+const CHOICES = {
+  repos: [
+    { host: "github.com", owner: "acme", name: "site" },
+    { host: "github.com", owner: "emmz", name: "panopticon" },
+  ],
+  owners: [
+    { host: "github.com", owner: "acme" },
+    { host: "github.com", owner: "emmz" },
+  ],
+  members: [{ id: "0190f5a2-0000-7000-8000-000000000001", displayName: "Emmz" }],
+  machines: ["laptop", "vm-1"],
+  clients: ["claude-code"],
+};
+
+/** A history server that answers each page by the query it's asked with, and records the queries. */
+function filteredHistory(
+  pages: Record<string, { changes: HistoryEntry[]; nextBefore: string | null }>,
+) {
+  return signedIn()
+    .on("GET", "/api/history/filters", { status: 200, body: CHOICES })
+    .on("GET", "/api/history", (call) => {
+      const query = call.url.split("?")[1] ?? "";
+      return { status: 200, body: pages[query] ?? { changes: [], nextBefore: null } };
+    });
+}
+
+const historyCalls = (server: ReturnType<typeof filteredHistory>) =>
+  server.to("GET", "/api/history").map((call) => call.url);
+
+// Spec change-filters: History filtered by the server, Filters in the address, Filter choices (history).
+describe("history page filters", () => {
+  const panopticon = "repo=github.com%2Femmz%2Fpanopticon";
+
+  it("A filtered address: the first page is asked for with the filters, and the bar shows them", async () => {
+    const server = filteredHistory({
+      [panopticon]: {
+        changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")],
+        nextBefore: null,
+      },
+    });
+    const { root } = await startTestShell(`/history?${panopticon}`, server);
+    await until(() => rows(root).length === 1);
+
+    expect(historyCalls(server)).toEqual([`/api/history?${panopticon}`]);
+    expect(q<HTMLSelectElement>(root, "select[name=repo]").value).toBe(
+      "github.com/emmz/panopticon",
+    );
+    expect(root.querySelector("select[name=status]")).toBeNull();
+  });
+
+  it("Show more keeps the filters", async () => {
+    const cursor = "2026-11-08T15:00:00Z";
+    const server = filteredHistory({
+      [panopticon]: { changes: [entry("ta", "team-auth", cursor)], nextBefore: cursor },
+      [`${panopticon}&before=${encodeURIComponent(cursor)}`]: {
+        changes: [entry("ws", "walking-skeleton", "2026-11-07T10:00:00Z")],
+        nextBefore: null,
+      },
+    });
+    const { root } = await startTestShell(`/history?${panopticon}`, server);
+    await until(() => rows(root).length === 1);
+
+    q<HTMLButtonElement>(root, ".show-more").click();
+    await until(() => rows(root).length === 2);
+
+    expect(rows(root).map((r) => r.change)).toEqual(["team-auth", "walking-skeleton"]);
+    expect(historyCalls(server)[1]).toBe(
+      `/api/history?${panopticon}&before=${encodeURIComponent(cursor)}`,
+    );
+    expect(q<HTMLButtonElement>(root, ".show-more").hidden).toBe(true);
+  });
+
+  it("A filter change starts the list again in place, from the server, writing the address", async () => {
+    const server = filteredHistory({
+      "": { changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")], nextBefore: null },
+      "machine=laptop": {
+        changes: [entry("ws", "walking-skeleton", "2026-11-07T10:00:00Z")],
+        nextBefore: null,
+      },
+    });
+    const { root, nav } = await startTestShell("/history", server);
+    await until(() => rows(root).length === 1);
+    const heading = q(root, ".view h2");
+
+    const select = q<HTMLSelectElement>(root, "select[name=machine]");
+    select.value = "laptop";
+    select.dispatchEvent(new Event("change"));
+    await until(() => rows(root)[0]?.change === "walking-skeleton");
+
+    expect(nav.path()).toBe("/history?machine=laptop");
+    expect(rows(root).map((r) => r.change)).toEqual(["walking-skeleton"]);
+    expect(historyCalls(server)).toEqual(["/api/history", "/api/history?machine=laptop"]);
+    expect(q(root, ".view h2")).toBe(heading);
+    expect(server.to("GET", "/api/history/filters")).toHaveLength(1);
+  });
+
+  it("A filtered history with no matches says so, with a way to clear the filters", async () => {
+    const server = filteredHistory({});
+    const { root, nav } = await startTestShell("/history?machine=nowhere", server);
+    await until(() => root.querySelector(".no-match") !== null);
+
+    expect(q(root, ".no-match p").textContent).toBe("No archived changes match these filters.");
+    q<HTMLButtonElement>(root, ".no-match button").click();
+    await until(() => nav.path() === "/history");
+
+    expect(nav.path()).toBe("/history");
+  });
+
+  it("offers the server's choices, and a failed choices fetch still shows the list", async () => {
+    const ok = filteredHistory({
+      "": { changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")], nextBefore: null },
+    });
+    const shown = await startTestShell("/history", ok);
+    await until(() => rows(shown.root).length === 1);
+    expect(
+      [...q<HTMLSelectElement>(shown.root, "select[name=owner]").options].map((o) => o.textContent),
+    ).toEqual(["All owners", "github.com/acme", "github.com/emmz"]);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const failing = filteredHistory({
+      "": { changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")], nextBefore: null },
+    }).on("GET", "/api/history/filters", { status: 500 });
+    const { root } = await startTestShell("/history", failing);
+    await until(() => rows(root).length === 1);
+
+    expect(rows(root).map((r) => r.change)).toEqual(["team-auth"]);
+    expect(warn).toHaveBeenCalledWith(
+      "Couldn't load the history's filter choices.",
+      expect.anything(),
+    );
+    warn.mockRestore();
+  });
+
+  it("ignores a status in the address: every change here is archived", async () => {
+    const server = filteredHistory({});
+    await startTestShell("/history?status=stale&machine=vm-1", server);
+    await until(() => historyCalls(server).length === 1);
+
+    expect(historyCalls(server)).toEqual(["/api/history?machine=vm-1"]);
   });
 });

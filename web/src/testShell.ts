@@ -52,6 +52,10 @@ export const signedIn = (member = MEMBER) =>
     .on("GET", "/api/settings", {
       status: 200,
       body: { idleAfterSeconds: 1800, staleAfterSeconds: 14400 },
+    })
+    .on("GET", "/api/history/filters", {
+      status: 200,
+      body: { repos: [], owners: [], members: [], machines: [], clients: [] },
     });
 
 /** A server with no session. */

@@ -28,7 +28,7 @@
 
 ## 5. Web: the history's filters
 
-- [ ] 5.1 The history view reads filters from the address, fetches `/api/history/filters` for the choices, and calls `/api/history` with the filter query. "Show more" keeps the filters, and a filter change resets the list in place through `update(params)`. There's no status filter here. Verify with history view tests: a filtered first page, "Show more" within the filter, a filter change resets and refetches, the empty filtered state, and a failed choices fetch still shows the list.
+- [x] 5.1 The history view reads filters from the address, fetches `/api/history/filters` for the choices, and calls `/api/history` with the filter query. "Show more" keeps the filters, and a filter change resets the list in place through `update(params)`. There's no status filter here. Verify with history view tests: a filtered first page, "Show more" within the filter, a filter change resets and refetches, the empty filtered state, and a failed choices fetch still shows the list.
 
 ## 6. Design pass
 

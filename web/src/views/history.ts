@@ -1,10 +1,25 @@
-import { ApiError, fetchHistory } from "../api";
+import { ApiError, fetchHistory, fetchHistoryChoices } from "../api";
 import { alertLine, button, el, page, routeLink } from "../dom";
+import { createFilterBar } from "../filterBar";
+import {
+  filterOptions,
+  hasFilters,
+  parseFilters,
+  toQuery,
+  type FilterChoices,
+  type FilterKey,
+  type Filters,
+} from "../filters";
 import { agentName, calendarDate } from "../format";
 import type { View } from "../router";
 import type { Env } from "../shell";
 import type { HistoryEntry } from "../types";
 import { changeHref } from "../links";
+
+/** The history's filters: every dimension but status, since every change here is archived (spec change-filters). */
+export const HISTORY_KEYS: readonly FilterKey[] = ["repo", "owner", "member", "machine", "client"];
+
+const NO_CHOICES: FilterChoices = { repos: [], owners: [], members: [], machines: [], clients: [] };
 
 const failureText = (failure: unknown) =>
   failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
@@ -12,26 +27,44 @@ const failureText = (failure: unknown) =>
 /**
  * `/history` (spec change-history, design D11): archived changes, the most recently archived first, each opening its
  * change page at the final snapshot. "Show more" fetches the next page.
+ *
+ * Filters (spec change-filters, filters-and-idle-cards D3–D5) come from the address and are applied by the server, so
+ * each page holds up to 50 matches and "Show more" continues within them. A choice in the bar writes the address; the
+ * router calls `update`, which starts the list again in place. The choices are the server's, among archived changes.
  */
 export function historyView(env: Env): View {
-  return async ({ root }) => {
-    const list = el("ol", "history-list");
+  return async ({ root, params, navigate }) => {
+    let parsed = parseFilters(params);
+    let choices = NO_CHOICES;
+    const changeFilters = (filters: Filters) => {
+      const query = toQuery(filters, HISTORY_KEYS);
+      navigate(query ? `/history?${query}` : "/history");
+    };
+    const bar = createFilterBar({ keys: HISTORY_KEYS, onChange: changeFilters });
+    const showBar = () =>
+      bar.update(filterOptions(choices, parsed.filters), parsed.filters, parsed.dropped);
+
+    const body = el("div", "history-body");
     const error = alertLine();
     const more = button("Show more", () => void load(), "show-more");
-    more.hidden = true;
+    let list = el("ol", "history-list");
     let before: string | null = null;
-    let left = false;
+    /** Bumped when the list starts again (new filters) or the view is left, so an older answer is dropped. */
+    let generation = 0;
 
     async function load(): Promise<void> {
+      const ticket = generation;
       more.disabled = true;
       try {
-        const next = await fetchHistory(env.api, before);
-        if (left) {
+        const next = await fetchHistory(env.api, before, toQuery(parsed.filters, HISTORY_KEYS));
+        if (ticket !== generation) {
           return;
         }
 
         if (!before && next.changes.length === 0) {
-          list.replaceWith(empty());
+          body.replaceChildren(
+            empty(hasFilters(parsed.filters, HISTORY_KEYS), () => changeFilters({})),
+          );
         }
 
         list.append(...next.changes.map(row));
@@ -40,6 +73,10 @@ export function historyView(env: Env): View {
         more.textContent = "Show more";
         error.clear();
       } catch (failure) {
+        if (ticket !== generation) {
+          return;
+        }
+
         if (!(failure instanceof ApiError && failure.status === 401)) {
           error.show(failureText(failure));
           // A failed first load leaves nothing to show more of, so the button offers to try again.
@@ -49,14 +86,46 @@ export function historyView(env: Env): View {
           }
         }
       } finally {
-        more.disabled = false;
+        if (ticket === generation) {
+          more.disabled = false;
+        }
       }
     }
 
-    root.replaceChildren(page("History", error.element, list, more));
-    await load();
-    return () => {
-      left = true;
+    function restart(): Promise<void> {
+      generation++;
+      before = null;
+      list = el("ol", "history-list");
+      body.replaceChildren(list);
+      more.hidden = true;
+      error.clear();
+      return load();
+    }
+
+    showBar();
+    root.replaceChildren(page("History", bar.element, error.element, body, more));
+    // The choices load beside the first page; without them the list still shows, and the bar offers only what's chosen.
+    const loadingChoices = fetchHistoryChoices(env.api).then(
+      (loaded) => {
+        choices = loaded;
+        showBar();
+      },
+      (failure: unknown) => {
+        if (!(failure instanceof ApiError && failure.status === 401)) {
+          console.warn("Couldn't load the history's filter choices.", failure);
+        }
+      },
+    );
+    await Promise.all([restart(), loadingChoices]);
+    return {
+      teardown: () => {
+        generation++;
+      },
+      update: (next) => {
+        parsed = parseFilters(next);
+        showBar();
+        void restart();
+      },
     };
   };
 }
@@ -90,7 +159,16 @@ function row(entry: HistoryEntry): HTMLLIElement {
   );
 }
 
-function empty(): HTMLElement {
+function empty(filtered: boolean, clear: () => void): HTMLElement {
+  if (filtered) {
+    return el(
+      "div",
+      "history-empty no-match",
+      el("p", undefined, "No archived changes match these filters."),
+      button("Clear filters", clear, "link-button"),
+    );
+  }
+
   return el(
     "div",
     "history-empty",
