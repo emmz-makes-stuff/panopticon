@@ -9,9 +9,9 @@
 
 ## 2. Server: history filters
 
-- [ ] 2.1 Accept `repo`, `owner`, `member`, `machine` and `client` on `GET /api/history`, applied in `ChangePages.HistoryAsync` against the `…Key` columns and `Agents.Any` (D3, D4). Malformed values return 400 naming the parameter. Verify each filter scenario in change-filters against the API: one repo, one owner, owner with a subgroup, person, shared change, machine, agent type, owner and person combined, and case-insensitive matching.
-- [ ] 2.2 Verify "Filtered paging": seed 60 archived changes in one repo and 40 elsewhere. The first filtered page holds 50, `nextBefore` continues with the other 10, and a run of equal archive times still never splits a page.
-- [ ] 2.3 Add `GET /api/history/filters` (member-only): the distinct repos, owners, members (id and display name), machines and clients over archived changes only (D5). Verify "History choices" (active-only values are absent), that a no-member agent adds no person, and a 401 when signed out.
+- [x] 2.1 Accept `repo`, `owner`, `member`, `machine` and `client` on `GET /api/history`, applied in `ChangePages.HistoryAsync` against the `…Key` columns and `Agents.Any` (D3, D4). Malformed values return 400 naming the parameter. Verify each filter scenario in change-filters against the API: one repo, one owner, owner with a subgroup, person, shared change, machine, agent type, owner and person combined, and case-insensitive matching.
+- [x] 2.2 Verify "Filtered paging": seed 60 archived changes in one repo and 40 elsewhere. The first filtered page holds 50, `nextBefore` continues with the other 10, and a run of equal archive times still never splits a page.
+- [x] 2.3 Add `GET /api/history/filters` (member-only): the distinct repos, owners, members (id and display name), machines and clients over archived changes only (D5). Verify "History choices" (active-only values are absent), that a no-member agent adds no person, and a 401 when signed out.
 
 ## 3. Web: quiet cards
 
