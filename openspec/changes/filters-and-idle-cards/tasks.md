@@ -37,7 +37,7 @@
 ## 7. Integration and human verification
 
 - [x] 7.1 Run `make gates` and `make e2e` (the image's new settings endpoint and options), and verify `GATES_EXIT:0` and `E2E_EXIT:0`.
-- [ ] 7.2 Write the human verification recipe in a devlog note, then stop for Emmz to run it:
+- [x] 7.2 Write the human verification recipe in a devlog note, then stop for Emmz to run it:
   - the filter bar and the quiet states, in light and dark, at desktop and phone width;
   - filtering the live dashboard while an agent reports, including a change outside the filter;
   - a card going idle in a real browser (with `IdleAfter` set to 1 minute locally);
