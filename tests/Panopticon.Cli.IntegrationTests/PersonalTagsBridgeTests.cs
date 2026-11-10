@@ -105,20 +105,22 @@ public sealed class PersonalTagsBridgeTests(PostgresFixture postgres, S3Fixture 
     }
 
     [Fact]
-    public async Task An_unreadable_config_file_is_a_tool_error_without_its_content()
+    public async Task An_unreadable_config_file_still_reports_and_keeps_the_tags_the_server_has()
     {
         await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
         using var repo = TempGitRepo.Create();
         repo.WriteTasks("walking-skeleton", Tasks);
-        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-        await File.WriteAllTextAsync(ConfigPath, $$"""{ "token": "{{FileToken}}", "tags": [""", Ct);
+        SaveTags("dev");
         await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root, await server.MemberTokenAsync(Ct)), server.CreateClient, "claude-code", Ct);
+        Assert.True((await bridge.ReportAsync("walking-skeleton", null, Ct)).IsError is not true);
 
-        var refused = await bridge.ReportAsync("walking-skeleton", null, Ct);
+        await File.WriteAllTextAsync(ConfigPath, $$"""{ "token": "{{FileToken}}", "tags": [""", Ct);
+        var result = await bridge.ReportAsync("walking-skeleton", null, Ct);
 
-        Assert.True(refused.IsError);
-        var text = BridgeHarness.Text(refused);
-        Assert.Contains(ConfigPath, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(FileToken, text, StringComparison.Ordinal);
+        Assert.True(result.IsError is not true, BridgeHarness.Text(result));
+        Assert.Equal(["dev"], await TagsOnServerAsync(server));
+        Assert.Contains(ConfigPath, bridge.Log, StringComparison.Ordinal);
+        Assert.Contains("without personal tags", bridge.Log, StringComparison.Ordinal);
+        Assert.DoesNotContain(FileToken, bridge.Log, StringComparison.Ordinal);
     }
 }

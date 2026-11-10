@@ -67,6 +67,9 @@ panopticon tags remove DEV                   # tags compare without regard to ca
 - **A hand-edited file:** if the file holds a tag that isn't valid, reports fail with an error naming the file and
   the tag, and nothing is sent, rather than clearing your tags. Fix it, or run `panopticon tags remove` with the
   bad entry's exact text.
+- **A file that can't be read** (not valid JSON, or no permission): reports still go, without your tags, so the
+  server keeps the ones it has. The bridge logs a warning naming the file on stderr. `panopticon tags` refuses to
+  edit such a file, so nothing in it is lost.
 
 Project tags are different: a Project's owners define them, and they're shared by everyone in the Project. To put
 them on changes, use the dashboard, or ask the agent: it calls `tag_change`.
@@ -250,8 +253,10 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
   was sent. The bridge never falls back to a personal report, so a typo can't hide the work.
 - **"Project … wasn't found, or you aren't a member of it"**: the link file names a Project you can't report into.
   Ask an owner to invite you, or call `list_projects` for the ones you can.
-- **"The personal tags in … aren't valid"** or **"The config at … can't be read"**: fix the config file, or run
-  `panopticon tags remove` with the bad entry's exact text. Nothing was sent.
+- **"The personal tags in … aren't valid"**: fix the config file, or run `panopticon tags remove` with the bad
+  entry's exact text. Nothing was sent.
+- **"The config at … can't be read"** (from `panopticon tags`, or as a warning in the bridge's log): fix the file,
+  or run `panopticon login` to write a fresh one, then add your tags again.
 - **"This repo isn't linked to a Project"** (from `tag_change`): only a linked repo's changes have project tags. Link
   it first.
 - **"The Panopticon server refused the tag change: …"**: the server's reason follows. For an unknown tag it lists the
