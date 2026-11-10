@@ -29,6 +29,9 @@ public abstract record ChangeEvent
 
     /// <summary>A member was removed from the server: their streams end, so the browser's reconnect gets a 401.</summary>
     public sealed record MemberRemoved(Guid MemberId) : ChangeEvent;
+
+    /// <summary>A Project's tags changed (tags D6); sent as <c>project-tags-changed</c> to the Project's members.</summary>
+    public sealed record TagsChanged(Guid ProjectId, IReadOnlyList<ProjectTagRef> Tags) : ChangeEvent;
 }
 
 /// <summary>
@@ -97,6 +100,13 @@ public sealed class ChangeBroadcaster
 
     /// <summary>Call after removing a member from the server commits: their open streams end.</summary>
     public void PublishMemberRemoved(Guid memberId) => Publish(new ChangeEvent.MemberRemoved(memberId));
+
+    /// <summary>Call after a Project tag write commits, with the Project's tags as they are now (tags D6).</summary>
+    public void PublishProjectTags(Guid projectId, IReadOnlyList<ProjectTagRef> tags)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+        Publish(new ChangeEvent.TagsChanged(projectId, tags));
+    }
 
     private void Publish(ChangeEvent change)
     {

@@ -7,8 +7,8 @@
 
 ## 2. Server: a Project's tags
 
-- [ ] 2.1 Add the Project tag endpoints (add, rename, delete) and `tags` with `changeCount` on `GET /api/projects/{id}` (D3): the owner/editor check, D1 validation (400), duplicates and the 200 limit (409, under the Project row lock), and 404 for non-members. Verify "A Project's tags", "Managing a Project's tags", "Renaming a tag", "Deleting a tag" (server side) and the `projects` "Membership roles" and "Project page" scenarios with endpoint tests, including two concurrent adds at 199 tags leaving exactly 200.
-- [ ] 2.2 Publish `ProjectTagsChanged(projectId, tags)` after each tag write, and send `project-tags-changed` to subscribers in that Project's scope (D6). Verify with `StreamAsync` tests: a `PAN` member gets the event for a rename, and an `ACME`-only member doesn't.
+- [x] 2.1 Add the Project tag endpoints (add, rename, delete) and `tags` with `changeCount` on `GET /api/projects/{id}` (D3): the owner/editor check, D1 validation (400), duplicates and the 200 limit (409, under the Project row lock), and 404 for non-members. Verify "A Project's tags", "Managing a Project's tags", "Renaming a tag", "Deleting a tag" (server side) and the `projects` "Membership roles" and "Project page" scenarios with endpoint tests, including two concurrent adds at 199 tags leaving exactly 200.
+- [x] 2.2 Publish `ProjectTagsChanged(projectId, tags)` after each tag write, and send `project-tags-changed` to subscribers in that Project's scope (D6). Verify with `StreamAsync` tests: a `PAN` member gets the event for a rename, and an `ACME`-only member doesn't.
 
 ## 3. Server: tagging changes
 

@@ -23,8 +23,17 @@ public sealed record ProjectView(Guid Id, string Name, string Code, string Role)
 /// <summary>A member of a Project, as its page lists them.</summary>
 public sealed record ProjectMemberView(Guid MemberId, string Email, string DisplayName, string Role, DateTimeOffset JoinedAt);
 
-/// <summary>A Project's page: the Project, the viewer's role, and its members (owners first, then by when they joined).</summary>
-public sealed record ProjectDetails(Guid Id, string Name, string Code, string Role, IReadOnlyList<ProjectMemberView> Members);
+/// <summary>
+/// A Project's page: the Project, the viewer's role, its members (owners first, then by when they joined), and its tags
+/// (by key, then value; tags D3).
+/// </summary>
+public sealed record ProjectDetails(
+    Guid Id,
+    string Name,
+    string Code,
+    string Role,
+    IReadOnlyList<ProjectMemberView> Members,
+    IReadOnlyList<ProjectTagView> Tags);
 
 /// <summary>
 /// Projects and their members (spec projects; design D5). Every endpoint needs a session. A Project the caller doesn't
@@ -48,6 +57,7 @@ public static class ProjectEndpoints
         endpoints.MapPost($"{ProjectsPath}/{{id:guid}}/members", InviteAsync).RequireAuthorization(AuthPolicies.Member);
         endpoints.MapPatch($"{ProjectsPath}/{{id:guid}}/members/{{memberId:guid}}", ChangeRoleAsync).RequireAuthorization(AuthPolicies.Member);
         endpoints.MapDelete($"{ProjectsPath}/{{id:guid}}/members/{{memberId:guid}}", RemoveAsync).RequireAuthorization(AuthPolicies.Member);
+        endpoints.MapProjectTags();
         return endpoints;
     }
 
@@ -326,7 +336,7 @@ public static class ProjectEndpoints
         return role == ProjectRoles.Owner || allowSelf ? null : OwnersOnly();
     }
 
-    private static Task<string?> RoleAsync(PanopticonDb db, Guid projectId, Guid memberId, CancellationToken cancellationToken) =>
+    internal static Task<string?> RoleAsync(PanopticonDb db, Guid projectId, Guid memberId, CancellationToken cancellationToken) =>
         db.ProjectMembers.AsNoTracking()
             .Where(m => m.ProjectId == projectId && m.MemberId == memberId)
             .Select(m => m.Role)
@@ -358,12 +368,13 @@ public static class ProjectEndpoints
             project.Name,
             project.Code,
             role,
-            [.. members.OrderBy(m => m.Role == ProjectRoles.Owner ? 0 : 1).ThenBy(m => m.JoinedAt).ThenBy(m => m.Email, StringComparer.OrdinalIgnoreCase)]);
+            [.. members.OrderBy(m => m.Role == ProjectRoles.Owner ? 0 : 1).ThenBy(m => m.JoinedAt).ThenBy(m => m.Email, StringComparer.OrdinalIgnoreCase)],
+            await ProjectTagEndpoints.ListAsync(db, id, cancellationToken));
     }
 
     private static bool IsRole(string? role) => role is not null && ProjectRoles.All.Contains(role);
 
-    private static IResult NoSuchProject() => SignInEndpoints.Problem(HttpStatusCode.NotFound, "There's no such Project.");
+    internal static IResult NoSuchProject() => SignInEndpoints.Problem(HttpStatusCode.NotFound, "There's no such Project.");
 
     private static IResult NoSuchMember() =>
         SignInEndpoints.Problem(HttpStatusCode.NotFound, "That person isn't a member of this Project.");
