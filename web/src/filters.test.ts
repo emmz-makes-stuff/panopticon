@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   filterChoices,
   filterOptions,
+  hasFilters,
   matches,
+  MAX_FILTER_TAGS,
   parseFilters,
   toQuery,
   type Filters,
 } from "./filters";
 import { card } from "./testing";
-import type { CardAgent } from "./types";
+import type { CardAgent, ChangeCard, PersonalTagRef, ProjectTagRef } from "./types";
 
 const EMMZ = "0190f5a2-0000-7000-8000-000000000001";
 const SAM = "0190f5a2-0000-7000-8000-000000000002";
@@ -244,5 +246,255 @@ describe("filterChoices order", () => {
     // Upper-cased: '-' (2D) < '/' (2F) < 'B' (42) < '_' (5F).
     expect(choices.owners.map((o) => o.owner)).toEqual(["A", "a-b", "a/b", "a_b"]);
     expect(choices.repos.map((r) => r.owner)).toEqual(["A", "a-b", "a/b", "a_b"]);
+  });
+});
+
+// Spec change-filters, "Filter by tags" and "Filters combine" (tags D7).
+describe("the Tags filter", () => {
+  const PAN = { id: "0190f5a2-0000-7000-8000-0000000000a1", code: "PAN", name: "Panopticon" };
+  const BUG = { id: "0190f5a2-0000-7000-8000-0000000000b1", key: "bug", value: null };
+  const CSHARP = { id: "0190f5a2-0000-7000-8000-0000000000b2", key: "language", value: "csharp" };
+  const RUST = { id: "0190f5a2-0000-7000-8000-0000000000b3", key: "language", value: "rust" };
+  const tagged = (
+    projectTags: ProjectTagRef[],
+    personalTags: PersonalTagRef[] = [],
+    overrides: Partial<ChangeCard> = {},
+  ) => card({ project: PAN, projectTags, personalTags, ...overrides });
+  const tagsIn = (query: string) => parse(query).filters.tags;
+
+  describe("parseFilters", () => {
+    it("reads the three forms, lower-casing ids, keys and values, with a value that can hold ':'", () => {
+      const query = [
+        `tag=t:${BUG.id.toUpperCase()}`,
+        `tag=k:${PAN.id}:Language`,
+        "tag=p:Dev",
+        `tag=${encodeURIComponent("p:URL: https://x")}`,
+      ].join("&");
+
+      expect(tagsIn(query)).toEqual([
+        { kind: "key", projectId: PAN.id, key: "language" },
+        { kind: "personal", key: "dev", value: null },
+        { kind: "personal", key: "url", value: "https://x" },
+        { kind: "tag", id: BUG.id },
+      ]);
+      expect(parse(query).dropped).toEqual([]);
+    });
+
+    it("ignores blank values and repeats, and has no tags filter when none are chosen", () => {
+      expect(tagsIn(`tag=&tag=p:dev&tag=p:DEV&tag=+`)).toEqual([
+        { kind: "personal", key: "dev", value: null },
+      ]);
+      expect(parse("tag=").filters).toEqual({});
+    });
+
+    it.each([
+      "x",
+      "x:dev",
+      "t:not-a-guid",
+      `k:${PAN.id}`,
+      "k:not-a-guid:area",
+      `k:${PAN.id}:area:onboarding`,
+      "p:",
+      "p:bad key",
+      "p:dev:",
+      "T:dev",
+    ])("drops a malformed value, keeping the rest: %s", (value) => {
+      const parsed = parse(`tag=${encodeURIComponent(value)}&tag=p:dev`);
+      expect(parsed.filters.tags).toEqual([{ kind: "personal", key: "dev", value: null }]);
+      expect(parsed.dropped).toEqual(["tags"]);
+    });
+
+    it("keeps at most 20 tags, the first in the address, and says only the first were kept", () => {
+      const query = Array.from(
+        { length: 22 },
+        (_, n) => `tag=p:k${String(n).padStart(2, "0")}`,
+      ).join("&");
+      const parsed = parse(query);
+
+      expect(parsed.filters.tags).toHaveLength(MAX_FILTER_TAGS);
+      expect(parsed.filters.tags?.at(-1)).toEqual({ kind: "personal", key: "k19", value: null });
+      expect(parsed.dropped).toEqual([]);
+      expect(parsed.tagsOverLimit).toBe(true);
+      const twenty = parse(query.split("&").slice(0, 20).concat("tag=p:k00").join("&"));
+      expect(twenty.tagsOverLimit).toBeUndefined();
+    });
+  });
+
+  describe("toQuery", () => {
+    it("writes the tags last, one tag each, in canonical order whatever order they were chosen in", () => {
+      const filters: Filters = {
+        tags: [
+          { kind: "tag", id: BUG.id },
+          { kind: "personal", key: "url", value: "a:b" },
+          { kind: "key", projectId: PAN.id, key: "language" },
+        ],
+        machine: "vm-1",
+      };
+
+      expect(toQuery(filters)).toBe(
+        `machine=vm-1&tag=k%3A${PAN.id}%3Alanguage&tag=p%3Aurl%3Aa%3Ab&tag=t%3A${BUG.id}`,
+      );
+      expect(toQuery(filters, ["machine"])).toBe("machine=vm-1");
+      expect(toQuery(parse(toQuery(filters)).filters)).toBe(toQuery(filters));
+    });
+
+    it("counts as a filter only with a tag chosen", () => {
+      expect(hasFilters({ tags: [{ kind: "tag", id: BUG.id }] })).toBe(true);
+      expect(hasFilters({ tags: [] })).toBe(false);
+      expect(hasFilters({ tags: [{ kind: "tag", id: BUG.id }] }, ["machine"])).toBe(false);
+    });
+  });
+
+  describe("matches", () => {
+    const both = tagged([BUG], [{ key: "language", value: "csharp" }]);
+    const bugOnly = tagged([BUG]);
+    const none = tagged([]);
+
+    it("Two tags: only changes with both", () => {
+      const filters = parse(`tag=t:${BUG.id}&tag=p:language:csharp`).filters;
+
+      expect(matches(both, filters)).toBe(true);
+      expect(matches(bugOnly, filters)).toBe(false);
+      expect(matches(none, filters)).toBe(false);
+    });
+
+    it("Key alone: any value of that key, and not a change without it", () => {
+      const filters = parse(`tag=k:${PAN.id}:LANGUAGE`).filters;
+
+      expect(matches(tagged([CSHARP]), filters)).toBe(true);
+      expect(matches(tagged([RUST, BUG]), filters)).toBe(true);
+      expect(matches(bugOnly, filters)).toBe(false);
+      // Another Project's language tag isn't this Project's key.
+      expect(
+        matches(
+          tagged([CSHARP], [], { project: { ...PAN, id: "0190f5a2-0000-7000-8000-0000000000a2" } }),
+          filters,
+        ),
+      ).toBe(false);
+    });
+
+    it("A personal key alone matches the bare tag and any value; with a value, only that value", () => {
+      const dev = tagged([], [{ key: "Dev", value: null }]);
+      const devValued = tagged([], [{ key: "dev", value: "Laptop" }]);
+
+      expect(matches(dev, parse("tag=p:dev").filters)).toBe(true);
+      expect(matches(devValued, parse("tag=p:dev").filters)).toBe(true);
+      expect(matches(devValued, parse("tag=p:dev:laptop").filters)).toBe(true);
+      expect(matches(dev, parse("tag=p:dev:laptop").filters)).toBe(false);
+      // A Project tag with the same text isn't a personal one.
+      expect(matches(tagged([{ ...BUG, key: "dev" }]), parse("tag=p:dev").filters)).toBe(false);
+    });
+
+    it("Removing one tag: the filter keeps the other", () => {
+      const filters = parse(`tag=t:${BUG.id}&tag=p:dev`).filters;
+      const rest = { ...filters, tags: (filters.tags ?? []).filter((t) => t.kind !== "personal") };
+
+      expect(matches(bugOnly, filters)).toBe(false);
+      expect(matches(bugOnly, rest)).toBe(true);
+    });
+
+    it("A deleted tag in the address: nothing matches", () => {
+      const filters = parse("tag=t:0190f5a2-0000-7000-8000-0000000000ff").filters;
+
+      expect([both, bugOnly, none].filter((c) => matches(c, filters))).toEqual([]);
+    });
+
+    it("Tags with another filter: only that repo's changes carrying the tag", () => {
+      const filters = parse(`repo=github.com/emmz/panopticon&tag=t:${BUG.id}`).filters;
+      const elsewhere = tagged([BUG], [], {
+        repo: { host: "github.com", owner: "emmz", name: "meko" },
+      });
+
+      expect(matches(bugOnly, filters)).toBe(true);
+      expect(matches(elsewhere, filters)).toBe(false);
+      expect(matches(none, filters)).toBe(false);
+    });
+  });
+});
+
+// Spec change-filters, "Tag filter choices" (tags D7): the dashboard's, in the server's order.
+describe("filterChoices tags", () => {
+  const PAN = { id: "0190f5a2-0000-7000-8000-0000000000a1", code: "PAN", name: "Panopticon" };
+  const ACME = { id: "0190f5a2-0000-7000-8000-0000000000a2", code: "acme", name: "Acme" };
+  const filtersOf = (cards: ChangeCard[]) => filterChoices(cards).tags.map((c) => c.filter);
+
+  it("Grouped choices: her personal tags first, a key with values also alone above them, then PAN/bug", () => {
+    const choices = filterChoices([
+      card({
+        project: PAN,
+        projectTags: [{ id: "0190f5a2-0000-7000-8000-0000000000b1", key: "bug", value: null }],
+        personalTags: [
+          { key: "language", value: "csharp" },
+          { key: "dev", value: null },
+        ],
+      }),
+    ]).tags;
+
+    expect(choices).toEqual([
+      { filter: "p:dev", project: null, key: "dev", value: null },
+      { filter: "p:language", project: null, key: "language", value: null },
+      { filter: "p:language:csharp", project: null, key: "language", value: "csharp" },
+      { filter: "t:0190f5a2-0000-7000-8000-0000000000b1", project: PAN, key: "bug", value: null },
+    ]);
+  });
+
+  it("orders each Project by code without regard to case, then key alone, bare tag and values by value", () => {
+    const tag = (n: number, key: string, value: string | null) => ({
+      id: `0190f5a2-0000-7000-8000-0000000000c${n}`,
+      key,
+      value,
+    });
+    expect(
+      filtersOf([
+        card({
+          changeId: "p",
+          project: PAN,
+          projectTags: [
+            tag(1, "lang", "rust"),
+            tag(2, "lang", null),
+            tag(3, "lang", "csharp"),
+            tag(4, "area", "x"),
+          ],
+        }),
+        card({ changeId: "a", project: ACME, projectTags: [tag(5, "zed", null)] }),
+      ]),
+    ).toEqual([
+      "t:0190f5a2-0000-7000-8000-0000000000c5",
+      `k:${PAN.id}:area`,
+      "t:0190f5a2-0000-7000-8000-0000000000c4",
+      `k:${PAN.id}:lang`,
+      "t:0190f5a2-0000-7000-8000-0000000000c2",
+      "t:0190f5a2-0000-7000-8000-0000000000c3",
+      "t:0190f5a2-0000-7000-8000-0000000000c1",
+    ]);
+  });
+
+  it("makes one choice of a tag on several cards, spelled as on the newest; personal casings are one", () => {
+    const id = "0190f5a2-0000-7000-8000-0000000000b1";
+    const choices = filterChoices([
+      card({
+        changeId: "old",
+        lastReportedAt: "2026-11-08T10:00:00Z",
+        project: PAN,
+        projectTags: [{ id, key: "bug", value: null }],
+        personalTags: [{ key: "Dev", value: null }],
+      }),
+      card({
+        changeId: "new",
+        lastReportedAt: "2026-11-08T11:00:00Z",
+        project: PAN,
+        projectTags: [{ id, key: "defect", value: null }],
+        personalTags: [{ key: "dev", value: null }],
+      }),
+    ]).tags;
+
+    expect(choices.map((c) => [c.filter, c.key])).toEqual([
+      ["p:dev", "dev"],
+      [`t:${id}`, "defect"],
+    ]);
+  });
+
+  it("is empty with no tags", () => {
+    expect(filtersOf([card()])).toEqual([]);
   });
 });

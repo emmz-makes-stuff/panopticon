@@ -65,6 +65,7 @@ export const signedIn = (member = MEMBER) =>
         clients: [],
         projects: [],
         personal: false,
+        tags: [],
       },
     });
 

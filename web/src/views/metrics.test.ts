@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished } from "vitest";
 import { signedIn, startTestShell } from "../testShell";
-import { FakeEventSource, q, until } from "../testing";
+import { BUG_TAG_ID, FakeEventSource, q, TAG_CHOICES, until } from "../testing";
 import type { TeamMetrics, WeekMetric } from "../types";
 import { weekLabel } from "./metrics";
 
@@ -63,6 +63,7 @@ const CHOICES = {
   clients: ["claude-code"],
   projects: [{ id: "6f1c2e4a-0000-4000-8000-000000000001", code: "PAN", name: "Panopticon" }],
   personal: true,
+  tags: TAG_CHOICES,
 };
 
 /** A metrics server answering by the query it's asked with. */
@@ -253,5 +254,30 @@ describe("metrics Project filter", () => {
     ]);
     expect(figures(root)[0]).toEqual(["Changes archived", "3"]);
     expect(q<HTMLSelectElement>(root, "select[name=project]").value).toBe(PAN_ID);
+  });
+});
+
+// Spec change-filters, "Filter by tags", on the metrics page (tags D7).
+describe("metrics Tags filter", () => {
+  it("a tag choice loads the numbers again with the tag, writing the address", async () => {
+    const bug = `tag=${encodeURIComponent(`t:${BUG_TAG_ID}`)}`;
+    const server = metricsServer({ "": TEAM, [bug]: { ...TEAM, changes: 1 } });
+    const { root, nav, events } = await startTestShell("/metrics", server);
+    document.body.append(events);
+    onTestFinished(() => events.remove());
+    await until(() => root.querySelector(".tag-filter-group-box") !== null);
+    q(root, ".filter-tags-button").click();
+
+    [...root.querySelectorAll(".tag-filter-option")]
+      .find((o) => o.querySelector(".tag-filter-text")?.textContent === "bug")
+      ?.querySelector("input")
+      ?.click();
+    await until(() => figures(root)[0]?.[1] === "1");
+
+    expect(nav.path()).toBe(`/metrics?${bug}`);
+    expect(server.to("GET", "/api/metrics").map((c) => c.url)).toEqual([
+      "/api/metrics",
+      `/api/metrics?${bug}`,
+    ]);
   });
 });

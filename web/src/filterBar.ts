@@ -4,20 +4,23 @@
  * choice does (on the dashboard and the history, it changes the address).
  */
 import { button, el } from "./dom";
+import { createTagFilter } from "./tagFilter";
 import {
   chosenOption,
   filterValue,
   hasFilters,
+  MAX_FILTER_TAGS,
   parseFilters,
   toQuery,
   type FilterKey,
+  type SingleFilterKey,
   type FilterOption,
   type FilterOptions,
   type Filters,
 } from "./filters";
 
 interface Dimension {
-  key: FilterKey;
+  key: SingleFilterKey;
   label: string;
   all: string;
 }
@@ -51,7 +54,12 @@ export interface FilterBar {
    * Shows `filters` chosen among `options`, and says which keys of the address were `dropped` as malformed. A select
    * whose options haven't changed keeps its element, so a live update doesn't close one that's open.
    */
-  update(options: FilterOptions, filters: Filters, dropped?: readonly FilterKey[]): void;
+  update(
+    options: FilterOptions,
+    filters: Filters,
+    dropped?: readonly FilterKey[],
+    tagsOverLimit?: boolean,
+  ): void;
 }
 
 export function createFilterBar(bar: FilterBarOptions): FilterBar {
@@ -82,15 +90,33 @@ export function createFilterBar(bar: FilterBarOptions): FilterBar {
     element.append(el("label", "filter", el("span", "filter-label", dimension.label), select));
   }
 
+  // tags D7: after Status, with its chosen tags on a line under the bar.
+  const tags = bar.keys.includes("tags")
+    ? createTagFilter((next) => {
+        const filters = { ...current };
+        if (next.length > 0) {
+          filters.tags = next;
+        } else {
+          delete filters.tags;
+        }
+
+        bar.onChange(filters);
+      })
+    : undefined;
+  if (tags) {
+    element.append(tags.control);
+  }
+
   const clear = button("Clear filters", () => bar.onChange({}), "link-button filter-clear");
   const note = el("p", "filter-note");
   note.setAttribute("role", "status");
-  element.append(clear, note);
+  element.append(clear, ...(tags ? [tags.chosenLine] : []), note);
 
   return {
     element,
-    update(options, filters, dropped = []) {
+    update(options, filters, dropped = [], tagsOverLimit = false) {
       current = filters;
+      tags?.update(options.tags, filters.tags ?? []);
       for (const dimension of DIMENSIONS) {
         const entry = selects.get(dimension.key);
         if (!entry) {
@@ -129,10 +155,16 @@ export function createFilterBar(bar: FilterBarOptions): FilterBar {
       const ignored = dropped.filter((key) => bar.keys.includes(key));
       // A malformed filter is still in the address: clearing removes it too.
       clear.hidden = !hasFilters(filters, bar.keys) && ignored.length === 0;
-      note.textContent = ignored.length
-        ? `Ignored ${ignored.length === 1 ? "a filter" : "filters"} in the address that didn't make sense: ${ignored.join(", ")}.`
-        : "";
-      note.hidden = ignored.length === 0;
+      const others = ignored.filter((key) => key !== "tags");
+      const notes = [
+        others.length
+          ? `Ignored ${others.length === 1 ? "a filter" : "filters"} in the address that didn't make sense: ${others.join(", ")}.`
+          : "",
+        ignored.includes("tags") ? "Dropped a tag filter that wasn't valid." : "",
+        tags && tagsOverLimit ? `Kept the first ${MAX_FILTER_TAGS} tags.` : "",
+      ].filter(Boolean);
+      note.textContent = notes.join(" ");
+      note.hidden = notes.length === 0;
     },
   };
 }

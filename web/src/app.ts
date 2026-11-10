@@ -182,7 +182,12 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     }
 
     if (barStale) {
-      bar.update(filterOptions(choices, filters.filters), filters.filters, filters.dropped);
+      bar.update(
+        filterOptions(choices, filters.filters),
+        filters.filters,
+        filters.dropped,
+        filters.tagsOverLimit,
+      );
       barStale = false;
     }
 

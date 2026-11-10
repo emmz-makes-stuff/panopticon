@@ -45,8 +45,8 @@
 
 ## 9. Web: the Tags filter
 
-- [ ] 9.1 Add `tags` to `filters.ts`: the `t:`, `k:` and `p:` forms, canonical ordering in the address, AND matching, key-only matching, and dropping malformed values or any beyond 20 (D7). Verify "Filter by tags" and the modified "Filters combine" with `filters` unit tests.
-- [ ] 9.2 Add the multi-select Tags control to the filter bar on the dashboard, history and metrics, with the grouped choices (personal first, then by Project code, key-only entries above their values), removable chips, and clear (D7, D9). Verify "Tag filter choices" and "Filters in the address" for tags with Vitest tests on each page, including Back/Forward between tag choices.
+- [x] 9.1 Add `tags` to `filters.ts`: the `t:`, `k:` and `p:` forms, canonical ordering in the address, AND matching, key-only matching, and dropping malformed values or any beyond 20 (D7). Verify "Filter by tags" and the modified "Filters combine" with `filters` unit tests.
+- [x] 9.2 Add the multi-select Tags control to the filter bar on the dashboard, history and metrics, with the grouped choices (personal first, then by Project code, key-only entries above their values), removable chips, and clear (D7, D9). Verify "Tag filter choices" and "Filters in the address" for tags with Vitest tests on each page, including Back/Forward between tag choices.
 
 ## 10. Docs, integration and human verification
 

@@ -1,4 +1,5 @@
 // Test helpers (imported by *.test.ts only).
+import type { TagChoice } from "./filters";
 import type { FetchLike } from "./api";
 import type { EventSourceLike } from "./live";
 import type { ChangeCard } from "./types";
@@ -241,3 +242,21 @@ export function q<T extends Element = HTMLElement>(root: ParentNode, selector: s
 
   return found;
 }
+
+/** The Project the tag fixtures use (the history and metrics tests' `PAN`). */
+export const TAG_PROJECT = {
+  id: "6f1c2e4a-0000-4000-8000-000000000001",
+  code: "PAN",
+  name: "Panopticon",
+};
+
+/** A `PAN/bug` tag's id. */
+export const BUG_TAG_ID = "0190f5a2-0000-7000-8000-0000000000b1";
+
+/** Tags filter choices as the server gives them (spec tags "Grouped choices"): dev, language, language: csharp, PAN/bug. */
+export const TAG_CHOICES: TagChoice[] = [
+  { filter: "p:dev", project: null, key: "dev", value: null },
+  { filter: "p:language", project: null, key: "language", value: null },
+  { filter: "p:language:csharp", project: null, key: "language", value: "csharp" },
+  { filter: `t:${BUG_TAG_ID}`, project: TAG_PROJECT, key: "bug", value: null },
+];

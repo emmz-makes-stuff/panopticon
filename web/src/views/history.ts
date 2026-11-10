@@ -26,6 +26,7 @@ export const HISTORY_KEYS: readonly FilterKey[] = [
   "member",
   "machine",
   "client",
+  "tags",
 ];
 
 const NO_CHOICES: FilterChoices = {
@@ -36,6 +37,7 @@ const NO_CHOICES: FilterChoices = {
   clients: [],
   projects: [],
   personal: false,
+  tags: [],
 };
 
 const failureText = (failure: unknown) =>
@@ -59,7 +61,12 @@ export function historyView(env: Env): View {
     };
     const bar = createFilterBar({ keys: HISTORY_KEYS, onChange: changeFilters });
     const showBar = () =>
-      bar.update(filterOptions(choices, parsed.filters), parsed.filters, parsed.dropped);
+      bar.update(
+        filterOptions(choices, parsed.filters),
+        parsed.filters,
+        parsed.dropped,
+        parsed.tagsOverLimit,
+      );
 
     const body = el("div", "history-body");
     const error = alertLine();

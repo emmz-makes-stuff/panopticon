@@ -270,6 +270,159 @@ body {
   color: var(--ink-muted);
 }
 
+/* The Tags filter (tags D7, web/DESIGN.md "The Tags filter"): a button styled as the selects, with a popover. */
+.filter-tags {
+  position: relative;
+}
+
+/* Specific enough to beat `.page button` on the history and metrics: it looks like the selects beside it. */
+.filter-bar .filter-tags .filter-tags-button {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--ink-muted) 55%, var(--rule));
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink);
+  font: 400 var(--step--1) / 1.5 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-bar .filter-tags .filter-select--set {
+  border: 2px solid var(--ink);
+  padding: calc(0.4rem - 1px) calc(0.5rem - 1px);
+  font-weight: 600;
+}
+
+.filter-tags-button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.tag-filter-popover {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 10;
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--card);
+}
+
+.tag-filter-list {
+  max-height: 20rem;
+  margin-top: 0.5rem;
+  overflow-y: auto;
+}
+
+.tag-filter-group {
+  margin: 0.5rem 0 0.25rem;
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.tag-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-size: var(--step--1);
+  overflow-wrap: anywhere;
+}
+
+/* A value under its key offered alone, one step in. */
+.tag-filter-option--value {
+  padding-left: 1.5rem;
+}
+
+.tag-filter-any {
+  margin-left: auto;
+  color: var(--ink-muted);
+}
+
+/* The same ink check in a rule square as the change page's picker. */
+.tag-filter-option input {
+  appearance: none;
+  flex: 0 0 auto;
+  display: grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  border: 1px solid var(--ink-muted);
+  border-radius: 2px;
+  background: var(--card);
+}
+
+.tag-filter-option input:checked::before {
+  content: "✓";
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.tag-filter-option input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.tag-filter-empty {
+  margin: 0.5rem 0 0;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+/* The chosen tags, on a line under the bar: the AND is said once, in the lead. */
+.filter-tags-chosen {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.filter-tags-lead {
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.filter-tags-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.filter-tags-chosen-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.filter-bar .filter-tags-chosen .filter-tags-remove {
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.filter-tags-remove:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.tag-chip--unknown {
+  color: var(--ink-muted);
+}
+
 .no-match {
   max-width: 38rem;
   padding: 2rem 0;
@@ -294,6 +447,16 @@ body {
   .filter-clear {
     align-self: flex-start;
     padding-bottom: 0;
+  }
+
+  /* The Tags control takes a whole row, and its popover the bar's width. */
+  .filter-tags {
+    flex-basis: 100%;
+  }
+
+  .tag-filter-popover {
+    width: 100%;
+    max-width: none;
   }
 }
 

@@ -343,6 +343,17 @@ describe("connectLive, Project tag changes", () => {
     expect(cards()[0]?.querySelector(".tag-chips")).toBeNull();
   });
 
+  it("A filtered dashboard drops a card whose chosen tag was deleted, and offers to clear", async () => {
+    const { app, cards, root } = await startTagged();
+    app.setFilters({ filters: { tags: [{ kind: "tag", id: BUG.id }] }, dropped: [] });
+    expect(cards().map((c) => c.querySelector(".card-change")?.textContent)).toEqual(["team-auth"]);
+
+    retag(PAN.id, [AREA]);
+
+    expect(cards()).toHaveLength(0);
+    expect(root.querySelector(".no-match")).not.toBeNull();
+  });
+
   it("ignores malformed events", async () => {
     const { cards } = await startTagged();
 
