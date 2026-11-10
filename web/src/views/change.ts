@@ -1,3 +1,4 @@
+import { leadingProjectLabel } from "../projectLabel";
 import { ApiError, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
 import { el, page, routeLink } from "../dom";
 import { agentName, calendarDate, relativeTime } from "../format";
@@ -141,6 +142,7 @@ export function changeView(env: Env): View {
       const repo = el(
         "div",
         "change-repo",
+        ...leadingProjectLabel(card),
         el("span", "change-host", card.repo.host),
         " ",
         el("span", "change-repo-name", `${card.repo.owner}/${card.repo.name}`),

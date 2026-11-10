@@ -2,6 +2,7 @@ import { createApi, fetchChanges, type Api, type FetchLike } from "./api";
 import { applyQuiet, renderCard } from "./card";
 import { createFilterBar, noMatch } from "./filterBar";
 import {
+  FILTER_KEYS,
   filterChoices,
   filterOptions,
   hasFilters,
@@ -129,7 +130,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
   const changeFilters =
     deps.onFiltersChange ?? ((next) => app.setFilters({ filters: next, dropped: [] }));
   const bar = createFilterBar({
-    keys: ["repo", "owner", "member", "machine", "client", "status"],
+    keys: FILTER_KEYS,
     onChange: (next) => changeFilters(next),
   });
   const noMatchBlock = noMatch(

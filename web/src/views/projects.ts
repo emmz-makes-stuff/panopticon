@@ -1,5 +1,6 @@
 import { ApiError } from "../api";
 import { alertLine, button, el, field, page, routeLink, selectField } from "../dom";
+import { codePlate } from "../projectLabel";
 import type { View } from "../router";
 import type { Env } from "../shell";
 
@@ -53,19 +54,6 @@ const failureText = (failure: unknown) =>
 /** The `.panopticon.json` that links a repo to the Project (cli-bridge, "Linking a repo to a Project"). */
 export const linkFile = (projectId: string) =>
   `${JSON.stringify({ project: projectId }, null, 2)}\n`;
-
-/**
- * A Project's code plate (web/DESIGN.md "Projects"), or the dashed "Personal" plate for work in no Project. The code
- * is set as text.
- */
-export function codePlate(code: string | null, className?: string): HTMLSpanElement {
-  const plate = el(
-    "span",
-    ["project-code", code === null && "personal", className].filter(Boolean).join(" "),
-    code ?? "Personal",
-  );
-  return plate;
-}
 
 function nameIsValid(name: string): boolean {
   return name.length > 0 && name.length <= PROJECT_NAME_MAX;

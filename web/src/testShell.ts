@@ -57,7 +57,15 @@ export const signedIn = (member = MEMBER) =>
     })
     .on("GET", "/api/history/filters", {
       status: 200,
-      body: { repos: [], owners: [], members: [], machines: [], clients: [] },
+      body: {
+        repos: [],
+        owners: [],
+        members: [],
+        machines: [],
+        clients: [],
+        projects: [],
+        personal: false,
+      },
     });
 
 /** A server with no session. */

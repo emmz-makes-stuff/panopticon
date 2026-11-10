@@ -1,3 +1,4 @@
+import { leadingProjectLabel } from "../projectLabel";
 import { ApiError, fetchHistory, fetchHistoryChoices } from "../api";
 import { alertLine, button, el, page, routeLink } from "../dom";
 import { createFilterBar, noMatch } from "../filterBar";
@@ -17,9 +18,24 @@ import type { HistoryEntry } from "../types";
 import { changeHref } from "../links";
 
 /** The history's filters: every dimension but status, since every change here is archived (spec change-filters). */
-export const HISTORY_KEYS: readonly FilterKey[] = ["repo", "owner", "member", "machine", "client"];
+export const HISTORY_KEYS: readonly FilterKey[] = [
+  "project",
+  "repo",
+  "owner",
+  "member",
+  "machine",
+  "client",
+];
 
-const NO_CHOICES: FilterChoices = { repos: [], owners: [], members: [], machines: [], clients: [] };
+const NO_CHOICES: FilterChoices = {
+  repos: [],
+  owners: [],
+  members: [],
+  machines: [],
+  clients: [],
+  projects: [],
+  personal: false,
+};
 
 const failureText = (failure: unknown) =>
   failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
@@ -131,7 +147,14 @@ export function historyView(env: Env): View {
 }
 
 function row(entry: HistoryEntry): HTMLLIElement {
-  const archived = el("time", "history-date", `Archived ${calendarDate(entry.archivedAt)}`);
+  // A retired copy says where its work went, in place of an archive folder (spec change-history, "History list").
+  const archived = el(
+    "time",
+    "history-date",
+    entry.linkedTo
+      ? `Linked to ${entry.linkedTo.code} on ${calendarDate(entry.archivedAt)}`
+      : `Archived ${calendarDate(entry.archivedAt)}`,
+  );
   archived.dateTime = entry.archivedAt;
   const agents = el("ul", "card-agents history-agents");
   agents.setAttribute("aria-label", "Agents");
@@ -151,6 +174,7 @@ function row(entry: HistoryEntry): HTMLLIElement {
     el(
       "p",
       "history-meta",
+      ...leadingProjectLabel(entry),
       el("span", "history-repo", `${entry.repo.host} ${entry.repo.owner}/${entry.repo.name}`),
       " ",
       archived,

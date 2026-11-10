@@ -14,6 +14,9 @@ export function card(overrides: Partial<ChangeCard> = {}): ChangeCard {
     currentSection: { number: 2, title: "Core", progress: { done: 2, total: 5 } },
     overall: { done: 7, total: 20 },
     lastReportedAt: "2026-11-08T11:57:00Z",
+    // A bootstrap reporter's change by default: no Project label, so other tests' text stays as it was.
+    project: null,
+    personal: false,
     ...overrides,
   };
 }

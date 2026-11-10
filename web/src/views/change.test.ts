@@ -73,6 +73,7 @@ describe("change page", () => {
     expect(q(root, "article.doc h1").textContent).toBe("proposal.md");
     expect(q(root, '.doc-nav a[aria-current="page"]').textContent).toBe("Proposal");
     expect(q(root, ".change-repo").textContent).toBe("github.com emmz/panopticon");
+    expect(root.querySelector(".change-repo .project-code")).toBeNull();
   });
 
   it("selecting a document opens it by ?doc=, which a reload keeps", async () => {
@@ -422,5 +423,35 @@ describe("change page helpers", () => {
     expect(defaultDocument(TEAM_AUTH.slice(1))?.path).toBe("tasks.md");
     expect(defaultDocument([doc("x.md", "other", "x.md")])?.path).toBe("x.md");
     expect(defaultDocument([])).toBeUndefined();
+  });
+});
+
+// Projects D9: the change page header shows the Project's code, like the card.
+describe("change page Project label", () => {
+  it("the header's repo line starts with the Project's code plate", async () => {
+    const server = serverFor(
+      changePage({
+        card: card({
+          changeId: "c1",
+          change: "team-auth",
+          project: { id: "p1", code: "PAN", name: "Panopticon" },
+        }),
+      }),
+    );
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".change-repo") !== null);
+
+    expect(q(root, ".change-repo").textContent).toBe("PAN github.com emmz/panopticon");
+    expect(q(root, ".change-repo .project-code").title).toBe("Panopticon");
+  });
+
+  it("personal work's header shows Personal", async () => {
+    const server = serverFor(
+      changePage({ card: card({ changeId: "c1", change: "team-auth", personal: true }) }),
+    );
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".change-repo") !== null);
+
+    expect(q(root, ".change-repo .project-code.personal").textContent).toBe("Personal");
   });
 });

@@ -3,6 +3,7 @@ import { renderProgressBar } from "./progressBar";
 import { DEFAULT_QUIET, quietState, type QuietSettings, type QuietState } from "./quiet";
 import type { ChangeCard } from "./types";
 import { changeHref } from "./links";
+import { leadingProjectLabel } from "./projectLabel";
 
 /**
  * One change's card (spec live-dashboard, "Card content", "Two progress bars" and "Quiet cards"). All text goes in as
@@ -17,7 +18,9 @@ export function renderCard(
   article.className = "card";
   article.dataset["changeId"] = card.changeId;
 
-  const host = element("div", "card-host", card.repo.host);
+  // The Project's code plate leads the host line (web/DESIGN.md "Projects").
+  const host = element("div", "card-host");
+  host.append(...leadingProjectLabel(card), card.repo.host);
 
   const repoLine = element("div", "card-repo");
   repoLine.append(element("span", "card-repo-name", `${card.repo.owner}/${card.repo.name}`));

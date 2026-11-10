@@ -10,6 +10,9 @@ const entry = (changeId: string, change: string, archivedAt: string): HistoryEnt
   archivedAt,
   archiveFolder: `${archivedAt.slice(0, 10)}-${change}`,
   agents: [{ client: "claude-code", machine: "vm-1", lastReportedAt: archivedAt, member: "Emmz" }],
+  project: null,
+  personal: false,
+  linkedTo: null,
 });
 
 const rows = (root: HTMLElement) =>
@@ -213,6 +216,8 @@ const CHOICES = {
   members: [{ id: "0190f5a2-0000-7000-8000-000000000001", displayName: "Emmz" }],
   machines: ["laptop", "vm-1"],
   clients: ["claude-code"],
+  projects: [{ id: "6f1c2e4a-0000-4000-8000-000000000001", code: "PAN", name: "Panopticon" }],
+  personal: true,
 };
 
 /** A history server that answers each page by the query it's asked with, and records the queries. */
@@ -340,5 +345,118 @@ describe("history page filters", () => {
     await until(() => historyCalls(server).length === 1);
 
     expect(historyCalls(server)).toEqual(["/api/history?machine=vm-1"]);
+  });
+});
+
+// Projects D9: "History row shows its Project".
+describe("history Project label", () => {
+  it("History row shows its Project: the code plate, or Personal, leads the row's meta line", async () => {
+    const server = signedIn().on("GET", "/api/history", {
+      status: 200,
+      body: {
+        changes: [
+          {
+            ...entry("ta", "team-auth", "2026-11-08T15:00:00Z"),
+            project: { id: "p1", code: "PAN", name: "Panopticon" },
+          },
+          { ...entry("ws", "walking-skeleton", "2026-11-07T10:00:00Z"), personal: true },
+        ],
+        nextBefore: null,
+      },
+    });
+    const { root } = await startTestShell("/history", server);
+    await until(() => rows(root).length === 2);
+
+    expect(rows(root).map((row) => row.meta)).toEqual([
+      "PAN github.com emmz/panopticon Archived 8 Nov 2026",
+      "Personal github.com emmz/panopticon Archived 7 Nov 2026",
+    ]);
+    expect(q(root, ".history-item .project-code").title).toBe("Panopticon");
+  });
+});
+
+// Spec change-filters (projects): "Filter by Project" and "Project filter choices" on the history.
+describe("history Project filter", () => {
+  const PAN_ID = "6f1c2e4a-0000-4000-8000-000000000001";
+
+  it("offers the server's Projects by code and name, then Personal", async () => {
+    const server = filteredHistory({
+      "": { changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")], nextBefore: null },
+    });
+    const { root } = await startTestShell("/history", server);
+    await until(() => rows(root).length === 1);
+
+    expect(
+      [...q<HTMLSelectElement>(root, "select[name=project]").options].map((o) => [
+        o.value,
+        o.textContent,
+      ]),
+    ).toEqual([
+      ["", "All Projects"],
+      [PAN_ID, "PAN: Panopticon"],
+      ["personal", "Personal"],
+    ]);
+  });
+
+  it("Personal only: choosing Personal asks the server for project=personal, writing the address", async () => {
+    const server = filteredHistory({
+      "": { changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")], nextBefore: null },
+      "project=personal": {
+        changes: [{ ...entry("mine", "cleanup", "2026-11-07T10:00:00Z"), personal: true }],
+        nextBefore: null,
+      },
+    });
+    const { root, nav } = await startTestShell("/history", server);
+    await until(() => rows(root).length === 1);
+    const select = q<HTMLSelectElement>(root, "select[name=project]");
+
+    select.value = "personal";
+    select.dispatchEvent(new Event("change"));
+    await until(() => rows(root)[0]?.change === "cleanup");
+
+    expect(historyCalls(server)).toEqual(["/api/history", "/api/history?project=personal"]);
+    expect(nav.location.search).toBe("?project=personal");
+  });
+
+  it("One Project in the address: the first page is asked for with its id", async () => {
+    const server = filteredHistory({
+      [`project=${PAN_ID}`]: {
+        changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")],
+        nextBefore: null,
+      },
+    });
+    const { root } = await startTestShell(`/history?project=${PAN_ID}`, server);
+    await until(() => rows(root).length === 1);
+
+    expect(historyCalls(server)).toEqual([`/api/history?project=${PAN_ID}`]);
+    expect(q<HTMLSelectElement>(root, "select[name=project]").value).toBe(PAN_ID);
+  });
+});
+
+// Spec change-history (projects): "A copy retired by linking".
+describe("history retired copy", () => {
+  it("A copy retired by linking: listed as Linked to PAN, with no archive folder", async () => {
+    const server = signedIn().on("GET", "/api/history", {
+      status: 200,
+      body: {
+        changes: [
+          {
+            ...entry("mine", "cleanup", "2026-11-08T15:00:00Z"),
+            archiveFolder: null,
+            personal: true,
+            linkedTo: { id: "p1", code: "PAN", name: "Panopticon" },
+          },
+          entry("ws", "walking-skeleton", "2026-11-07T10:00:00Z"),
+        ],
+        nextBefore: null,
+      },
+    });
+    const { root } = await startTestShell("/history", server);
+    await until(() => rows(root).length === 2);
+
+    expect(rows(root).map((row) => row.meta)).toEqual([
+      "Personal github.com emmz/panopticon Linked to PAN on 8 Nov 2026",
+      "github.com emmz/panopticon Archived 7 Nov 2026",
+    ]);
   });
 });

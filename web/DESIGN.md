@@ -198,7 +198,10 @@ Email [              ]  Role [Viewer ▾]  [Invite]
     - **The Project page:** 31px, and the loudest thing on the page, like the device code, because it's what
       you'll look for on the cards.
     - **The Projects list:** 16px, in a fixed 6.5rem column so the names line up.
-    - **Cards, the change page header and history rows:** 12.8px.
+    - **Cards, the change page header and history rows:** 12.8px. The plate leads the line it sits on: the host
+      line on a card ("PAN github.com"), the repo line on a change page, and the meta line on a history row. The
+      Project's name is its tooltip. A bootstrap reporter's change, in no Project and nobody's personal work,
+      has no plate.
 - **"Personal"** (`.project-code.personal`) is the same plate with a dashed `--rule` border, in the body font
   at 400, `--ink-muted` and sentence case. The dash is the empty bar's vocabulary: no Project here.
 - **Plain colours only.** Plates are never teal, since `--lit` is progress, and never `--spark`, since that's
@@ -290,6 +293,10 @@ Repo              Owner           Person      Machine       Agent type        St
 └──────────────────────────┘ └──────────────────────────┘ ┆╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┆
 ```
 
+- **The Project filter** comes first in the bar ("Project", with "All Projects"), because it's the widest cut.
+  It offers each Project as "PAN: Panopticon", by code, then "Personal" last. The dashboard offers only Projects
+  with a card, and the history and metrics offer only those with an archived change. A Project in the address
+  that the viewer isn't in shows as "Unknown Project (no changes)", so it can still be cleared.
 - **Active:** the card as it always was.
 - **Idle:** it loses contrast. The change name and owner/name drop to `--ink-muted`, and the time reads "Idle, 1h
   ago" with "Idle" in `--ink` 600. The lit cells stay teal: progress is still worth reading.

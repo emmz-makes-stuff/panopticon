@@ -46,9 +46,9 @@
 
 ## 8. Web: the Project in the views
 
-- [ ] 8.1 Show the Project's code, or "Personal", on cards, the change page header and history rows. Verify with view tests ("Card shows its Project", "History row shows its Project").
-- [ ] 8.2 Add the `project` filter to the dashboard (filtering in the browser, with choices from the cards), the history and the metrics (choices from the server), offered by code and name. Verify "Filter by Project", "Project filter choices" and "One Project's metrics" with view tests, and that live updates respect the Project filter.
-- [ ] 8.3 Show a retired copy's history row as "Linked to <code>" in place of its archive folder, with `archiveFolder` typed `string | null` on history entries. Verify "A copy retired by linking" with a view test.
+- [x] 8.1 Show the Project's code, or "Personal", on cards, the change page header and history rows. Verify with view tests ("Card shows its Project", "History row shows its Project").
+- [x] 8.2 Add the `project` filter to the dashboard (filtering in the browser, with choices from the cards), the history and the metrics (choices from the server), offered by code and name. Verify "Filter by Project", "Project filter choices" and "One Project's metrics" with view tests, and that live updates respect the Project filter.
+- [x] 8.3 Show a retired copy's history row as "Linked to <code>" in place of its archive folder, with `archiveFolder` typed `string | null` on history entries. Verify "A copy retired by linking" with a view test.
 
 ## 9. Design pass and docs
 

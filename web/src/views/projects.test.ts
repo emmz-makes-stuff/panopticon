@@ -1,13 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { MEMBER, q, until, type FakeServer } from "../testing";
 import { signedIn, startTestShell, type TestShellOptions } from "../testShell";
-import {
-  codePlate,
-  linkFile,
-  type Project,
-  type ProjectDetails,
-  type ProjectMember,
-} from "./projects";
+import { codePlate } from "../projectLabel";
+import { linkFile, type Project, type ProjectDetails, type ProjectMember } from "./projects";
 
 const PAN_ID = "6f1c2e4a-0000-4000-8000-000000000001";
 const pan: Project = { id: PAN_ID, name: "Panopticon", code: "PAN", role: "owner" };
