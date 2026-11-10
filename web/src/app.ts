@@ -10,6 +10,7 @@ import {
   type Filters,
   type ParsedFilters,
 } from "./filters";
+import { retagCard, type ProjectTagsChange } from "./live";
 import { DEFAULT_QUIET, type QuietSettings } from "./quiet";
 import type { ChangeCard } from "./types";
 
@@ -60,6 +61,11 @@ export interface App {
    * go, and a filter on it is cleared, so its choice goes from the bar too.
    */
   leaveProject(projectId: string): void;
+  /**
+   * A Project's tags changed (tags D6): its cards' tags are renamed by id, and the ones that are gone dropped, with no
+   * reload. Under a filter, a card that no longer matches goes out. Returns how many cards changed.
+   */
+  retagProject(change: ProjectTagsChange): number;
   /** Loads every card from the server and renders them. Throws if the load fails, leaving the cards as they were. */
   refresh(): Promise<void>;
   /** Shows whether the live connection is up. */
@@ -268,6 +274,29 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
       } else if (loaded) {
         layout();
       }
+    },
+
+    retagProject(change) {
+      let changed = 0;
+      for (const [changeId, entry] of shown) {
+        const card = retagCard(entry.card, change);
+        if (card !== entry.card) {
+          const element = renderCard(card, now(), quiet);
+          // Not a report: the card keeps its place and its "updated" mark, with no lighting.
+          element.classList.toggle("updated", entry.element.classList.contains("updated"));
+          shown.set(changeId, { card, element });
+          changed++;
+        }
+      }
+
+      if (changed > 0) {
+        cardsChanged();
+        if (loaded) {
+          layout();
+        }
+      }
+
+      return changed;
     },
 
     async refresh() {

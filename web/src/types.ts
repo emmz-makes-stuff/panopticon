@@ -37,6 +37,19 @@ export interface CardSection {
   progress: Progress;
 }
 
+/** A Project's tag (tags D3): chosen by id, so a rename keeps links and filters. `value` is null for a bare key. */
+export interface ProjectTagRef {
+  id: string;
+  key: string;
+  value: string | null;
+}
+
+/** One of the viewer's own personal tags (tags D5): only they ever receive it. */
+export interface PersonalTagRef {
+  key: string;
+  value: string | null;
+}
+
 export interface ChangeCard {
   changeId: string;
   repo: CardRepo;
@@ -50,6 +63,10 @@ export interface ChangeCard {
   project: CardProject | null;
   /** Its owner's personal work (shown as "Personal"); false for a bootstrap change, which shows no label. */
   personal: boolean;
+  /** Its Project's tags on it, by key then value (tags D6). */
+  projectTags: ProjectTagRef[];
+  /** The viewer's own personal tags on it, by key then value (tags D6). */
+  personalTags: PersonalTagRef[];
 }
 
 // The change page and history (server: Panopticon.Server.Changes, change-documents-and-history D9).
@@ -96,6 +113,8 @@ export interface HistoryEntry {
   personal: boolean;
   /** For a retired copy, the Project its work went to: shown as "Linked to PAN". */
   linkedTo: CardProject | null;
+  projectTags: ProjectTagRef[];
+  personalTags: PersonalTagRef[];
 }
 
 /** `GET /api/history`: newest archive first; `nextBefore` is the next page's cursor, or null on the last page. */

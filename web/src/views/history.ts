@@ -1,4 +1,5 @@
 import { leadingProjectLabel } from "../projectLabel";
+import { tagChips } from "../tagChips";
 import { ApiError, fetchHistory, fetchHistoryChoices } from "../api";
 import { alertLine, button, el, page, routeLink } from "../dom";
 import { createFilterBar, noMatch } from "../filterBar";
@@ -179,6 +180,7 @@ function row(entry: HistoryEntry): HTMLLIElement {
       " ",
       archived,
     ),
+    tagChips(entry),
     agents,
   );
 }

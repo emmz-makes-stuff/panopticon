@@ -4,6 +4,7 @@ import { DEFAULT_QUIET, quietState, type QuietSettings, type QuietState } from "
 import type { ChangeCard } from "./types";
 import { changeHref } from "./links";
 import { leadingProjectLabel } from "./projectLabel";
+import { CARD_TAG_LIMIT, tagChips } from "./tagChips";
 
 /**
  * One change's card (spec live-dashboard, "Card content", "Two progress bars" and "Quiet cards"). All text goes in as
@@ -68,7 +69,9 @@ export function renderCard(
     agents.append(row);
   }
 
-  article.append(host, repoLine, change, sectionBar, overallBar, agents);
+  // Under the change name: what it is, before how far along it is (web/DESIGN.md "Tags"). No tags, no row.
+  const tags = tagChips(card, CARD_TAG_LIMIT);
+  article.append(host, repoLine, change, ...(tags ? [tags] : []), sectionBar, overallBar, agents);
   applyQuiet(article, card, now, quiet);
   return article;
 }

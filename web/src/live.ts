@@ -1,5 +1,5 @@
 import type { App } from "./app";
-import type { ChangeCard } from "./types";
+import type { ChangeCard, ProjectTagRef } from "./types";
 
 /** The SSE event the server sends for every changed card (server: Dashboard/DashboardEndpoints). */
 export const CHANGE_UPDATED = "change-updated";
@@ -17,6 +17,18 @@ export const PROJECTS_CHANGED = "projects-changed";
 export interface ProjectsChange {
   projectId: string;
   member: boolean;
+}
+
+/**
+ * The SSE event the server sends to a Project's members when one of its tags is added, renamed or deleted (tags D6;
+ * server: Dashboard/DashboardEndpoints).
+ */
+export const PROJECT_TAGS_CHANGED = "project-tags-changed";
+
+/** A `project-tags-changed` event's data: every tag the Project has now, by key then value. */
+export interface ProjectTagsChange {
+  projectId: string;
+  tags: ProjectTagRef[];
 }
 
 /** The parts of the browser's EventSource this module uses, so tests can supply a fake. */
@@ -109,6 +121,13 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
       });
     });
 
+    current.addEventListener(PROJECT_TAGS_CHANGED, (event) => {
+      const change = parseProjectTagsChange(event.data);
+      if (change) {
+        app.retagProject(change);
+      }
+    });
+
     current.onerror = () => {
       app.setStatus("offline");
       if (options.checkSignedIn) {
@@ -170,6 +189,50 @@ export function parseProjectsChange(data: string): ProjectsChange | null {
   } catch {
     return null;
   }
+}
+
+/** A `project-tags-changed` event's data, or null when it isn't one. */
+export function parseProjectTagsChange(data: string): ProjectTagsChange | null {
+  try {
+    const value = JSON.parse(data) as { projectId?: unknown; tags?: unknown } | null;
+    if (typeof value?.projectId !== "string" || !Array.isArray(value.tags)) {
+      return null;
+    }
+
+    const tags: ProjectTagRef[] = [];
+    for (const tag of value.tags as unknown[]) {
+      const { id, key, value: tagValue } = (tag ?? {}) as Partial<Record<string, unknown>>;
+      if (typeof id !== "string" || typeof key !== "string") {
+        return null;
+      }
+
+      tags.push({ id, key, value: typeof tagValue === "string" ? tagValue : null });
+    }
+
+    return { projectId: value.projectId, tags };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `card` with its Project's tags as `change` has them (tags D6): renamed by id, in the Project's order, with the ids
+ * that are gone dropped. The same card when it isn't in that Project, or nothing changed.
+ */
+export function retagCard(card: ChangeCard, change: ProjectTagsChange): ChangeCard {
+  if (card.project?.id.toLowerCase() !== change.projectId.toLowerCase()) {
+    return card;
+  }
+
+  const on = new Set(card.projectTags.map((tag) => tag.id.toLowerCase()));
+  const projectTags = change.tags.filter((tag) => on.has(tag.id.toLowerCase()));
+  const same =
+    projectTags.length === card.projectTags.length &&
+    projectTags.every((tag, index) => {
+      const was = card.projectTags[index];
+      return was?.id === tag.id && was.key === tag.key && was.value === tag.value;
+    });
+  return same ? card : { ...card, projectTags };
 }
 
 /** A `change-updated` event's card, or null when the data isn't one. */

@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { MEMBER, q, until, type FakeServer } from "../testing";
 import { signedIn, startTestShell, type TestShellOptions } from "../testShell";
 import { codePlate } from "../projectLabel";
-import { linkFile, type Project, type ProjectDetails, type ProjectMember } from "./projects";
+import {
+  linkFile,
+  type Project,
+  type ProjectDetails,
+  type ProjectMember,
+  type ProjectTag,
+} from "./projects";
 
 const PAN_ID = "6f1c2e4a-0000-4000-8000-000000000001";
 const pan: Project = { id: PAN_ID, name: "Panopticon", code: "PAN", role: "owner" };
@@ -26,10 +32,25 @@ const sam: ProjectMember = {
 const details = (
   role: Project["role"],
   members: ProjectMember[] = [emmz, sam],
+  tags: ProjectTag[] = [],
 ): ProjectDetails => ({
   ...pan,
   role,
   members: members.map((m) => (m.memberId === MEMBER.id ? { ...m, role } : m)),
+  tags,
+});
+
+const projectTag = (
+  id: string,
+  key: string,
+  value: string | null,
+  changeCount: number,
+): ProjectTag => ({
+  id,
+  key,
+  value,
+  text: value === null ? key : `${key}: ${value}`,
+  changeCount,
 });
 
 const PATH = `/api/projects/${PAN_ID}`;
@@ -464,6 +485,206 @@ describe("/projects/{id}", () => {
       "<b>Sam</b>",
     );
     expect(root.querySelector(".project-members b")).toBeNull();
+  });
+});
+
+// Spec tags: "A Project's tags", "Managing a Project's tags", "Renaming a tag", "Deleting a tag" (the Project page;
+// web/DESIGN.md "Tags").
+describe("/projects/{id} tags", () => {
+  const AREA = projectTag("t1", "area", "onboarding", 3);
+  const BUG = projectTag("t2", "bug", null, 12);
+
+  async function openTags(server: FakeServer, options: TestShellOptions = {}) {
+    const shell = await startTestShell(`/projects/${PAN_ID}`, server, options);
+    await until(() => shell.root.querySelector(".project-tags") !== null);
+    return shell;
+  }
+
+  const tagRows = (root: HTMLElement) =>
+    [...root.querySelectorAll(".project-tag")].map((row) => ({
+      chip: row.querySelector(".tag-chip")?.textContent,
+      count: row.querySelector(".project-tag-count")?.textContent,
+      buttons: [...row.querySelectorAll("button")].map((b) => b.textContent),
+    }));
+
+  /** Clicks the button named `label` in the `index`th tag row; fails the test if there's none. */
+  function clickTagButton(root: HTMLElement, index: number, label: string): void {
+    const row = root.querySelectorAll<HTMLElement>(".project-tag")[index];
+    const found = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+      (b) => b.textContent === label,
+    );
+    if (!found) {
+      throw new Error(`No ${label} button in tag row ${index}`);
+    }
+
+    found.click();
+  }
+
+  /** A server whose Project page reflects `state.tags`, which a test changes as the server would. */
+  function liveServer(role: Project["role"], state: { tags: ProjectTag[] }) {
+    return signedIn().on("GET", PATH, () => ({
+      status: 200,
+      body: details(role, [emmz, sam], state.tags),
+    }));
+  }
+
+  it("A viewer sees each tag with the code and its count, and no controls", async () => {
+    const { root } = await openTags(
+      liveServer("viewer", { tags: [AREA, BUG, projectTag("t3", "x", null, 1)] }),
+    );
+
+    expect(tagRows(root)).toEqual([
+      { chip: "PAN/area: onboarding", count: "3 changes", buttons: [] },
+      { chip: "PAN/bug", count: "12 changes", buttons: [] },
+      { chip: "PAN/x", count: "1 change", buttons: [] },
+    ]);
+    expect(q(root, ".project-tags-hint").textContent).toBe("Owners and editors manage these tags.");
+    expect(root.querySelector(".tag-add-form")).toBeNull();
+  });
+
+  it("a viewer of a Project with no tags is told so, with no form", async () => {
+    const { root } = await openTags(liveServer("viewer", { tags: [] }));
+
+    expect(q(root, ".project-tags-empty").textContent).toBe("PAN has no tags yet.");
+    expect(root.querySelector(".tag-add-form")).toBeNull();
+  });
+
+  it("An editor adds a tag: it's sent, confirmed, and the list reloads", async () => {
+    const state = { tags: [BUG] };
+    const server = liveServer("editor", state).on("POST", `${PATH}/tags`, (call) => {
+      state.tags = [projectTag("t9", "area", "billing", 0), BUG];
+      expect(call.body).toEqual({ tag: "area: billing" });
+      return { status: 201, body: state.tags[0] };
+    });
+    const { root } = await openTags(server);
+    expect(tagRows(root)[0]?.buttons).toEqual(["Rename", "Delete"]);
+
+    q<HTMLInputElement>(root, ".tag-add-form input").value = "  area: billing ";
+    submit(root.querySelector(".tag-add-form"));
+    await until(() => tagRows(root).length === 2);
+
+    expect(q(root, ".form-status").textContent).toBe("Added PAN/area: billing.");
+    expect(tagRows(root)[0]).toEqual({
+      chip: "PAN/area: billing",
+      count: "No changes",
+      buttons: ["Rename", "Delete"],
+    });
+  });
+
+  it("an editor of a Project with no tags is invited to add one, here or from a change's page", async () => {
+    const { root } = await openTags(liveServer("editor", { tags: [] }));
+
+    expect(q(root, ".project-tags-empty").textContent).toBe(
+      "PAN has no tags yet. Add one here, or from a change's page.",
+    );
+    expect(root.querySelector(".tag-add-form")).not.toBeNull();
+  });
+
+  it("A duplicate: the server's refusal shows by the form, and the typed text stays", async () => {
+    const server = liveServer("owner", { tags: [AREA] }).on("POST", `${PATH}/tags`, {
+      status: 409,
+      body: { detail: "PAN/area: onboarding is already one of this Project's tags." },
+    });
+    const { root } = await openTags(server);
+
+    q<HTMLInputElement>(root, ".tag-add-form input").value = "Area: Onboarding";
+    submit(root.querySelector(".tag-add-form"));
+    await until(() => !!root.querySelector(".tag-add-form [role=alert]")?.textContent);
+
+    expect(q(root, ".tag-add-form [role=alert]").textContent).toBe(
+      "PAN/area: onboarding is already one of this Project's tags.",
+    );
+    expect(q<HTMLInputElement>(root, ".tag-add-form input").value).toBe("Area: Onboarding");
+  });
+
+  it("at 200 tags, the form's help says it's the most a Project can have", async () => {
+    const tags = Array.from({ length: 200 }, (_, i) => projectTag(`t${i}`, `tag-${i}`, null, 0));
+    const { root } = await openTags(liveServer("owner", { tags }));
+
+    expect(q(root, ".tag-add-form .field-help").textContent).toBe(
+      "PAN has 200 tags, the most it can have.",
+    );
+  });
+
+  it("Renamed: rename in place, sent by id, confirmed, and the row shows the new name", async () => {
+    const state = { tags: [AREA, BUG] };
+    const server = liveServer("editor", state).on("PATCH", `${PATH}/tags/t2`, (call) => {
+      expect(call.body).toEqual({ tag: "defect" });
+      state.tags = [AREA, projectTag("t2", "defect", null, 12)];
+      return { status: 200, body: state.tags[1] };
+    });
+    const { root } = await openTags(server);
+
+    clickTagButton(root, 1, "Rename");
+    const input = q<HTMLInputElement>(root, ".tag-rename-form input");
+    expect(input.value).toBe("bug");
+    expect(q(root, ".tag-rename-form .field-label").textContent).toBe("Rename PAN/bug");
+    input.value = "defect";
+    submit(root.querySelector(".tag-rename-form"));
+    await until(() => tagRows(root)[1]?.chip === "PAN/defect");
+
+    expect(q(root, ".form-status").textContent).toBe("Renamed PAN/bug to PAN/defect.");
+  });
+
+  it("a refused rename shows by its input; Escape gives the row back unchanged", async () => {
+    const server = liveServer("editor", {
+      tags: [AREA, projectTag("t3", "area", "billing", 1)],
+    }).on("PATCH", `${PATH}/tags/t3`, {
+      status: 409,
+      body: { detail: "PAN/area: onboarding is already one of this Project's tags." },
+    });
+    const { root } = await openTags(server);
+
+    clickTagButton(root, 1, "Rename");
+    q<HTMLInputElement>(root, ".tag-rename-form input").value = "Area: Onboarding";
+    submit(root.querySelector(".tag-rename-form"));
+    await until(() => !!root.querySelector(".tag-rename-form [role=alert]")?.textContent);
+    expect(q(root, ".tag-rename-form [role=alert]").textContent).toContain("PAN/area: onboarding");
+
+    q(root, ".tag-rename-form").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+
+    expect(root.querySelector(".tag-rename-form")).toBeNull();
+    expect(tagRows(root)[1]).toEqual({
+      chip: "PAN/area: billing",
+      count: "1 change",
+      buttons: ["Rename", "Delete"],
+    });
+  });
+
+  it("Confirm with a count: cancelling deletes nothing; confirming deletes and says so", async () => {
+    const state = { tags: [AREA, BUG] };
+    const server = liveServer("editor", state).on("DELETE", `${PATH}/tags/t2`, () => {
+      state.tags = [AREA];
+      return { status: 204 };
+    });
+    let answer = false;
+    const confirm = vi.fn(() => answer);
+    const { root } = await openTags(server, { confirm });
+    const deleteBug = () => clickTagButton(root, 1, "Delete");
+
+    deleteBug();
+    expect(confirm).toHaveBeenCalledWith("PAN/bug is on 12 changes. Delete it?");
+    expect(server.to("DELETE", `${PATH}/tags/t2`)).toHaveLength(0);
+
+    answer = true;
+    deleteBug();
+    await until(() => tagRows(root).length === 1);
+
+    expect(q(root, ".form-status").textContent).toBe("Deleted PAN/bug.");
+  });
+
+  it("deleting a tag no change carries says so in the confirm", async () => {
+    const confirm = vi.fn(() => false);
+    const { root } = await openTags(
+      liveServer("owner", { tags: [projectTag("t4", "unused", null, 0)] }),
+      { confirm },
+    );
+
+    clickTagButton(root, 0, "Delete");
+
+    expect(confirm).toHaveBeenCalledWith("Delete PAN/unused? No changes carry it.");
   });
 });
 

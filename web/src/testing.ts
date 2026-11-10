@@ -17,6 +17,8 @@ export function card(overrides: Partial<ChangeCard> = {}): ChangeCard {
     // A bootstrap reporter's change by default: no Project label, so other tests' text stays as it was.
     project: null,
     personal: false,
+    projectTags: [],
+    personalTags: [],
     ...overrides,
   };
 }

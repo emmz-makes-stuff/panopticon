@@ -38,10 +38,10 @@
 
 ## 8. Web: tags in the views
 
-- [ ] 8.1 Add the tag types to `types.ts` and a shared chips helper, and show the chips on cards, history rows and the change page, with no row when there are no tags (D9). Verify "Tags shown on changes" with Vitest tests on each view.
-- [ ] 8.2 Add the Project page's Tags section: the list with counts for everyone, plus add, inline rename and delete with a confirm for owners and editors, and inline errors from the API (D9). Verify the Project-page parts of "Managing a Project's tags", "Renaming a tag" and "Deleting a tag" with Vitest tests, including that a viewer sees no controls.
-- [ ] 8.3 Add the change page's picker for owners and editors: search, toggling tags, "+ Add `PAN/…`" (two calls), and inline parse errors (D4, D9). Verify "Tagging a change on the dashboard" and "Adding a tag from the picker" with Vitest tests, including a viewer seeing chips with no picker.
-- [ ] 8.4 Handle tags live: `change-updated` cards with their tags, and `project-tags-changed` renaming and dropping by id on the dashboard and the change page (D6). Verify "Tag edits are live" (web side) with `live` and view tests, including a filtered dashboard dropping a card whose tag was removed.
+- [x] 8.1 Add the tag types to `types.ts` and a shared chips helper, and show the chips on cards, history rows and the change page, with no row when there are no tags (D9). Verify "Tags shown on changes" with Vitest tests on each view.
+- [x] 8.2 Add the Project page's Tags section: the list with counts for everyone, plus add, inline rename and delete with a confirm for owners and editors, and inline errors from the API (D9). Verify the Project-page parts of "Managing a Project's tags", "Renaming a tag" and "Deleting a tag" with Vitest tests, including that a viewer sees no controls.
+- [x] 8.3 Add the change page's picker for owners and editors: search, toggling tags, "+ Add `PAN/…`" (two calls), and inline parse errors (D4, D9). Verify "Tagging a change on the dashboard" and "Adding a tag from the picker" with Vitest tests, including a viewer seeing chips with no picker.
+- [x] 8.4 Handle tags live: `change-updated` cards with their tags, and `project-tags-changed` renaming and dropping by id on the dashboard and the change page (D6). Verify "Tag edits are live" (web side) with `live` and view tests, including a filtered dashboard dropping a card whose tag was removed.
 
 ## 9. Web: the Tags filter
 

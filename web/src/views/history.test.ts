@@ -13,6 +13,8 @@ const entry = (changeId: string, change: string, archivedAt: string): HistoryEnt
   project: null,
   personal: false,
   linkedTo: null,
+  projectTags: [],
+  personalTags: [],
 });
 
 const rows = (root: HTMLElement) =>
@@ -62,6 +64,35 @@ describe("history page", () => {
       },
     ]);
     expect(q(root, ".show-more").hidden).toBe(true);
+  });
+
+  it("Tags shown on changes: a row's tags follow its meta line, and a row without tags has none", async () => {
+    const PAN = { id: "p1", code: "PAN", name: "Panopticon" };
+    const server = signedIn().on("GET", "/api/history", {
+      status: 200,
+      body: {
+        changes: [
+          {
+            ...entry("ta", "team-auth", "2026-11-08T15:00:00Z"),
+            project: PAN,
+            projectTags: [{ id: "t1", key: "bug", value: null }],
+            personalTags: [{ key: "dev", value: null }],
+          },
+          entry("ws", "walking-skeleton", "2026-11-07T10:00:00Z"),
+        ],
+        nextBefore: null,
+      },
+    });
+    const { root } = await startTestShell("/history", server);
+    await until(() => rows(root).length === 2);
+
+    const [tagged, plain] = [...root.querySelectorAll<HTMLElement>(".history-item")];
+    const tags = tagged?.querySelector(".tag-chips");
+    expect(tags?.previousElementSibling?.classList.contains("history-meta")).toBe(true);
+    expect(
+      [...(tags?.querySelectorAll(".tag-chip") ?? [])].map((chip) => chip.textContent),
+    ).toEqual(["PAN/bug", "dev (only you see this)"]);
+    expect(plain?.querySelector(".tag-chips")).toBeNull();
   });
 
   it("Nothing archived yet: an empty state saying archived changes will appear here", async () => {
