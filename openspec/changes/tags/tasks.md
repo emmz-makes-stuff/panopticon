@@ -34,7 +34,7 @@
 
 ## 7. Design pass
 
-- [ ] 7.1 Design the tag chips, the change-page picker (with "+ Add"), the Project page's Tags section (inline rename, delete confirm with the count) and the multi-select Tags filter with the `frontend-design` skill, within the existing `web/DESIGN.md` system. Record them in `web/DESIGN.md` (D9). Verify that `web/DESIGN.md` has a section for each, with ASCII layouts and states (empty, viewer, editor, error).
+- [x] 7.1 Design the tag chips, the change-page picker (with "+ Add"), the Project page's Tags section (inline rename, delete confirm with the count) and the multi-select Tags filter with the `frontend-design` skill, within the existing `web/DESIGN.md` system. Record them in `web/DESIGN.md` (D9). Verify that `web/DESIGN.md` has a section for each, with ASCII layouts and states (empty, viewer, editor, error).
 
 ## 8. Web: tags in the views
 

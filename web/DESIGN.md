@@ -378,6 +378,254 @@ Wall-clock time, first report to archive.        (small, muted)
     - its time at the right;
     - a full-width rule against the slowest.
 
+## Tags
+
+A tag says what a change _is_ (`bug`, `area: onboarding`). It isn't progress, liveness or a person, so it borrows
+none of their colours or shapes. It speaks in the tools' quiet voice. The one deliberate choice is a **border that
+says who can see it**:
+
+- **A solid border** is a Project's tag, which every member sees.
+- **A dashed border** is your personal tag, which only you see.
+
+The dash is the vocabulary the "Personal" plate and the empty bar already use for "no Project here".
+
+### The chip
+
+```
+ PAN/bug   PAN/area: onboarding   ╎dev╎   ╎language: csharp╎
+ └ solid: the Project's ┘          └ dashed: only yours ┘
+```
+
+- **Shape:** body font (Atkinson 400) at 12.8px, in a 1px `--ink-muted` border with a 3px radius, padded 0 6px.
+    - **Not a code plate:** the plate is Gabarito 700 capitals with open letter-spacing.
+    - **Not an agent pill:** pills are fully round with a `--rule` hairline.
+    - So chips, plates and pills never read alike, even side by side.
+- **Two tones in one chip:** the part that tells tags apart is `--ink`. What comes before it is `--ink-muted`:
+    - in `PAN/bug`, "PAN/" is muted and "bug" is ink;
+    - in `PAN/area: onboarding`, "PAN/area:" is muted and "onboarding" is ink;
+    - in `dev`, it's all ink.
+
+    So a row of `area:` tags scans by its values.
+
+- **The code:** a Project tag always carries its code, as the spec words it (`PAN/bug`), even on a card whose
+  host line already has the `PAN` plate. A chip can be read on its own: in a filter, a picker or a screen reader.
+- **Personal chips:** the same chip with a dashed border. Each has a visually hidden suffix, "(only you see this)",
+  and the same words as its title.
+- **The row:** a `ul.tag-chips` with `aria-label="Tags"`.
+    - **Order:** the project tags first, by key then value, then the personal ones, as the API orders them.
+    - **Wrapping:** chips wrap with a 4px gap.
+    - **No tags:** a change with no tags renders no row and no gap. It looks as it did before tags.
+- **Never teal, never `--spark`:** a tag is neither progress nor live.
+- **Quiet cards:** on idle and stale cards, the chips' ink parts drop to `--ink-muted` with the rest of the card's
+  identity (principle 3). The borders stay, so solid and dashed still read.
+
+### Where chips sit
+
+```
+┌──────────────────────────┐
+│ PAN github.com           │
+│ emmz/panopticon   2m ago │
+│ walking-skeleton         │
+│ PAN/bug ╎dev╎            │   ← under the change name: what it is, before how far along
+│                          │
+│ Section 6: CLI bridge    │
+│ ▮▮▮▮▯         4/5 (80%) │
+│ …                        │
+```
+
+- **On a card:** directly under the change name, 8px above the bars. That's identity (what it is) before progress
+  (how far). A card shows at most eight chips, then "+3 more" in small muted text, whose title lists the rest. The
+  change page shows them all.
+- **On a history row:** after the meta line (plate, repo, "Archived 8 Nov 2026"), before the agent pills.
+- **On the change page:** under the change name in the header, with the editor's "Edit tags" button (below) at the
+  row's end.
+
+### The change page's picker (owners and editors)
+
+```
+walking-skeleton
+PAN/bug  PAN/area: onboarding  ╎dev╎   [Edit tags]
+```
+
+```
+walking-skeleton
+PAN/bug  PAN/area: onboarding  ╎dev╎   [Done]
+┌ PAN's tags ──────────────────────────────────┐
+│ Find or add a tag [area: bi            ]     │
+│ ──────────────────────────────────────────── │
+│ ✓ area: onboarding                           │
+│   area: billing-v1                           │
+│ ──────────────────────────────────────────── │
+│ + Add PAN/area: bi                           │
+└──────────────────────────────────────────────┘
+Added PAN/bug.                                    (status line)
+Your personal tags come from `panopticon tags` on your machines.
+```
+
+- **Opening:** "Edit tags" is a small outlined button, like Remove. It toggles an inline panel under the chips. It's
+  not a modal: the change stays in view, and each toggle shows in the chips above at once. The button reads "Done"
+  while the panel is open. Escape also closes it, and focus returns to the button.
+- **The panel:** 28rem wide at most (full width on phones), with a 1px `--rule` border, a 4px radius, `--card`
+  surface and no shadow. Its heading, "PAN's tags", is small 600 `--ink-muted`, like the document list's group
+  labels.
+- **Search:** "Find or add a tag" is a labelled input, focused when the panel opens. It narrows the list by key and
+  value, ignoring case.
+- **The list:** one row per Project tag, by key then value, between hairlines. Each row is a real checkbox: checked
+  means the change has the tag.
+    - **The mark:** an `--ink` check mark (✓) in a `--rule` square, never a lit cell. Teal is progress, and a lit cell
+      on this page means a done task.
+    - **Inside the panel:** the code is left off ("area: onboarding"), because the heading already says whose tags
+      these are.
+    - **Toggling:** a toggle applies at once. The status line (`aria-live="polite"`) confirms it: "Added PAN/bug." or
+      "Removed PAN/bug.". The action keeps its name in the confirmation.
+    - **Long lists:** past ten rows, the list scrolls inside the panel (max-height 20rem), and the add row stays in
+      sight.
+- **Adding a new tag:** when the typed text parses and equals no tag in the list, a last row reads "+ Add
+  PAN/area: billing", with the code, because it creates a Project tag that everyone sees.
+    - **What it does:** it adds the tag to the Project and puts it on the change, in two calls. The status reads "Added
+      PAN/area: billing to PAN's tags and to this change."
+    - **If the second call fails:** the tag stays in the list, unchecked, and the error says so.
+- **Typed text that isn't a tag:** no add row. The panel's alert line gives the parse error as the API words it
+  (`"has space": a key can only have letters, digits, '-', '_' and '.'`).
+- **Personal tags:** they aren't edited here, because they come from the machines. One muted line under the panel
+  says where they do come from.
+- **Errors:** the usual alert line inside the panel, with a 3px `--spark` rule. For example "PAN has 200 tags, the
+  most it can have. Delete one first." or "Only the Project's owners and editors can tag its changes." (the role
+  changed while the page was open).
+
+**The states:**
+
+| State                       | What shows                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| Viewer                      | The chips only, with no button.                                                 |
+| Editor, change has no tags  | No chip row. "Edit tags" sits alone under the change name.                      |
+| Editor, Project has no tags | The panel opens to "PAN has no tags yet. Type one to add it." above the search. |
+| Personal change             | Personal chips only, and no button. A personal change has no project tags.      |
+| Archived change             | The same as active: tags can still be edited.                                   |
+| Error                       | The alert line in the panel. The checkbox goes back to what the server has.     |
+
+### The Project page's Tags section
+
+It sits between "Link a repo" and "Members", because it's about the Project's work, not its people.
+
+```
+Tags
+──────────────────────────────────────────────
+PAN/area: onboarding      3 changes   [Rename] [Delete]
+──────────────────────────────────────────────
+PAN/bug                  12 changes   [Rename] [Delete]
+──────────────────────────────────────────────
+Tag [area: billing   ] [Add tag]                 (owners and editors)
+    A key, or a key and a value: bug, or area: onboarding.
+```
+
+Renaming, in place:
+
+```
+──────────────────────────────────────────────
+Rename PAN/bug [defect          ] [Save] [Cancel]
+──────────────────────────────────────────────
+```
+
+- **The rows:** rows between hairlines, like Members. The chip comes first, as on cards, so you learn what it looks
+  like. Then the count in small `--ink-muted` text: "No changes", "1 change" or "12 changes". On a phone, the
+  buttons wrap under the chip.
+- **Rename and Delete:** small outlined buttons at the row's right, for owners and editors.
+    - **Rename** turns the row into a labelled input holding the current text, with Save (primary) and Cancel. Enter
+      saves and Escape cancels. A refusal shows in the alert line under the input, for example "PAN already has
+      PAN/area: onboarding.", and the input keeps what was typed.
+    - **Delete** asks first, through the pages' usual confirm, with the count: "PAN/bug is on 12 changes. Delete it?"
+      With no changes, it's "Delete PAN/bug? No changes carry it." The status line then reads "Deleted PAN/bug."
+- **Adding:** a Tag input with "Add tag" as the primary button, and the syntax as muted help text linked by
+  `aria-describedby`. An added tag joins the list in its sorted place with "No changes", and the input clears.
+    - **Errors** go in the alert line under the form: a parse error, a duplicate, or the limit.
+    - **At the limit:** with 200 tags, the form stays, and the help line says "PAN has 200 tags, the most it can
+      have."
+- **Live:** the list follows `project-tags-changed`, so a rename by someone else shows without a reload.
+
+**The states:**
+
+| State                  | What shows                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| Viewer                 | The rows and counts only, then one muted line: "Owners and editors manage these tags." |
+| Owner or editor        | The rows with Rename and Delete, then the add form.                                    |
+| Empty, viewer          | "PAN has no tags yet."                                                                 |
+| Empty, owner or editor | "PAN has no tags yet. Add one here, or from a change's page." Then the form.           |
+| Error                  | The alert line by the control that was used, as elsewhere on the page.                 |
+
+### The Tags filter
+
+One multi-select control in the filter bar, after Status, on the dashboard, the history and the metrics page.
+
+```
+Project          Repo         …  Status         Tags
+[All Projects ▾] [All repos ▾] … [Any status ▾] [2 tags ▾]  Clear filters
+Showing changes with all of:  PAN/bug ×   ╎dev╎ ×
+```
+
+Open:
+
+```
+[2 tags ▴]
+┌──────────────────────────────────────┐
+│ Find a tag [lang            ]        │
+│ Yours                                │
+│ ☐ language        any value          │
+│ ☐   language: csharp                 │
+│ PAN                                  │
+│ ☑ bug                                │
+│ ☐ language        any value          │
+│ ☐   language: rust                   │
+└──────────────────────────────────────┘
+```
+
+- **The control:** a button that looks like the bar's selects, with "Tags" above it.
+    - **What it reads:** "Any tags" when none is chosen. With some chosen, it says how many ("2 tags") and takes the
+      set filter's style (a 2px `--ink` border and 600 text).
+    - **Opening:** it opens a popover under it, 22rem wide (full width on phones), with the picker's surface.
+    - **Its parts:** a "Find a tag" search, focused on open, then a list of checkboxes in groups.
+    - **Closing:** Escape or a click outside closes it, and focus returns to the button.
+- **The groups:** "Yours" first (the personal tags, without the dash, since the group label says whose), then one
+  group per Project by code, the group labelled with the code alone. That's the API's order.
+    - **Inside a group:** a key that has values gets a key-only entry first, "language" with "any value" muted at the
+      right. Its values follow, indented one step.
+    - **No group for the empty:** a group with no choices doesn't render.
+    - **Nothing to offer:** the popover reads "None of these changes have tags."
+- **Choosing:** each toggle applies at once and updates the address, like the selects. Choosing a value under a
+  chosen key-only entry is allowed: both apply, and the list says nothing about it.
+- **The chosen tags:** they show as chips on a line under the bar, after "Showing changes with all of:" in small
+  muted text. That phrase is the AND, said once.
+    - **Each chip:** the usual chip (solid or dashed), with a × button labelled "Remove PAN/bug from the filter".
+    - **A key-only chip:** it reads "PAN/language: any".
+    - **Clear filters** clears the tags too.
+- **A tag the address names but the choices don't** (a deleted tag, or a key no change has any more): its chip
+  reads "Unknown tag", with ×. Nothing matches, so the usual "No changes match these filters" block offers Clear
+  filters. A renamed tag shows its new name, because it goes by id.
+- **Dropped values:** a malformed `tag` value, or any past 20, joins the bar's muted "dropped" line ("Dropped a tag
+  filter that wasn't valid.", or "Kept the first 20 tags.").
+- **On a phone:** the Tags control takes a whole row, and the chosen chips wrap under it.
+
+**The states:**
+
+| State                  | What shows                                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| Nothing chosen         | "Any tags", and no chip line.                                                                            |
+| Some chosen            | "2 tags" in the set style, and the chip line.                                                            |
+| Unknown in the address | An "Unknown tag" chip with ×, and no-match if nothing else matches.                                      |
+| No tags anywhere       | The control is still there, and opens to "None of these changes have tags."                              |
+| Error                  | Like the other filters: the choices come with the page's data, so a failed load is the page's own error. |
+
+### Accessibility
+
+- **Chips:** they're text, so there's no contrast trick: the ink and muted parts are each ≥ 4.5:1 on the card. The
+  dashed border isn't the only cue, because every personal chip carries its hidden "(only you see this)".
+- **The picker:** a `fieldset` of real checkboxes, with the legend "PAN's tags". The add row is a button. The status
+  line is `aria-live="polite"`, and errors are `role="alert"`.
+- **The filter:** the button has `aria-expanded` and `aria-controls`. The popover is a group of checkboxes per
+  group (`role="group"`, labelled by the group name), not a custom listbox, so the keyboard works as everywhere
+  else: Tab, Space, Escape. The × buttons have their full labels.
+- **Focus:** the usual 2px `--ink` outline everywhere, and nothing is reachable only on hover.
+
 ## Accessibility floor
 
 - Each bar is `role="progressbar"` with `aria-label` (e.g. "Section 6 progress") and `aria-valuenow`,
