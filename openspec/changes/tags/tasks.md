@@ -2,8 +2,8 @@
 
 ## 1. Tag syntax and the data model
 
-- [ ] 1.1 Add `Tag` and `TagText.TryParse` to `Panopticon.Contracts` (D1): key and value rules, the first `:` splits, trimming, the canonical text, case-insensitive equality and the error messages. Verify the "Tag syntax" scenarios with unit tests, including `link: http://x`, `key:`, `: value`, a 41-character key and a value with a line break.
-- [ ] 1.2 Add `ProjectTag`, `ChangeProjectTag` and `ChangeAgentTag` with their keys, cascades and indexes, in one migration with a down migration (D2). Verify with migration tests: the migration applies and rolls back, two tags equal without regard to case can't coexist in one Project but can in two, and deleting a tag or a change removes its `change_project_tags` rows.
+- [x] 1.1 Add `Tag` and `TagText.TryParse` to `Panopticon.Contracts` (D1): key and value rules, the first `:` splits, trimming, the canonical text, case-insensitive equality and the error messages. Verify the "Tag syntax" scenarios with unit tests, including `link: http://x`, `key:`, `: value`, a 41-character key and a value with a line break.
+- [x] 1.2 Add `ProjectTag`, `ChangeProjectTag` and `ChangeAgentTag` with their keys, cascades and indexes, in one migration with a down migration (D2). Verify with migration tests: the migration applies and rolls back, two tags equal without regard to case can't coexist in one Project but can in two, and deleting a tag or a change removes its `change_project_tags` rows.
 
 ## 2. Server: a Project's tags
 

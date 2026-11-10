@@ -34,6 +34,9 @@ public sealed class Change
 
     public List<ChangeAgent> Agents { get; } = [];
 
+    /// <summary>Its Project's tags put on it (tags D2); always empty for a personal change.</summary>
+    public List<ChangeProjectTag> ProjectTags { get; } = [];
+
     // projects D1: a change's scope. A Project's change has ProjectId; a personal one has OwnerMemberId; neither is a
     // Development bootstrap report with no Project, or an old row with no member. Never both (a check constraint).
 
@@ -110,6 +113,43 @@ public sealed class ChangeAgent
     public Guid AgentId { get; set; }
     public Agent Agent { get; set; } = null!;
     public DateTimeOffset LastReportedAt { get; set; }
+
+    /// <summary>This agent's personal tags on the change, from its latest report that carried any (tags D2, D5).</summary>
+    public List<ChangeAgentTag> Tags { get; } = [];
+}
+
+/// <summary>
+/// One of a Project's tags (tags D2). <see cref="KeyKey"/> and <see cref="ValueKey"/> are the lower-cased twins that
+/// carry the unique index; <see cref="ValueKey"/> is the empty string for a bare key.
+/// </summary>
+public sealed class ProjectTag
+{
+    public Guid Id { get; set; }
+    public Guid ProjectId { get; set; }
+    public required string Key { get; set; }
+    public string? Value { get; set; }
+    public required string KeyKey { get; set; }
+    public required string ValueKey { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>A Project tag on one of the Project's changes (tags D2).</summary>
+public sealed class ChangeProjectTag
+{
+    public Guid ChangeId { get; set; }
+    public Guid TagId { get; set; }
+    public ProjectTag Tag { get; set; } = null!;
+}
+
+/// <summary>One personal tag in an agent's latest set on a change (tags D2, D5). Its owner is the agent's member.</summary>
+public sealed class ChangeAgentTag
+{
+    public Guid ChangeId { get; set; }
+    public Guid AgentId { get; set; }
+    public required string Key { get; set; }
+    public string? Value { get; set; }
+    public required string KeyKey { get; set; }
+    public required string ValueKey { get; set; }
 }
 
 /// <summary>Every accepted report; history and metrics build on these (spec: Document retention).</summary>

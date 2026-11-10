@@ -217,6 +217,65 @@ namespace Panopticon.Server.Data.Migrations
                     b.ToTable("change_agents", (string)null);
                 });
 
+            modelBuilder.Entity("Panopticon.Server.Data.ChangeAgentTag", b =>
+                {
+                    b.Property<Guid>("ChangeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("change_id");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_id");
+
+                    b.Property<string>("KeyKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("key_key");
+
+                    b.Property<string>("ValueKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("value_key");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("value");
+
+                    b.HasKey("ChangeId", "AgentId", "KeyKey", "ValueKey")
+                        .HasName("pk_change_agent_tags");
+
+                    b.HasIndex("KeyKey", "ValueKey")
+                        .HasDatabaseName("ix_change_agent_tags_key_key_value_key");
+
+                    b.ToTable("change_agent_tags", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ChangeProjectTag", b =>
+                {
+                    b.Property<Guid>("ChangeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("change_id");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tag_id");
+
+                    b.HasKey("ChangeId", "TagId")
+                        .HasName("pk_change_project_tags");
+
+                    b.HasIndex("TagId")
+                        .HasDatabaseName("ix_change_project_tags_tag_id");
+
+                    b.ToTable("change_project_tags", (string)null);
+                });
+
             modelBuilder.Entity("Panopticon.Server.Data.DeviceLogin", b =>
                 {
                     b.Property<Guid>("Id")
@@ -459,6 +518,54 @@ namespace Panopticon.Server.Data.Migrations
                         {
                             t.HasCheckConstraint("ck_project_members_role", "role IN ('owner', 'editor', 'viewer')");
                         });
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ProjectTag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("KeyKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("key_key");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("value");
+
+                    b.Property<string>("ValueKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("value_key");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_tags");
+
+                    b.HasIndex("ProjectId", "KeyKey", "ValueKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_tags_project_id_key_key_value_key");
+
+                    b.ToTable("project_tags", (string)null);
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Repo", b =>
@@ -784,6 +891,35 @@ namespace Panopticon.Server.Data.Migrations
                     b.Navigation("Agent");
                 });
 
+            modelBuilder.Entity("Panopticon.Server.Data.ChangeAgentTag", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.ChangeAgent", null)
+                        .WithMany("Tags")
+                        .HasForeignKey("ChangeId", "AgentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_change_agent_tags_change_agents_change_id_agent_id");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ChangeProjectTag", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Change", null)
+                        .WithMany("ProjectTags")
+                        .HasForeignKey("ChangeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_change_project_tags_changes_change_id");
+
+                    b.HasOne("Panopticon.Server.Data.ProjectTag", "Tag")
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_change_project_tags_project_tags_tag_id");
+
+                    b.Navigation("Tag");
+                });
+
             modelBuilder.Entity("Panopticon.Server.Data.DeviceLogin", b =>
                 {
                     b.HasOne("Panopticon.Server.Data.Member", null)
@@ -847,6 +983,16 @@ namespace Panopticon.Server.Data.Migrations
                         .HasConstraintName("fk_project_members_projects_project_id");
 
                     b.Navigation("Member");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ProjectTag", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_tags_projects_project_id");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.ReportDocument", b =>
@@ -935,6 +1081,13 @@ namespace Panopticon.Server.Data.Migrations
             modelBuilder.Entity("Panopticon.Server.Data.Change", b =>
                 {
                     b.Navigation("Agents");
+
+                    b.Navigation("ProjectTags");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ChangeAgent", b =>
+                {
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Project", b =>
