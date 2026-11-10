@@ -190,7 +190,8 @@ body {
 }
 
 .card--idle .card-change,
-.card--idle .card-repo-name {
+.card--idle .card-repo-name,
+.card--idle .project-code {
   color: var(--ink-muted);
 }
 
@@ -202,7 +203,8 @@ body {
 
 .card--stale .card-change,
 .card--stale .card-repo-name,
-.card--stale .card-agent {
+.card--stale .card-agent,
+.card--stale .project-code {
   color: var(--ink-muted);
 }
 

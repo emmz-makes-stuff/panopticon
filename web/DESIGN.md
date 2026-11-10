@@ -206,6 +206,8 @@ Email [              ]  Role [Viewer ▾]  [Invite]
   at 400, `--ink-muted` and sentence case. The dash is the empty bar's vocabulary: no Project here.
 - **Plain colours only.** Plates are never teal, since `--lit` is progress, and never `--spark`, since that's
   the live signal. A Project has no colour of its own.
+- **Quiet cards:** on idle and stale cards the code turns `--ink-muted` with the rest of the card's identity, so
+  a quiet card's plate doesn't stand out ahead of live ones (principle 3).
 - **The list:** rows between hairlines, like Members. The plate, then the name (600, the row's link, with no
   underline until hover or focus), then the role at the right in small `--ink-muted` text, as "Owner",
   "Editor" or "Viewer". Phones wrap the role under the name. With no Projects: "You're not in any Projects

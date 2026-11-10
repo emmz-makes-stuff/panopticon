@@ -52,8 +52,8 @@
 
 ## 9. Design pass and docs
 
-- [ ] 9.1 Run the `frontend-design` skill for the Projects list, the Project page (members, roles, the link block) and the code label on cards and rows (desktop and phone, light and dark), within `web/DESIGN.md`. Add a "Projects" section to it and apply the styles. Verify `make web-build` and `make web-lint`, and record the choices in a devlog note.
-- [ ] 9.2 Update the README: Projects and roles, linking a repo with `.panopticon.json`, who sees what (personal work included), that people now join through a Project, and who can remove someone from the server. Mark the Projects items as built in `docs/DISCOVERY.md`. Verify the wording against the specs.
+- [x] 9.1 Run the `frontend-design` skill for the Projects list, the Project page (members, roles, the link block) and the code label on cards and rows (desktop and phone, light and dark), within `web/DESIGN.md`. Add a "Projects" section to it and apply the styles. Verify `make web-build` and `make web-lint`, and record the choices in a devlog note.
+- [x] 9.2 Update the README: Projects and roles, linking a repo with `.panopticon.json`, who sees what (personal work included), that people now join through a Project, and who can remove someone from the server. Mark the Projects items as built in `docs/DISCOVERY.md`. Verify the wording against the specs.
 
 ## 10. Integration and human verification
 

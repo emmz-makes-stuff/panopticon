@@ -94,6 +94,10 @@ Items above marked out of v1 are also candidates.
 
 _Source: Emmz, 2026-11-09._
 
+**Built** in the `projects` change (2026-11-10): Projects with an id, a name and a code, linking a repo through a
+committed `.panopticon.json`, the `list_projects` MCP tool, owner, editor and viewer roles with invites, and scoped
+visibility. Editors' tags are not built yet: they come with the tags change below.
+
 - **A Project:** it has three properties, an `Id`, a `Name` and a `Code`. For example: a UUIDv4, `Panopticon` and
   `PAN`.
 - **Linking work:** a Project's `Id` goes in the local settings, which links that work to the Project.
@@ -134,10 +138,10 @@ _Source: Emmz, 2026-11-09._
 
 - **Tags in reports:** where do project tags get attached: in the local settings like personal ones, or on the
   dashboard? A report would carry both personal and project tags. Does each report carry its tags, or the change?
-- **The code:** is it unique, and can it change? It prefixes project tags, so renaming it would rename them.
-- **Owners:** can a Project have more than one owner? Can the last owner leave? Who creates a Project: any member
-  of the deployment?
-- **Viewers and the MCP server:** does "use the MCP server" mean a viewer can report into the Project, or only read?
+- **The code:** answered, and built. It's unique on the server, regardless of case, and can't change.
+- **Owners:** answered, and built. A Project can have several owners, and it always keeps one, so the last owner
+  can't leave. Any member of the deployment can create a Project.
+- **Viewers and the MCP server:** answered, and built. Viewers report into the Project.
 - **Filters:** do tags join the existing filter bar (dashboard, history and metrics) as one more dimension?
 
 ## Hard constraints
