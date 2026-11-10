@@ -115,8 +115,8 @@ NOT count in the metrics page: its work is measured on the Project's change.
 - **THEN** Emmz's metrics count one change, `PAN`'s
 
 ### Requirement: Metrics page filters
-The metrics page SHALL take the same filters as the history (Project, repo, owner, person, machine, agent type), from
-the page's address. A filter that matches no archived change SHALL say so, with a way to clear it.
+The metrics page SHALL take the same filters as the history (Project, repo, owner, person, machine, agent type,
+tags), from the page's address. A filter that matches no archived change SHALL say so, with a way to clear it.
 
 #### Scenario: Nothing matches
 - **WHEN** a member filters the metrics page by a machine no archived change ran on
@@ -133,6 +133,14 @@ the page's address. A filter that matches no archived change SHALL say so, with 
 #### Scenario: One Project's metrics
 - **WHEN** a member of `PAN` and `ACME` filters the metrics page by Project `PAN`
 - **THEN** only `PAN`'s archived changes are counted
+
+#### Scenario: Metrics by tag
+- **WHEN** a member filters the metrics page by `PAN/bug`
+- **THEN** only archived changes carrying `PAN/bug` are counted
+
+#### Scenario: Metrics by a personal tag
+- **WHEN** Emmz filters the team metrics by her personal tag `dev`
+- **THEN** only archived changes where her own agents reported `dev` are counted
 
 ### Requirement: Metrics link
 The signed-in header SHALL include a link to the metrics page.

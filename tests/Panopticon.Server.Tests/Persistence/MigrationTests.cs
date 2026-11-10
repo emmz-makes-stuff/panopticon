@@ -360,6 +360,81 @@ public class MigrationTests(PostgresFixture postgres)
         Assert.Equal(0, await db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM information_schema.tables WHERE table_name = 'projects'").SingleAsync(ct));
     }
 
+    // tags D2: a tag is unique in its Project without regard to case, and two Projects may each have it.
+    [Fact]
+    public async Task Project_tags_are_unique_per_project_without_regard_to_case()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var (pan, acme) = (NewProject("PAN", emmz.Id), NewProject("ACME", emmz.Id));
+        db.AddRange(emmz, pan, acme);
+        db.ProjectTags.AddRange(NewTag(pan.Id, "area", "Onboarding"), NewTag(acme.Id, "area", "onboarding"), NewTag(pan.Id, "area"));
+        await db.SaveChangesAsync(ct);
+
+        db.ChangeTracker.Clear();
+        db.ProjectTags.Add(NewTag(pan.Id, "Area", "ONBOARDING"));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+    }
+
+    // tags D2: deleting a tag, or a change, takes its change_project_tags rows with it; personal tags go with their agent row.
+    [Fact]
+    public async Task Deleting_a_tag_or_a_change_removes_what_hangs_off_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var project = NewProject("PAN", emmz.Id);
+        var repo = NewRepo();
+        var agent = NewAgent(emmz.Id);
+        db.AddRange(emmz, project, repo, agent);
+        await db.SaveChangesAsync(ct);
+        var (bug, onboarding) = (NewTag(project.Id, "bug"), NewTag(project.Id, "area", "onboarding"));
+        var change = NewChange(repo.Id, projectId: project.Id);
+        db.AddRange(bug, onboarding, change);
+        db.ChangeProjectTags.AddRange(
+            new ChangeProjectTag { ChangeId = change.Id, TagId = bug.Id },
+            new ChangeProjectTag { ChangeId = change.Id, TagId = onboarding.Id });
+        db.ChangeAgents.Add(new ChangeAgent { ChangeId = change.Id, AgentId = agent.Id, LastReportedAt = DateTimeOffset.UnixEpoch });
+        db.ChangeAgentTags.Add(new ChangeAgentTag { ChangeId = change.Id, AgentId = agent.Id, Key = "dev", KeyKey = "dev", ValueKey = "" });
+        await db.SaveChangesAsync(ct);
+
+        await db.ProjectTags.Where(t => t.Id == bug.Id).ExecuteDeleteAsync(ct);
+        Assert.Equal([onboarding.Id], await db.ChangeProjectTags.Select(t => t.TagId).ToListAsync(ct));
+
+        await db.ChangeAgents.Where(a => a.ChangeId == change.Id).ExecuteDeleteAsync(ct);
+        Assert.Equal(0, await db.ChangeAgentTags.CountAsync(ct));
+
+        await db.Changes.Where(c => c.Id == change.Id).ExecuteDeleteAsync(ct);
+        Assert.Equal(0, await db.ChangeProjectTags.CountAsync(ct));
+        Assert.Equal(1, await db.ProjectTags.CountAsync(ct));
+    }
+
+    [Fact]
+    public async Task The_tags_migration_rolls_back()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+
+        await db.GetService<IMigrator>().MigrateAsync(RetiredCopiesMigration, cancellationToken: ct);
+
+        Assert.Equal(0, await db.Database.SqlQuery<int>(
+            $"SELECT count(*)::int AS \"Value\" FROM information_schema.tables WHERE table_name IN ('project_tags', 'change_project_tags', 'change_agent_tags')").SingleAsync(ct));
+    }
+
+    private static ProjectTag NewTag(Guid projectId, string key, string? value = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        ProjectId = projectId,
+        Key = key,
+        Value = value,
+        KeyKey = key.ToLowerInvariant(),
+        ValueKey = value?.ToLowerInvariant() ?? string.Empty,
+        CreatedAt = DateTimeOffset.UnixEpoch,
+    };
+
+    private const string RetiredCopiesMigration = "20261110011205_RetiredCopies";
     private const string MetricsMigration = "20261109164834_ChangeMetrics";
     private const string DocumentsMigration = "20261108184053_ChangeDocumentsAndHistory";
     private const string InitialMigration = "20261108001226_Initial";

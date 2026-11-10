@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Panopticon.Contracts;
 
 namespace Panopticon.Server.Data;
 
@@ -18,6 +19,9 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
+    public DbSet<ProjectTag> ProjectTags => Set<ProjectTag>();
+    public DbSet<ChangeProjectTag> ChangeProjectTags => Set<ChangeProjectTag>();
+    public DbSet<ChangeAgentTag> ChangeAgentTags => Set<ChangeAgentTag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -131,6 +135,37 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
         {
             changeAgent.HasKey(ca => new { ca.ChangeId, ca.AgentId });
             changeAgent.HasOne(ca => ca.Agent).WithMany().HasForeignKey(ca => ca.AgentId);
+            changeAgent.HasMany(ca => ca.Tags).WithOne()
+                .HasForeignKey(t => new { t.ChangeId, t.AgentId }).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // tags D2. A tag's key and value are each at most TagText.MaxPartLength characters.
+        modelBuilder.Entity<ProjectTag>(tag =>
+        {
+            tag.HasIndex(t => new { t.ProjectId, t.KeyKey, t.ValueKey }).IsUnique();
+            tag.Property(t => t.Key).HasMaxLength(TagText.MaxPartLength);
+            tag.Property(t => t.Value).HasMaxLength(TagText.MaxPartLength);
+            tag.Property(t => t.KeyKey).HasMaxLength(TagText.MaxPartLength);
+            tag.Property(t => t.ValueKey).HasMaxLength(TagText.MaxPartLength);
+            tag.HasOne<Project>().WithMany().HasForeignKey(t => t.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChangeProjectTag>(changeTag =>
+        {
+            changeTag.HasKey(ct => new { ct.ChangeId, ct.TagId });
+            changeTag.HasIndex(ct => ct.TagId);
+            changeTag.HasOne<Change>().WithMany(c => c.ProjectTags).HasForeignKey(ct => ct.ChangeId).OnDelete(DeleteBehavior.Cascade);
+            changeTag.HasOne(ct => ct.Tag).WithMany().HasForeignKey(ct => ct.TagId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChangeAgentTag>(agentTag =>
+        {
+            agentTag.HasKey(t => new { t.ChangeId, t.AgentId, t.KeyKey, t.ValueKey });
+            agentTag.HasIndex(t => new { t.KeyKey, t.ValueKey });
+            agentTag.Property(t => t.Key).HasMaxLength(TagText.MaxPartLength);
+            agentTag.Property(t => t.Value).HasMaxLength(TagText.MaxPartLength);
+            agentTag.Property(t => t.KeyKey).HasMaxLength(TagText.MaxPartLength);
+            agentTag.Property(t => t.ValueKey).HasMaxLength(TagText.MaxPartLength);
         });
 
         modelBuilder.Entity<ReportEvent>(reportEvent =>

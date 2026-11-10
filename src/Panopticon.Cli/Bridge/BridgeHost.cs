@@ -56,6 +56,7 @@ internal static class BridgeHost
         {
             TypeInfoResolver = JsonTypeInfoResolver.Combine(
                 BridgeJsonContext.Default,
+                Contracts.ContractsJsonContext.Default,
                 McpJsonUtilities.DefaultOptions.TypeInfoResolver),
         };
         options.MakeReadOnly();

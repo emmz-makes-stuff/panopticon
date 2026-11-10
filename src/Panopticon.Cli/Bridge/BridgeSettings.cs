@@ -22,6 +22,12 @@ internal sealed record BridgeSettings(
     public const string ServerUrlVariable = "PANOPTICON_SERVER_URL";
     public const string TokenVariable = "PANOPTICON_TOKEN";
 
+    /// <summary>
+    /// The config file the personal tags are read from, afresh for each report, so <c>panopticon tags</c> takes effect
+    /// without a restart (tags D8). Null means no personal tags: each report then sends an empty list.
+    /// </summary>
+    public CliConfigFile? Config { get; init; }
+
     /// <summary>How long the archive watcher waits before retrying a failed archived report (spec cli-bridge).</summary>
     public TimeSpan ArchiveRetryInterval { get; init; } = TimeSpan.FromSeconds(30);
 
@@ -65,7 +71,10 @@ internal sealed record BridgeSettings(
             }
         }
 
-        return new BridgeSettings(serverUrl, token, workingDirectory, machineName, tokenFromEnvironment, savedLoginServer);
+        return new BridgeSettings(serverUrl, token, workingDirectory, machineName, tokenFromEnvironment, savedLoginServer)
+        {
+            Config = config,
+        };
     }
 
     private static string? NonBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

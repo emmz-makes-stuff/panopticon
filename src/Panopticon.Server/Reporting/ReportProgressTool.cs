@@ -34,10 +34,11 @@ public sealed class ReportProgressTool
         [Description("Optional. The change folder's Markdown and YAML files: each a path relative to the folder, with '/' separators, and its content. Include tasks.md.")] IReadOnlyList<ChangeDocument>? documents = null,
         [Description("Optional. The archive folder's name, e.g. 2026-11-08-team-auth, when the change has been archived.")] string? archive = null,
         [Description("Optional. The id of the Project this work is linked to, from the repo's .panopticon.json. Without it, the work is the reporter's own.")] string? project = null,
+        [Description("Optional. The reporter's personal tags, e.g. \"dev\" or \"language: csharp\": the bridge sends them from its config. They replace this agent's personal tags on the change; leave it out to keep them.")] IReadOnlyList<string>? personalTags = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var input = Validate(repo, change, agent, tasksMarkdown, section, documents, archive, project);
+        var input = Validate(repo, change, agent, tasksMarkdown, section, documents, archive, project, personalTags);
 
         // The member comes from the bearer token (design D16): the SDK carries the request's authenticated user into
         // the tool as RequestContext.User. A bootstrap-token report has no member.
@@ -104,7 +105,8 @@ public sealed class ReportProgressTool
         int? section,
         IReadOnlyList<ChangeDocument?>? documents = null,
         string? archive = null,
-        string? project = null)
+        string? project = null,
+        IReadOnlyList<string>? personalTags = null)
     {
         var missing = new List<string>();
         Require(repo?.Host, "repo.host", missing);
@@ -139,6 +141,13 @@ public sealed class ReportProgressTool
                 : throw new McpException(ReportRefusedException.NotYourProject(project.Trim()));
         }
 
+        // tags D5: a malformed tag, or more than 20, refuses the whole report before anything is recorded.
+        IReadOnlyList<Tag>? tags = null;
+        if (personalTags is not null && !TagText.TryParseAll(personalTags, TagText.MaxPersonalTags, out tags, out var tagError))
+        {
+            throw new McpException($"Personal tags: {tagError}");
+        }
+
         return new ReportInput(
             new RepoIdentity(repo!.Host.Trim(), repo.Owner.Trim(), repo.Name.Trim()),
             changeName,
@@ -149,6 +158,7 @@ public sealed class ReportProgressTool
             Documents = checkedDocuments,
             Archive = archive,
             ProjectId = projectId,
+            PersonalTags = tags,
         };
     }
 

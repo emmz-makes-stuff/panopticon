@@ -18,6 +18,9 @@ internal static class CliApp
             stdout.WriteLine("Commands:");
             stdout.WriteLine("  login [--server <url>]  Log this machine in: approve a code in the dashboard, and save a token");
             stdout.WriteLine("  mcp                     Run the local MCP bridge over stdio");
+            stdout.WriteLine("  tags                    List the personal tags sent with this machine's reports");
+            stdout.WriteLine("  tags add <tag>...       Add personal tags, e.g. dev or \"language: csharp\"");
+            stdout.WriteLine("  tags remove <tag>...    Remove personal tags");
             stdout.WriteLine();
             stdout.WriteLine("Environment (each overrides the login 'panopticon login' saved):");
             stdout.WriteLine($"  {BridgeSettings.ServerUrlVariable}  The Panopticon server's base URL");
@@ -65,6 +68,11 @@ internal static class CliApp
             {
                 Console.CancelKeyPress -= onCancel;
             }
+        }
+
+        if (args[0] == "tags")
+        {
+            return new TagsCommand(CliConfigFile.ForCurrentUser(), stdout, stderr).Run(args[1..]);
         }
 
         await stderr.WriteLineAsync($"Unknown command '{args[0]}'. Run 'panopticon --help'.");

@@ -90,6 +90,21 @@ public class ListProjectsToolTests(PostgresFixture postgres, S3Fixture s3)
             result.Projects);
     }
 
+    // tags D4; spec projects: "An agent sees the tags".
+    [Fact]
+    public async Task Each_Project_comes_with_its_tags_by_key_then_value()
+    {
+        await using var world = await TagWorld.CreateAsync(postgres, s3, Ct);
+        await world.AddPanTagAsync("bug", Ct);
+        await world.AddPanTagAsync("area: onboarding", Ct);
+
+        var (result, text) = await ListAsync(world.Reporter);
+
+        var pan = Assert.Single(result.Projects);
+        Assert.Equal(["area: onboarding", "bug"], pan.Tags);
+        Assert.Contains("tags: area: onboarding, bug", text, StringComparison.Ordinal);
+    }
+
     private static async Task<(ListProjectsResult Result, string Text)> ListAsync(McpClient client)
     {
         var called = await client.CallToolAsync(ContractsAssembly.ListProjectsToolName, cancellationToken: Ct);

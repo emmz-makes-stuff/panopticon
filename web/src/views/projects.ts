@@ -1,6 +1,7 @@
 import { ApiError } from "../api";
 import { alertLine, button, el, field, page, routeLink, selectField } from "../dom";
 import { codePlate } from "../projectLabel";
+import { tagChip, tagText } from "../tagChips";
 import type { View } from "../router";
 import type { Env } from "../shell";
 
@@ -25,10 +26,28 @@ export interface ProjectMember {
   joinedAt: string;
 }
 
-/** A Project's page (server: ProjectDetails): members come owners first. */
+/** One of a Project's tags on its page (server: ProjectTagView), with how many changes carry it. */
+export interface ProjectTag {
+  id: string;
+  key: string;
+  value: string | null;
+  /** Its canonical text, e.g. "area: onboarding". */
+  text: string;
+  changeCount: number;
+}
+
+/** A Project's page (server: ProjectDetails): members come owners first, and tags by key then value. */
 export interface ProjectDetails extends Project {
   members: ProjectMember[];
+  tags: ProjectTag[];
 }
+
+/** The most tags a Project may have (server: TagText.MaxProjectTags). */
+export const PROJECT_TAG_MAX = 200;
+
+/** "No changes", "1 change", "12 changes". */
+const changeCount = (count: number) =>
+  count === 0 ? "No changes" : count === 1 ? "1 change" : `${count} changes`;
 
 /** Names are 1 to 100 characters after trimming (server: ProjectNames). */
 export const PROJECT_NAME_MAX = 100;
@@ -213,6 +232,7 @@ export function projectView(env: Env): View {
 
       children.push(
         linkBlock(project),
+        tagSection(project),
         el("h3", undefined, "Members"),
         memberList(project, isOwner, me),
       );
@@ -282,6 +302,175 @@ export function projectView(env: Env): View {
         block,
         el("div", "copy-row", copy, copied),
       );
+    }
+
+    // web/DESIGN.md "Tags": everyone sees the list and counts; owners and editors add, rename and delete.
+    function tagSection(project: ProjectDetails): HTMLElement {
+      const canManage = project.role === "owner" || project.role === "editor";
+      const section = el("section", "project-tags", el("h3", undefined, "Tags"));
+      if (project.tags.length === 0) {
+        section.append(
+          el(
+            "p",
+            "project-tags-empty",
+            canManage
+              ? `${project.code} has no tags yet. Add one here, or from a change's page.`
+              : `${project.code} has no tags yet.`,
+          ),
+        );
+      } else {
+        const error = alertLine();
+        const list = el("ul", "member-list project-tag-list");
+        list.setAttribute("aria-label", `${project.code}'s tags`);
+        for (const tag of project.tags) {
+          list.append(tagRow(project, tag, canManage, error));
+        }
+
+        section.append(list, error.element);
+        if (!canManage) {
+          section.append(el("p", "project-tags-hint", "Owners and editors manage these tags."));
+        }
+      }
+
+      if (canManage) {
+        section.append(addTagForm(project));
+      }
+
+      return section;
+    }
+
+    function tagRow(
+      project: ProjectDetails,
+      tag: ProjectTag,
+      canManage: boolean,
+      error: ReturnType<typeof alertLine>,
+    ): HTMLLIElement {
+      const name = tagText(tag, project.code);
+      const item = el("li", "member project-tag");
+      const show = () => {
+        item.replaceChildren(
+          tagChip(tag, project.code, false),
+          el("span", "project-tag-count", changeCount(tag.changeCount)),
+        );
+        if (canManage) {
+          item.append(
+            el(
+              "span",
+              "project-tag-actions",
+              button("Rename", rename, "danger-button"),
+              button("Delete", remove, "danger-button"),
+            ),
+          );
+        }
+      };
+
+      function rename(): void {
+        const { element, input } = field(`Rename ${name}`, { name: "tag", value: tag.text });
+        input.autocomplete = "off";
+        const save = el("button", "primary", "Save");
+        save.type = "submit";
+        const cancel = button("Cancel", () => {
+          show();
+          item.querySelector("button")?.focus();
+        });
+        const renameError = alertLine();
+        const form = el(
+          "form",
+          "rename-form tag-rename-form",
+          element,
+          save,
+          cancel,
+          renameError.element,
+        );
+        form.noValidate = true;
+        form.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            cancel.click();
+          }
+        });
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const text = input.value.trim();
+          if (!text) {
+            renameError.show("Enter the tag's new text.");
+            return;
+          }
+
+          renameError.clear();
+          env.api
+            .send<ProjectTag>("PATCH", `${path}/tags/${encodeURIComponent(tag.id)}`, { tag: text })
+            .then(
+              async (renamed) => {
+                status.textContent = `Renamed ${name} to ${tagText(renamed, project.code)}.`;
+                await load();
+              },
+              (failure: unknown) => renameError.show(failureText(failure)),
+            );
+        });
+        item.replaceChildren(form);
+        input.focus();
+        input.select();
+      }
+
+      function remove(): void {
+        const question =
+          tag.changeCount === 0
+            ? `Delete ${name}? No changes carry it.`
+            : `${name} is on ${changeCount(tag.changeCount).toLowerCase()}. Delete it?`;
+        if (!env.confirm(question)) {
+          return;
+        }
+
+        error.clear();
+        env.api.send("DELETE", `${path}/tags/${encodeURIComponent(tag.id)}`).then(
+          async () => {
+            status.textContent = `Deleted ${name}.`;
+            await load();
+          },
+          (failure: unknown) => error.show(failureText(failure)),
+        );
+      }
+
+      show();
+      return item;
+    }
+
+    function addTagForm(project: ProjectDetails): HTMLFormElement {
+      const { element, input } = field("Tag", { name: "tag", autocomplete: "off" });
+      const help = el(
+        "span",
+        "field-help",
+        project.tags.length >= PROJECT_TAG_MAX
+          ? `${project.code} has ${PROJECT_TAG_MAX} tags, the most it can have.`
+          : "A key, or a key and a value: bug, or area: onboarding.",
+      );
+      help.id = "project-tag-help";
+      input.setAttribute("aria-describedby", help.id);
+      element.append(help);
+      const add = el("button", "primary", "Add tag");
+      add.type = "submit";
+      const error = alertLine();
+      const form = el("form", "project-form tag-add-form", element, add, error.element);
+      form.noValidate = true;
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const text = input.value.trim();
+        if (!text) {
+          error.show("Enter a tag to add.");
+          return;
+        }
+
+        error.clear();
+        env.api.send<ProjectTag>("POST", `${path}/tags`, { tag: text }).then(
+          async (added) => {
+            status.textContent = `Added ${tagText(added, project.code)}.`;
+            await load();
+          },
+          (failure: unknown) => error.show(failureText(failure)),
+        );
+      });
+      return form;
     }
 
     function memberList(

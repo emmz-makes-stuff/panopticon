@@ -10,6 +10,7 @@ import {
   type Filters,
   type ParsedFilters,
 } from "./filters";
+import { retagCard, type ProjectTagsChange } from "./live";
 import { DEFAULT_QUIET, type QuietSettings } from "./quiet";
 import type { ChangeCard } from "./types";
 
@@ -50,7 +51,8 @@ export interface App {
   render(cards: ChangeCard[]): void;
   /**
    * Applies one live update: updates the card in place, or adds a new card at the top. Ignores an update that is
-   * no newer than the card already shown. Returns whether it was applied.
+   * older than the card already shown, or the same report again. The same report with other tags is a tag edit (tags
+   * D6): the card's tags change in place, with no motion. Returns whether it was applied.
    */
   upsert(card: ChangeCard): boolean;
   /** Takes a change's card away: it was archived, and lives in the history now. Returns whether it was shown. */
@@ -60,6 +62,11 @@ export interface App {
    * go, and a filter on it is cleared, so its choice goes from the bar too.
    */
   leaveProject(projectId: string): void;
+  /**
+   * A Project's tags changed (tags D6): its cards' tags are renamed by id, and the ones that are gone dropped, with no
+   * reload. Under a filter, a card that no longer matches goes out. Returns how many cards changed.
+   */
+  retagProject(change: ProjectTagsChange): number;
   /** Loads every card from the server and renders them. Throws if the load fails, leaving the cards as they were. */
   refresh(): Promise<void>;
   /** Shows whether the live connection is up. */
@@ -85,6 +92,11 @@ interface Shown {
 }
 
 const reportedAt = (card: ChangeCard) => Date.parse(card.lastReportedAt);
+
+/** Whether two copies of a card carry the same tags, in the same order (the server's). */
+const sameTags = (a: ChangeCard, b: ChangeCard) =>
+  JSON.stringify([a.projectTags, a.personalTags]) ===
+  JSON.stringify([b.projectTags, b.personalTags]);
 
 /** Mounts the dashboard into `root`, then loads the cards. Resolves once the first load has rendered (or failed). */
 export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<App> {
@@ -176,7 +188,12 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     }
 
     if (barStale) {
-      bar.update(filterOptions(choices, filters.filters), filters.filters, filters.dropped);
+      bar.update(
+        filterOptions(choices, filters.filters),
+        filters.filters,
+        filters.dropped,
+        filters.tagsOverLimit,
+      );
       barStale = false;
     }
 
@@ -194,17 +211,25 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     }
   }
 
+  /** A card's tags changed, and nothing else did: not a report, so it keeps its place and "updated" mark, unlit. */
+  function replaceQuietly(changeId: string, current: Shown, card: ChangeCard): void {
+    const element = renderCard(card, now(), quiet);
+    element.classList.toggle("updated", current.element.classList.contains("updated"));
+    shown.set(changeId, { card, element });
+  }
+
   const app: App = {
     render(cards) {
       const next = new Map<string, Shown>();
       for (const card of cards) {
         const current = shown.get(card.changeId);
-        next.set(
-          card.changeId,
-          current && reportedAt(current.card) >= reportedAt(card)
-            ? current
-            : { card, element: renderCard(card, now(), quiet) },
-        );
+        // Kept when it's newer than the list, or as new with the same tags; on a tie with other tags (a tag edit the
+        // stream missed), the server's card wins.
+        const keep =
+          current &&
+          (reportedAt(current.card) > reportedAt(card) ||
+            (reportedAt(current.card) === reportedAt(card) && sameTags(current.card, card)));
+        next.set(card.changeId, keep ? current : { card, element: renderCard(card, now(), quiet) });
       }
 
       shown.clear();
@@ -216,8 +241,23 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
     upsert(card) {
       const current = shown.get(card.changeId);
-      if (current && reportedAt(card) <= reportedAt(current.card)) {
+      if (current && reportedAt(card) < reportedAt(current.card)) {
         return false;
+      }
+
+      // The same report: a duplicate, or a tag edit (tags D6), which republishes the card with its tags as they are now.
+      if (current && reportedAt(card) === reportedAt(current.card)) {
+        if (sameTags(card, current.card)) {
+          return false;
+        }
+
+        replaceQuietly(card.changeId, current, card);
+        cardsChanged();
+        if (loaded) {
+          layout();
+        }
+
+        return true;
       }
 
       const element = renderCard(card, now(), quiet);
@@ -268,6 +308,26 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
       } else if (loaded) {
         layout();
       }
+    },
+
+    retagProject(change) {
+      let changed = 0;
+      for (const [changeId, entry] of shown) {
+        const card = retagCard(entry.card, change);
+        if (card !== entry.card) {
+          replaceQuietly(changeId, entry, card);
+          changed++;
+        }
+      }
+
+      if (changed > 0) {
+        cardsChanged();
+        if (loaded) {
+          layout();
+        }
+      }
+
+      return changed;
     },
 
     async refresh() {

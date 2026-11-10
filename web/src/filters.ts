@@ -3,7 +3,15 @@
  * the address's query means, how to write it back, and whether a change matches.
  */
 import type { QuietState } from "./quiet";
-import type { CardAgent, CardProject, CardRepo, ChangeCard } from "./types";
+import { parseTag } from "./tagSyntax";
+import type {
+  CardAgent,
+  CardProject,
+  CardRepo,
+  ChangeCard,
+  PersonalTagRef,
+  ProjectTagRef,
+} from "./types";
 
 export interface OwnerRef {
   host: string;
@@ -24,11 +32,31 @@ export interface Filters {
   client?: string;
   /** Dashboard only; the history ignores it. */
   status?: QuietState;
+  /**
+   * The one filter with many values (tags D7): a change matches only when it has every one. In canonical order, with
+   * no repeats, and never empty (no tags chosen is undefined).
+   */
+  tags?: TagFilter[];
 }
+
+/**
+ * One chosen tag (tags D7; server: Changes/TagFilter), keys and values lower-cased, as tags match: a Project tag by id,
+ * a Project's key alone with any value, or the viewer's own personal tag (with no value, their key alone).
+ */
+export type TagFilter =
+  | { kind: "tag"; id: string }
+  | { kind: "key"; projectId: string; key: string }
+  | { kind: "personal"; key: string; value: string | null };
 
 export type FilterKey = keyof Filters;
 
-/** The query keys, in the order the app writes them, so the same filters always give the same address. */
+/** The filters with one value each: a select in the filter bar. */
+export type SingleFilterKey = Exclude<FilterKey, "tags">;
+
+/**
+ * The filter keys, in the order the app writes them, so the same filters always give the same address. `tags` is
+ * written last, as repeated `tag` parameters.
+ */
 export const FILTER_KEYS: readonly FilterKey[] = [
   "project",
   "repo",
@@ -37,7 +65,14 @@ export const FILTER_KEYS: readonly FilterKey[] = [
   "machine",
   "client",
   "status",
+  "tags",
 ];
+
+/** The query parameter for the Tags filter, repeated once per tag. */
+export const TAG_PARAM = "tag";
+
+/** At most this many tags are read from an address; the rest are dropped (the server refuses more, tags D7). */
+export const MAX_FILTER_TAGS = 20;
 
 const STATUSES: readonly QuietState[] = ["active", "idle", "stale"];
 
@@ -50,13 +85,15 @@ export interface ParsedFilters {
   filters: Filters;
   /** Keys whose value didn't parse, and so were dropped (the filter bar says so). */
   dropped: FilterKey[];
+  /** Whether the address had more than `MAX_FILTER_TAGS` tags, so only the first were kept. */
+  tagsOverLimit?: boolean;
 }
 
 /** The filters in `params`. Unknown keys are ignored, blank values mean no filter, and malformed ones are dropped. */
 export function parseFilters(params: URLSearchParams): ParsedFilters {
   const filters: Filters = {};
   const dropped: FilterKey[] = [];
-  const value = (key: FilterKey) => params.get(key)?.trim() || undefined;
+  const value = (key: SingleFilterKey) => params.get(key)?.trim() || undefined;
 
   const project = value("project");
   if (project !== undefined) {
@@ -115,7 +152,102 @@ export function parseFilters(params: URLSearchParams): ParsedFilters {
     }
   }
 
-  return { filters, dropped };
+  // Blank values are ignored and a repeat counts once, as on the server; a malformed one, or one past the limit, is
+  // dropped, keeping the rest.
+  const tags = new Map<string, TagFilter>();
+  let droppedTag = false;
+  let overLimit = false;
+  for (const raw of params.getAll(TAG_PARAM)) {
+    if (raw.trim() === "") {
+      continue;
+    }
+
+    const tag = parseTagFilter(raw);
+    if (!tag) {
+      droppedTag = true;
+      continue;
+    }
+
+    const canonical = tagFilterValue(tag);
+    if (!tags.has(canonical)) {
+      if (tags.size === MAX_FILTER_TAGS) {
+        overLimit = true;
+        continue;
+      }
+
+      tags.set(canonical, tag);
+    }
+  }
+
+  if (tags.size > 0) {
+    filters.tags = sortTags([...tags.values()]);
+  }
+
+  if (droppedTag) {
+    dropped.push("tags");
+  }
+
+  return overLimit ? { filters, dropped, tagsOverLimit: true } : { filters, dropped };
+}
+
+/**
+ * One `tag` value (tags D7), read as the server reads it: `t:<tag id>`, `k:<project id>:<key>`, or `p:<key>` or
+ * `p:<key>:<value>`, where the value is everything after the key's ':' (so it can contain ':'). Null when malformed.
+ */
+export function parseTagFilter(value: string): TagFilter | null {
+  const trimmed = value.trim();
+  if (trimmed.length < 2 || trimmed[1] !== ":") {
+    return null;
+  }
+
+  const rest = trimmed.slice(2);
+  switch (trimmed[0]) {
+    case "t":
+      return GUID.test(rest) ? { kind: "tag", id: rest.toLowerCase() } : null;
+    case "k": {
+      const colon = rest.indexOf(":");
+      const projectId = colon < 0 ? "" : rest.slice(0, colon);
+      const parsed = colon < 0 ? null : parseTag(rest.slice(colon + 1));
+      return GUID.test(projectId) && parsed && "tag" in parsed && parsed.tag.value === null
+        ? { kind: "key", projectId: projectId.toLowerCase(), key: parsed.tag.key.toLowerCase() }
+        : null;
+    }
+    case "p": {
+      const parsed = parseTag(rest);
+      return "tag" in parsed
+        ? {
+            kind: "personal",
+            key: parsed.tag.key.toLowerCase(),
+            value: parsed.tag.value?.toLowerCase() ?? null,
+          }
+        : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** A chosen tag's `tag` value, as the server writes it (TagFilter.ToString). */
+export function tagFilterValue(tag: TagFilter): string {
+  switch (tag.kind) {
+    case "tag":
+      return `t:${tag.id}`;
+    case "key":
+      return `k:${tag.projectId}:${tag.key}`;
+    case "personal":
+      return tag.value === null ? `p:${tag.key}` : `p:${tag.key}:${tag.value}`;
+  }
+}
+
+/** Ordinal order, as the server compares tag keys and values (`StringComparer.Ordinal`). */
+export const ordinal = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Tags in canonical order: by `tag` value, ordinally, so the same tags always give the same address. */
+export function sortTags(tags: readonly TagFilter[]): TagFilter[] {
+  return [...tags]
+    .map((tag) => ({ tag, value: tagFilterValue(tag) }))
+    .sort((a, b) => ordinal(a.value, b.value))
+    .map(({ tag }) => tag);
 }
 
 /** `host/owner…/name`: the first segment is the host, the last the name, and the rest the owner (as the server reads it). */
@@ -149,8 +281,8 @@ function segmentsOf(value: string): string[] | undefined {
 export const repoValue = (repo: CardRepo) => `${repo.host}/${repo.owner}/${repo.name}`;
 export const ownerValue = (owner: OwnerRef) => `${owner.host}/${owner.owner}`;
 
-/** The query value of one filter, or undefined when it isn't set. */
-export function filterValue(filters: Filters, key: FilterKey): string | undefined {
+/** The query value of one single-valued filter, or undefined when it isn't set. */
+export function filterValue(filters: Filters, key: SingleFilterKey): string | undefined {
   switch (key) {
     case "repo":
       return filters.repo && repoValue(filters.repo);
@@ -163,12 +295,25 @@ export function filterValue(filters: Filters, key: FilterKey): string | undefine
 
 /**
  * The filters as a query string, without the '?': keys in `FILTER_KEYS` order, encoded by `URLSearchParams`, and only
- * those in `keys` (the history leaves out `status`). Empty when no filter is set.
+ * those in `keys` (the history leaves out `status`). The tags go last, one `tag` each, in canonical order. Empty when
+ * no filter is set.
  */
 export function toQuery(filters: Filters, keys: readonly FilterKey[] = FILTER_KEYS): string {
   const params = new URLSearchParams();
   for (const key of FILTER_KEYS) {
-    const value = keys.includes(key) ? filterValue(filters, key) : undefined;
+    if (!keys.includes(key)) {
+      continue;
+    }
+
+    if (key === "tags") {
+      for (const tag of sortTags(filters.tags ?? [])) {
+        params.append(TAG_PARAM, tagFilterValue(tag));
+      }
+
+      continue;
+    }
+
+    const value = filterValue(filters, key);
     if (value !== undefined) {
       params.set(key, value);
     }
@@ -178,7 +323,9 @@ export function toQuery(filters: Filters, keys: readonly FilterKey[] = FILTER_KE
 }
 
 export const hasFilters = (filters: Filters, keys: readonly FilterKey[] = FILTER_KEYS) =>
-  keys.some((key) => filters[key] !== undefined);
+  keys.some((key) =>
+    key === "tags" ? (filters.tags?.length ?? 0) > 0 : filters[key] !== undefined,
+  );
 
 /** What a change has that filters look at: a card, or a history entry. */
 export interface Filterable {
@@ -186,6 +333,30 @@ export interface Filterable {
   agents: CardAgent[];
   project: CardProject | null;
   personal: boolean;
+  /** Its Project's tags on it. */
+  projectTags: ProjectTagRef[];
+  /** The viewer's own personal tags on it. */
+  personalTags: PersonalTagRef[];
+}
+
+/** Whether a change has one chosen tag: compared without regard to case, as tags are (tags D1). */
+export function hasTag(change: Filterable, tag: TagFilter): boolean {
+  switch (tag.kind) {
+    case "tag":
+      return change.projectTags.some((t) => t.id.toLowerCase() === tag.id);
+    case "key":
+      // A card's Project tags are all its Project's, so the key matches only there.
+      return (
+        change.project?.id.toLowerCase() === tag.projectId &&
+        change.projectTags.some((t) => t.key.toLowerCase() === tag.key)
+      );
+    case "personal":
+      return change.personalTags.some(
+        (t) =>
+          t.key.toLowerCase() === tag.key &&
+          (tag.value === null || (t.value ?? "").toLowerCase() === tag.value),
+      );
+  }
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -196,7 +367,12 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
  * and is skipped when no state is given.
  */
 export function matches(change: Filterable, filters: Filters, state?: QuietState): boolean {
-  const { project, repo, owner, member, machine, client, status } = filters;
+  const { project, repo, owner, member, machine, client, status, tags } = filters;
+  // tags D7: every chosen tag. A deleted tag, or one no change has, matches nothing.
+  if (tags && !tags.every((tag) => hasTag(change, tag))) {
+    return false;
+  }
+
   // A Project matches by id, so a rename doesn't break it; one the viewer isn't in matches nothing, as no card has it.
   if (
     project &&
@@ -248,6 +424,22 @@ export interface FilterChoices {
   projects: CardProject[];
   /** Whether the viewer has a personal change on the page, so "Personal" is offered. */
   personal: boolean;
+  /**
+   * The tags on the page's changes, as the viewer sees them (tags D7): their own personal tags, then each Project's by
+   * code, each group by key then value, with a key that has values also offered alone, above them.
+   */
+  tags: TagChoice[];
+}
+
+/**
+ * A Tags filter choice (server: Changes/TagChoice): `filter` is its `tag` value, and `project` is null for the viewer's
+ * own personal tag. `value` is null for a bare tag or a key offered alone.
+ */
+export interface TagChoice {
+  filter: string;
+  project: CardProject | null;
+  key: string;
+  value: string | null;
 }
 
 /**
@@ -332,7 +524,107 @@ export function filterChoices(cards: readonly ChangeCard[]): FilterChoices {
     clients: [...clients.values()].sort(byLabel),
     projects: [...projects.values()].sort((a, b) => byLabel(a.code, b.code)),
     personal,
+    tags: tagChoices(newestFirst),
   };
+}
+
+interface RankedChoice {
+  keyKey: string;
+  /** The key alone first, then a bare tag, then the valued ones. */
+  rank: number;
+  valueKey: string;
+  choice: TagChoice;
+}
+
+const byRank = (a: RankedChoice, b: RankedChoice) =>
+  ordinal(a.keyKey, b.keyKey) || a.rank - b.rank || ordinal(a.valueKey, b.valueKey);
+
+/**
+ * The dashboard's Tags choices, in the order the server gives the history's (server: ChangePages, tags D7). A Project
+ * tag is spelled as on its most recent card, so a rename shows at once. A personal tag reported in several casings is
+ * one choice, spelled as the one sorting last ordinally, as on the server. For a personal tag, the key alone and the
+ * bare tag are one filter (`p:<key>`), so one choice.
+ */
+function tagChoices(newestFirst: readonly ChangeCard[]): TagChoice[] {
+  const personal = new Map<string, RankedChoice>();
+  const addPersonal = (
+    keyKey: string,
+    key: string,
+    valueKey: string | null,
+    value: string | null,
+  ) => {
+    const filter = tagFilterValue({ kind: "personal", key: keyKey, value: valueKey });
+    const current = personal.get(filter);
+    const spelled = {
+      key: current && ordinal(current.choice.key, key) > 0 ? current.choice.key : key,
+      value,
+    };
+    if (
+      current &&
+      value !== null &&
+      current.choice.value !== null &&
+      ordinal(current.choice.value, value) > 0
+    ) {
+      spelled.value = current.choice.value;
+    }
+
+    personal.set(filter, {
+      keyKey,
+      rank: valueKey === null ? 0 : 1,
+      valueKey: valueKey ?? "",
+      choice: { filter, project: null, key: spelled.key, value: spelled.value },
+    });
+  };
+
+  const projects = new Map<string, { project: CardProject; choices: Map<string, RankedChoice> }>();
+  for (const card of newestFirst) {
+    for (const tag of card.personalTags) {
+      const keyKey = tag.key.toLowerCase();
+      addPersonal(keyKey, tag.key, tag.value?.toLowerCase() ?? null, tag.value);
+      if (tag.value !== null) {
+        addPersonal(keyKey, tag.key, null, null);
+      }
+    }
+
+    if (!card.project) {
+      continue;
+    }
+
+    const projectId = card.project.id.toLowerCase();
+    const group = projects.get(projectId) ?? { project: card.project, choices: new Map() };
+    projects.set(projectId, group);
+    for (const tag of card.projectTags) {
+      const keyKey = tag.key.toLowerCase();
+      const filter = tagFilterValue({ kind: "tag", id: tag.id.toLowerCase() });
+      if (!group.choices.has(filter)) {
+        group.choices.set(filter, {
+          keyKey,
+          rank: tag.value === null ? 1 : 2,
+          valueKey: tag.value?.toLowerCase() ?? "",
+          choice: { filter, project: group.project, key: tag.key, value: tag.value },
+        });
+      }
+
+      // The key alone is spelled as the valued tag whose key sorts last ordinally, as on the server.
+      const keyFilter = tagFilterValue({ kind: "key", projectId, key: keyKey });
+      const keyAlone = group.choices.get(keyFilter);
+      if (tag.value !== null && (!keyAlone || ordinal(keyAlone.choice.key, tag.key) < 0)) {
+        group.choices.set(keyFilter, {
+          keyKey,
+          rank: 0,
+          valueKey: "",
+          choice: { filter: keyFilter, project: group.project, key: tag.key, value: null },
+        });
+      }
+    }
+  }
+
+  return [
+    ...[...personal.values()].sort(byRank),
+    ...[...projects.values()]
+      .sort((a, b) => byLabel(a.project.code, b.project.code))
+      .flatMap((group) => [...group.choices.values()].sort(byRank)),
+  ].map((ranked) => ranked.choice);
 }
 
 /** One option of a filter select: its query value, its label, and whether no change on the page has it. */
@@ -342,14 +634,27 @@ export interface FilterOption {
   missing?: boolean;
 }
 
-export type FilterOptions = Record<Exclude<FilterKey, "status">, FilterOption[]>;
+/** The selects' keys: every single-valued filter but status, whose options are fixed. */
+export type SelectKey = Exclude<SingleFilterKey, "status">;
+
+const SELECT_KEYS: readonly SelectKey[] = [
+  "project",
+  "repo",
+  "owner",
+  "member",
+  "machine",
+  "client",
+];
+
+/** Each select's options, and the Tags filter's choices (the bar names a chosen tag that isn't among them). */
+export type FilterOptions = Record<SelectKey, FilterOption[]> & { tags: TagChoice[] };
 
 /**
  * The options for each select. A chosen value that isn't among the choices (no change has it any more, or a shared link
  * names it) stays offered, marked missing, so the bar can still show it and clear it.
  */
 export function filterOptions(choices: FilterChoices, filters: Filters): FilterOptions {
-  const options: FilterOptions = {
+  const options: Record<SelectKey, FilterOption[]> = {
     // Offered by code and name, chosen by id (projects D9); "Personal" last, when the viewer has personal work here.
     project: [
       ...choices.projects.map((p) => ({
@@ -365,7 +670,7 @@ export function filterOptions(choices: FilterChoices, filters: Filters): FilterO
     client: choices.clients.map((client) => ({ value: client, label: client })),
   };
 
-  for (const key of Object.keys(options) as (keyof FilterOptions)[]) {
+  for (const key of SELECT_KEYS) {
     const chosen = filterValue(filters, key);
     if (chosen !== undefined && !options[key].some((option) => same(option.value, chosen))) {
       const label =
@@ -380,7 +685,7 @@ export function filterOptions(choices: FilterChoices, filters: Filters): FilterO
     }
   }
 
-  return options;
+  return { ...options, tags: choices.tags };
 }
 
 /** The option that stands for the chosen value: matched without regard to case, as filtering is. */

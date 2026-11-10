@@ -33,6 +33,17 @@ public class ContractsTests
             json);
     }
 
+    // tags D5: null is left out (an older server ignores it either way), and an empty list is sent, since it clears.
+    [Fact]
+    public void Personal_tags_go_on_the_wire_only_when_given()
+    {
+        Assert.False(_arguments.ToToolArguments().ContainsKey(ReportProgressArguments.Names.PersonalTags));
+        Assert.Equal(
+            """["dev","language: csharp"]""",
+            ((JsonElement)(_arguments with { PersonalTags = ["dev", "language: csharp"] }).ToToolArguments()[ReportProgressArguments.Names.PersonalTags]!).GetRawText());
+        Assert.Equal("[]", ((JsonElement)(_arguments with { PersonalTags = [] }).ToToolArguments()[ReportProgressArguments.Names.PersonalTags]!).GetRawText());
+    }
+
     [Fact]
     public void Arguments_with_documents_and_an_archive_round_trip()
     {

@@ -182,6 +182,48 @@ describe("renderCard bars", () => {
   });
 });
 
+// Spec tags: "Tags shown on changes" on a card (web/DESIGN.md "Tags").
+describe("renderCard tags", () => {
+  const PAN = { id: "p1", code: "PAN", name: "Panopticon" };
+
+  it("Both kinds: chips sit under the change name, ahead of the bars", () => {
+    const element = renderCard(
+      card({
+        project: PAN,
+        projectTags: [{ id: "t1", key: "bug", value: null }],
+        personalTags: [{ key: "dev", value: null }],
+      }),
+      NOW,
+    );
+
+    const tags = query(element, ".tag-chips");
+    expect(tags.previousElementSibling?.classList.contains("card-change")).toBe(true);
+    expect(tags.nextElementSibling?.classList.contains("bar-section")).toBe(true);
+    expect([...tags.querySelectorAll(".tag-chip")].map((chip) => chip.textContent)).toEqual([
+      "PAN/bug",
+      "dev (only you see this)",
+    ]);
+  });
+
+  it("No tags: the card has no tag row", () => {
+    const element = renderCard(card(), NOW);
+
+    expect(element.querySelector(".tag-chips")).toBeNull();
+    expect(
+      query(element, ".card-change").nextElementSibling?.classList.contains("bar-section"),
+    ).toBe(true);
+  });
+
+  it("a card shows eight chips, then +N more", () => {
+    const personalTags = Array.from({ length: 11 }, (_, i) => ({ key: `t${i}`, value: null }));
+
+    const element = renderCard(card({ personalTags }), NOW);
+
+    expect(element.querySelectorAll(".tag-chip")).toHaveLength(8);
+    expect(text(element, ".tag-chips-more")).toBe("+3 more");
+  });
+});
+
 // Spec change-visibility / projects D9: "Card shows its Project".
 describe("renderCard Project label", () => {
   const PAN = { id: "p1", code: "PAN", name: "Panopticon" };

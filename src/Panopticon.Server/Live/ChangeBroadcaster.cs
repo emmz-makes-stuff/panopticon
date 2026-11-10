@@ -15,8 +15,19 @@ public abstract record ChangeEvent
     {
     }
 
-    /// <summary>A report moved an active change on; sent as <c>change-updated</c> with the card.</summary>
-    public sealed record Updated(ChangeCard Card, ChangeScope Scope) : ChangeEvent;
+    /// <summary>
+    /// A report or a tag edit moved an active change on; sent as <c>change-updated</c> with the card. <see cref="Live"/>
+    /// holds the card with no personal tags and each member's beside it, so each subscriber gets only their own (tags
+    /// D6). The map is never serialised.
+    /// </summary>
+    public sealed record Updated(LiveCard Live, ChangeScope Scope) : ChangeEvent
+    {
+        /// <summary>The card, with no personal tags on it.</summary>
+        public ChangeCard Card => Live.Card;
+
+        /// <summary>The card for one subscriber: with their own personal tags, and nobody else's.</summary>
+        public ChangeCard CardFor(Guid memberId) => Live.For(memberId);
+    }
 
     /// <summary>The change was archived and leaves the live view; sent as <c>change-archived</c>.</summary>
     public sealed record Archived(Guid ChangeId, ChangeScope Scope) : ChangeEvent;
@@ -29,6 +40,9 @@ public abstract record ChangeEvent
 
     /// <summary>A member was removed from the server: their streams end, so the browser's reconnect gets a 401.</summary>
     public sealed record MemberRemoved(Guid MemberId) : ChangeEvent;
+
+    /// <summary>A Project's tags changed (tags D6); sent as <c>project-tags-changed</c> to the Project's members.</summary>
+    public sealed record TagsChanged(Guid ProjectId, IReadOnlyList<ProjectTagRef> Tags) : ChangeEvent;
 }
 
 /// <summary>
@@ -74,11 +88,28 @@ public sealed class ChangeBroadcaster
         return new Subscription(this, channel);
     }
 
-    public void Publish(ChangeCard card, ChangeScope scope)
+    /// <summary>Publishes a card with each member's personal tags (tags D6).</summary>
+    public void Publish(LiveCard card, ChangeScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        Publish(card.Card, scope, card.PersonalTags);
+    }
+
+    /// <summary>Publishes a card with no personal tags on it.</summary>
+    /// <exception cref="ArgumentException">The card carries personal tags: they would reach every subscriber.</exception>
+    public void Publish(
+        ChangeCard card,
+        ChangeScope scope,
+        IReadOnlyDictionary<Guid, IReadOnlyList<PersonalTagRef>>? personalTags = null)
     {
         ArgumentNullException.ThrowIfNull(card);
         ArgumentNullException.ThrowIfNull(scope);
-        Publish(new ChangeEvent.Updated(card, scope));
+        if (card.PersonalTags.Count > 0)
+        {
+            throw new ArgumentException("A published card carries no personal tags: pass them by member instead (tags D6).", nameof(card));
+        }
+
+        Publish(new ChangeEvent.Updated(new LiveCard(card, personalTags ?? new Dictionary<Guid, IReadOnlyList<PersonalTagRef>>()), scope));
     }
 
     public void PublishArchived(Guid changeId, ChangeScope scope)
@@ -97,6 +128,13 @@ public sealed class ChangeBroadcaster
 
     /// <summary>Call after removing a member from the server commits: their open streams end.</summary>
     public void PublishMemberRemoved(Guid memberId) => Publish(new ChangeEvent.MemberRemoved(memberId));
+
+    /// <summary>Call after a Project tag write commits, with the Project's tags as they are now (tags D6).</summary>
+    public void PublishProjectTags(Guid projectId, IReadOnlyList<ProjectTagRef> tags)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+        Publish(new ChangeEvent.TagsChanged(projectId, tags));
+    }
 
     private void Publish(ChangeEvent change)
     {

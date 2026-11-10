@@ -20,6 +20,7 @@ public sealed record ChangeDocument(string Path, string Content);
 /// <see cref="Documents"/> and <see cref="Archive"/> are optional (change-documents-and-history D1): a CLI from before
 /// them leaves them out, and an older server, which binds only its named parameters, ignores them.
 /// <see cref="Project"/> (projects D10) is optional the same way: the id from the repo's <c>.panopticon.json</c>, as text.
+/// <see cref="PersonalTags"/> (tags D5) too: null leaves the agent's personal tags as they are, and an empty list clears them.
 /// </remarks>
 public sealed record ReportProgressArguments(
     RepoRef Repo,
@@ -29,7 +30,8 @@ public sealed record ReportProgressArguments(
     int? Section = null,
     IReadOnlyList<ChangeDocument>? Documents = null,
     string? Archive = null,
-    string? Project = null)
+    string? Project = null,
+    IReadOnlyList<string>? PersonalTags = null)
 {
     /// <summary>The tool's argument names, as they appear on the wire.</summary>
     public static class Names
@@ -42,6 +44,7 @@ public sealed record ReportProgressArguments(
         public const string Documents = "documents";
         public const string Archive = "archive";
         public const string Project = "project";
+        public const string PersonalTags = "personalTags";
     }
 
     /// <summary>The argument dictionary an MCP client sends, built without reflection (AOT-safe).</summary>
@@ -74,6 +77,11 @@ public sealed record ReportProgressArguments(
         if (Project is { } project)
         {
             arguments[Names.Project] = JsonSerializer.SerializeToElement(project, context.String);
+        }
+
+        if (PersonalTags is { } personalTags)
+        {
+            arguments[Names.PersonalTags] = JsonSerializer.SerializeToElement(personalTags, context.IReadOnlyListString);
         }
 
         return arguments;
@@ -120,6 +128,9 @@ public sealed record ReportProgressResult(
 [JsonSerializable(typeof(ReportProgressArguments))]
 [JsonSerializable(typeof(ReportProgressResult))]
 [JsonSerializable(typeof(ListProjectsResult))]
+[JsonSerializable(typeof(TagChangeArguments))]
+[JsonSerializable(typeof(TagChangeResult))]
+[JsonSerializable(typeof(IReadOnlyList<string>))]
 [JsonSerializable(typeof(DeviceStartRequest))]
 [JsonSerializable(typeof(DeviceStartResponse))]
 [JsonSerializable(typeof(DevicePollRequest))]

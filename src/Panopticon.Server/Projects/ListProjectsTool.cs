@@ -14,7 +14,7 @@ namespace Panopticon.Server.Projects;
 public sealed class ListProjectsTool
 {
     [McpServerTool(Name = ContractsAssembly.ListProjectsToolName, Destructive = false, Idempotent = true, ReadOnly = true)]
-    [Description("List the Projects you can report into: each one's id, name, code and your role. Put a Project's id in the repo's .panopticon.json, as {\"project\": \"<id>\"}, to link the repo's work to it.")]
+    [Description("List the Projects you can report into: each one's id, name, code, your role, and its tags (which tag_change can put on its changes). Put a Project's id in the repo's .panopticon.json, as {\"project\": \"<id>\"}, to link the repo's work to it.")]
     public static async Task<CallToolResult> ListProjectsAsync(
         PanopticonDb db,
         RequestContext<CallToolRequestParams> context,
@@ -31,6 +31,16 @@ public sealed class ListProjectsTool
                 .OrderBy(p => p.CodeKey)
                 .Select(p => new ProjectSummary(p.Id.ToString(), p.Name, p.Code, ProjectRoles.Viewer))
                 .ToListAsync(cancellationToken);
+
+        // tags D4: each Project's tags, so an agent knows what tag_change can use.
+        var ids = projects.ConvertAll(p => Guid.Parse(p.Id));
+        var tags = (await db.ProjectTags.AsNoTracking()
+                .Where(t => ids.Contains(t.ProjectId))
+                .Select(t => new { t.ProjectId, t.Key, t.Value, t.KeyKey, t.ValueKey })
+                .ToListAsync(cancellationToken))
+            .InTagOrder(t => t.KeyKey, t => t.ValueKey)
+            .ToLookup(t => t.ProjectId, t => new Tag(t.Key, t.Value).Text);
+        projects = projects.ConvertAll(p => p with { Tags = [.. tags[Guid.Parse(p.Id)]] });
 
         var result = new ListProjectsResult(projects);
         return new CallToolResult

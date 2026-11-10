@@ -20,6 +20,12 @@ public sealed record ArchivedChange(Guid ChangeId);
 /// </summary>
 public sealed record ProjectsChanged(Guid ProjectId, bool Member);
 
+/// <summary>
+/// The data of a <c>project-tags-changed</c> event: the Project's tags as they are now, after one was added, renamed or
+/// deleted (tags D6). The page renames its cards' tags by id, and drops the ids that are gone.
+/// </summary>
+public sealed record ProjectTagsChanged(Guid ProjectId, IReadOnlyList<ProjectTagRef> Tags);
+
 /// <summary>The dashboard's read API and live stream (spec: live-dashboard), for signed-in members only (dashboard-sign-in).</summary>
 public static class DashboardEndpoints
 {
@@ -38,6 +44,9 @@ public static class DashboardEndpoints
     /// refetches them for a joined one. Data is <see cref="ProjectsChanged"/>.
     /// </summary>
     public const string ProjectsChangedEvent = "projects-changed";
+
+    /// <summary>A Project's tags changed (tags D6), sent to the Project's members. Data is <see cref="ProjectTagsChanged"/>.</summary>
+    public const string ProjectTagsChangedEvent = "project-tags-changed";
 
     /// <summary>Sent on an idle stream so proxies and browsers don't drop it; the dashboard doesn't listen for it.</summary>
     public const string PingEvent = "ping";
@@ -213,12 +222,16 @@ public static class DashboardEndpoints
                 // projects D3: only the changes this viewer can see.
                 var (scope, item) = change switch
                 {
-                    ChangeEvent.Updated(var card, var cardScope) => (cardScope, new SseItem<object?>(card, ChangeUpdatedEvent)
+                    // tags D6: the subscriber's own personal tags only, from the event's map; no database read.
+                    ChangeEvent.Updated updated => (updated.Scope, new SseItem<object?>(updated.CardFor(viewer.MemberId), ChangeUpdatedEvent)
                     {
-                        EventId = card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
+                        EventId = updated.Card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
                     }),
                     ChangeEvent.Archived(var changeId, var archivedScope) =>
                         (archivedScope, new SseItem<object?>(new ArchivedChange(changeId), ChangeArchivedEvent)),
+                    ChangeEvent.TagsChanged(var projectId, var tags) => (
+                        new ChangeScope(projectId, null),
+                        new SseItem<object?>(new ProjectTagsChanged(projectId, tags), ProjectTagsChangedEvent)),
                     _ => throw new UnreachableException(),
                 };
                 if (viewer.CanSee(scope))

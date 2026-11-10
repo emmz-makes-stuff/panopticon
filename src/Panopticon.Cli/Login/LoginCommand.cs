@@ -150,7 +150,7 @@ internal sealed class LoginCommand(
                 case DevicePollStatus.Approved when poll.Token is { Length: > 0 } token:
                     try
                     {
-                        config.Write(new SavedLogin(root.ToString(), token));
+                        config.Update(saved => saved with { ServerUrl = root.ToString(), Token = token }, startOverIfUnreadable: true);
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {

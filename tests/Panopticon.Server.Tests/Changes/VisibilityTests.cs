@@ -17,6 +17,9 @@ public class VisibilityTests(PostgresFixture postgres, S3Fixture s3)
 
     private const string Tasks = "## 1. Work\n- [x] 1.1\n- [ ] 1.2\n";
 
+    // Emmz's personal tag on her PAN changes (tags D6): Kit shares those changes and must never see it.
+    private const string EmmzOnlyTag = "emmz-only-tag";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -82,6 +85,25 @@ public class VisibilityTests(PostgresFixture postgres, S3Fixture s3)
         // The owner, by contrast, reads them all.
         using var owners = await world.Emmz.GetAsync(ChangeEndpoints.DocumentPath(archived, "proposal.md"), Ct);
         Assert.Equal(HttpStatusCode.OK, owners.StatusCode);
+
+        // Emmz's personal tags on the PAN changes Kit shares never reach Kit (tags "Personal tags are private").
+        var shared = new[] { await world.ChangeIdAsync("pan-work"), await world.ChangeIdAsync("pan-done") };
+        string[] everyRead =
+        [
+            DashboardEndpoints.ChangesPath,
+            ChangeEndpoints.HistoryPath,
+            ChangeEndpoints.HistoryFiltersPath,
+            MetricsEndpoints.MetricsPath,
+            .. shared.SelectMany(id => new[] { ChangeEndpoints.ChangePath(id), MetricsEndpoints.ChangeMetricsPath(id) }),
+        ];
+        foreach (var path in everyRead)
+        {
+            var body = await world.Kit.GetStringAsync(path, Ct);
+            Assert.DoesNotContain(EmmzOnlyTag, body, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains(EmmzOnlyTag, await world.Emmz.GetStringAsync(DashboardEndpoints.ChangesPath, Ct), StringComparison.Ordinal);
+        Assert.Contains(EmmzOnlyTag, await world.Emmz.GetStringAsync(ChangeEndpoints.HistoryPath, Ct), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -105,10 +127,16 @@ public class VisibilityTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(["walking-skeleton"], await DashboardAsync(kit));
     }
 
-    private static ReportProgressArguments Report(string change, string machine = "vm-1", Guid? project = null, bool archived = false) =>
+    private static ReportProgressArguments Report(
+        string change,
+        string machine = "vm-1",
+        Guid? project = null,
+        bool archived = false,
+        IReadOnlyList<string>? personalTags = null) =>
         new(new RepoRef("github.com", "emmz", "panopticon"), change, new AgentRef("claude-code", machine), Tasks)
         {
             Project = project?.ToString(),
+            PersonalTags = personalTags,
             Documents = [new ChangeDocument("tasks.md", Tasks), new ChangeDocument("proposal.md", $"# {change}\n")],
             Archive = archived ? $"2026-11-08-{change}" : null,
         };
@@ -131,7 +159,8 @@ public class VisibilityTests(PostgresFixture postgres, S3Fixture s3)
     /// <summary>
     /// Emmz owns <c>PAN</c> and <c>ACME</c>; Kit is a viewer of <c>PAN</c> only. Emmz has reported, in <c>PAN</c>,
     /// <c>pan-work</c> (active) and <c>pan-done</c> (archived); in <c>ACME</c>, from machine <c>acme-vm</c>,
-    /// <c>acme-live</c> (active) and <c>acme-work</c> (archived); and her own <c>scratch</c>.
+    /// <c>acme-live</c> (active) and <c>acme-work</c> (archived); and her own <c>scratch</c>. Her agent tagged both
+    /// <c>PAN</c> changes <see cref="EmmzOnlyTag"/>.
     /// </summary>
     private sealed class World : IAsyncDisposable
     {
@@ -152,8 +181,8 @@ public class VisibilityTests(PostgresFixture postgres, S3Fixture s3)
 
             await using (var client = await factory.CreateMcpClientAsync(Ct))
             {
-                await ReportAsync(client, Report("pan-work", project: pan));
-                await ReportAsync(client, Report("pan-done", project: pan));
+                await ReportAsync(client, Report("pan-work", project: pan, personalTags: [EmmzOnlyTag]));
+                await ReportAsync(client, Report("pan-done", project: pan, personalTags: [EmmzOnlyTag]));
                 await ReportAsync(client, Report("pan-done", project: pan, archived: true));
                 await ReportAsync(client, Report("acme-live", "acme-vm", acme));
                 await ReportAsync(client, Report("acme-work", "acme-vm", acme));

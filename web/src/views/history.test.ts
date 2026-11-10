@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { signedIn, signedOut, savedReturn, startTestShell } from "../testShell";
-import { card, FakeEventSource, q, until } from "../testing";
+import { BUG_TAG_ID, card, FakeEventSource, q, TAG_CHOICES, until } from "../testing";
 import type { HistoryEntry } from "../types";
 
 const entry = (changeId: string, change: string, archivedAt: string): HistoryEntry => ({
@@ -13,6 +13,8 @@ const entry = (changeId: string, change: string, archivedAt: string): HistoryEnt
   project: null,
   personal: false,
   linkedTo: null,
+  projectTags: [],
+  personalTags: [],
 });
 
 const rows = (root: HTMLElement) =>
@@ -62,6 +64,35 @@ describe("history page", () => {
       },
     ]);
     expect(q(root, ".show-more").hidden).toBe(true);
+  });
+
+  it("Tags shown on changes: a row's tags follow its meta line, and a row without tags has none", async () => {
+    const PAN = { id: "p1", code: "PAN", name: "Panopticon" };
+    const server = signedIn().on("GET", "/api/history", {
+      status: 200,
+      body: {
+        changes: [
+          {
+            ...entry("ta", "team-auth", "2026-11-08T15:00:00Z"),
+            project: PAN,
+            projectTags: [{ id: "t1", key: "bug", value: null }],
+            personalTags: [{ key: "dev", value: null }],
+          },
+          entry("ws", "walking-skeleton", "2026-11-07T10:00:00Z"),
+        ],
+        nextBefore: null,
+      },
+    });
+    const { root } = await startTestShell("/history", server);
+    await until(() => rows(root).length === 2);
+
+    const [tagged, plain] = [...root.querySelectorAll<HTMLElement>(".history-item")];
+    const tags = tagged?.querySelector(".tag-chips");
+    expect(tags?.previousElementSibling?.classList.contains("history-meta")).toBe(true);
+    expect(
+      [...(tags?.querySelectorAll(".tag-chip") ?? [])].map((chip) => chip.textContent),
+    ).toEqual(["PAN/bug", "dev (only you see this)"]);
+    expect(plain?.querySelector(".tag-chips")).toBeNull();
   });
 
   it("Nothing archived yet: an empty state saying archived changes will appear here", async () => {
@@ -218,6 +249,7 @@ const CHOICES = {
   clients: ["claude-code"],
   projects: [{ id: "6f1c2e4a-0000-4000-8000-000000000001", code: "PAN", name: "Panopticon" }],
   personal: true,
+  tags: TAG_CHOICES,
 };
 
 /** A history server that answers each page by the query it's asked with, and records the queries. */
@@ -458,5 +490,61 @@ describe("history retired copy", () => {
       "Personal github.com emmz/panopticon Linked to PAN on 8 Nov 2026",
       "github.com emmz/panopticon Archived 7 Nov 2026",
     ]);
+  });
+});
+
+// Spec change-filters, "Tag filter choices" and "Filters in the address" for tags (tags D7).
+describe("history page Tags filter", () => {
+  const bug = `tag=${encodeURIComponent(`t:${BUG_TAG_ID}`)}`;
+  const groups = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLElement>(".tag-filter-group-box")].map((g) =>
+      [...g.querySelectorAll(".tag-filter-group, .tag-filter-option")].map((o) => o.textContent),
+    );
+  const toggle = (root: HTMLElement, text: string) =>
+    [...root.querySelectorAll(".tag-filter-option")]
+      .find((o) => o.querySelector(".tag-filter-text")?.textContent === text)
+      ?.querySelector("input")
+      ?.click();
+
+  it("Grouped choices: the server's choices, Yours first, then PAN", async () => {
+    const server = filteredHistory({
+      "": { changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")], nextBefore: null },
+    });
+    const { root } = await startTestShell("/history", server);
+    await until(() => root.querySelector(".tag-filter-group-box") !== null);
+
+    expect(groups(root)).toEqual([
+      ["Yours", "dev", "languageany value", "language: csharp"],
+      ["PAN", "bug"],
+    ]);
+  });
+
+  it("a tag choice asks the server again with the tag, and Back goes back to the unfiltered list", async () => {
+    const server = filteredHistory({
+      "": {
+        changes: [
+          entry("ta", "team-auth", "2026-11-08T15:00:00Z"),
+          entry("ws", "walking-skeleton", "2026-11-07T10:00:00Z"),
+        ],
+        nextBefore: null,
+      },
+      [bug]: { changes: [entry("ta", "team-auth", "2026-11-08T15:00:00Z")], nextBefore: null },
+    });
+    const { root, nav, events } = await startTestShell("/history", server);
+    document.body.append(events);
+    onTestFinished(() => events.remove());
+    await until(() => rows(root).length === 2);
+    q(root, ".filter-tags-button").click();
+
+    toggle(root, "bug");
+    await until(() => rows(root).length === 1);
+    expect(nav.path()).toBe(`/history?${bug}`);
+    expect(historyCalls(server)).toEqual(["/api/history", `/api/history?${bug}`]);
+    expect(q(root, ".filter-tags-chosen .tag-chip").textContent).toBe("PAN/bug");
+
+    nav.history.replaceState(null, "", "/history");
+    events.dispatchEvent(new Event("popstate"));
+    await until(() => rows(root).length === 2);
+    expect(q(root, ".filter-tags-button").textContent).toBe("Any tags");
   });
 });

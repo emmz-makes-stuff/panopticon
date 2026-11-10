@@ -76,7 +76,7 @@ public class ArchiveWatcherTests(PostgresFixture postgres, S3Fixture s3)
         await EventuallyAsync(() => bridge.Log.Contains("Report for change team-auth failed", StringComparison.Ordinal));
 
         // The bridge keeps serving, and the agent's next report finds the archive.
-        Assert.Equal(2, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
+        Assert.Equal(3, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
         down = false;
         var result = await bridge.ReportAsync("team-auth", null, Ct);
 

@@ -270,6 +270,159 @@ body {
   color: var(--ink-muted);
 }
 
+/* The Tags filter (tags D7, web/DESIGN.md "The Tags filter"): a button styled as the selects, with a popover. */
+.filter-tags {
+  position: relative;
+}
+
+/* Specific enough to beat `.page button` on the history and metrics: it looks like the selects beside it. */
+.filter-bar .filter-tags .filter-tags-button {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--ink-muted) 55%, var(--rule));
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink);
+  font: 400 var(--step--1) / 1.5 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-bar .filter-tags .filter-select--set {
+  border: 2px solid var(--ink);
+  padding: calc(0.4rem - 1px) calc(0.5rem - 1px);
+  font-weight: 600;
+}
+
+.filter-tags-button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.tag-filter-popover {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 10;
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--card);
+}
+
+.tag-filter-list {
+  max-height: 20rem;
+  margin-top: 0.5rem;
+  overflow-y: auto;
+}
+
+.tag-filter-group {
+  margin: 0.5rem 0 0.25rem;
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.tag-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-size: var(--step--1);
+  overflow-wrap: anywhere;
+}
+
+/* A value under its key offered alone, one step in. */
+.tag-filter-option--value {
+  padding-left: 1.5rem;
+}
+
+.tag-filter-any {
+  margin-left: auto;
+  color: var(--ink-muted);
+}
+
+/* The same ink check in a rule square as the change page's picker. */
+.tag-filter-option input {
+  appearance: none;
+  flex: 0 0 auto;
+  display: grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  border: 1px solid var(--ink-muted);
+  border-radius: 2px;
+  background: var(--card);
+}
+
+.tag-filter-option input:checked::before {
+  content: "✓";
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.tag-filter-option input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.tag-filter-empty {
+  margin: 0.5rem 0 0;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+/* The chosen tags, on a line under the bar: the AND is said once, in the lead. */
+.filter-tags-chosen {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.filter-tags-lead {
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.filter-tags-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.filter-tags-chosen-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.filter-bar .filter-tags-chosen .filter-tags-remove {
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.filter-tags-remove:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.tag-chip--unknown {
+  color: var(--ink-muted);
+}
+
 .no-match {
   max-width: 38rem;
   padding: 2rem 0;
@@ -295,6 +448,16 @@ body {
     align-self: flex-start;
     padding-bottom: 0;
   }
+
+  /* The Tags control takes a whole row, and its popover the bar's width. */
+  .filter-tags {
+    flex-basis: 100%;
+  }
+
+  .tag-filter-popover {
+    width: 100%;
+    max-width: none;
+  }
 }
 
 .card-change {
@@ -317,6 +480,50 @@ body {
   padding: 0.1rem 0.5rem;
   border: 1px solid var(--rule);
   border-radius: 999px;
+}
+
+/*
+ * Tags (web/DESIGN.md "Tags"). The border says who sees a tag: solid for a Project's, dashed for your own. Never teal
+ * (progress) or spark (live). The part that tells tags apart is ink; what leads it is muted.
+ */
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem;
+  margin: 0.4rem 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--step--1);
+}
+
+/* On a card, under the change name and 8px above the bars. */
+.card .tag-chips {
+  margin: -0.5rem 0 0.5rem;
+}
+
+.tag-chip {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--ink-muted);
+  border-radius: 3px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.tag-chip.personal {
+  border-style: dashed;
+}
+
+.tag-chip-lead,
+.tag-chips-more {
+  color: var(--ink-muted);
+}
+
+.card--idle .tag-chip-main,
+.card--stale .tag-chip-main {
+  color: var(--ink-muted);
 }
 
 /* The member who runs the agent: present, but quieter than the agent itself (design D17). */
@@ -590,6 +797,37 @@ body {
 .member .danger-button,
 .token .danger-button {
   margin-left: auto;
+}
+
+/* A Project's tags (web/DESIGN.md "Tags"): rows like Members, the chip first, then its count. */
+.project-tag-count {
+  flex: 1 1 8rem;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.project-tag-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.tag-rename-form {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.page .project-tags-hint,
+.page .project-tags-empty {
+  color: var(--ink-muted);
+}
+
+.page .project-tags-empty {
+  margin-bottom: 0.75rem;
+}
+
+.tag-add-form {
+  margin-top: 1rem;
 }
 
 .page .members-invite-hint {
@@ -1437,5 +1675,103 @@ body {
 }
 
 .metrics-empty-state p:last-child {
+  color: var(--ink-muted);
+}
+
+/* The change page's tags and picker (web/DESIGN.md "Tags"): inline, never a modal; the tools' quiet surface. */
+.change-tags:empty {
+  display: none;
+}
+
+.change-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.change-tags-row .tag-chips {
+  margin: 0;
+}
+
+.tag-picker {
+  max-width: 28rem;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--card);
+}
+
+.tag-picker-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tag-picker-heading {
+  padding: 0;
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.tag-picker-list {
+  max-height: 20rem;
+  margin-top: 0.5rem;
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+}
+
+.tag-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--rule);
+  overflow-wrap: anywhere;
+}
+
+/* An ink check in a rule square: never a lit cell, which on this page means a done task. */
+.tag-picker-option input {
+  appearance: none;
+  flex: 0 0 auto;
+  display: grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  border: 1px solid var(--ink-muted);
+  border-radius: 2px;
+  background: var(--card);
+}
+
+.tag-picker-option input:checked::before {
+  content: "✓";
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.tag-picker-option input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.page button.tag-picker-add {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.3rem 0;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+}
+
+.page .tag-picker-empty,
+.page .tag-picker-personal {
+  margin: 0.5rem 0 0;
+  font-size: var(--step--1);
   color: var(--ink-muted);
 }

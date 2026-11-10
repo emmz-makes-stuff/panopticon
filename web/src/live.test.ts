@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mountApp } from "./app";
-import { CHANGE_ARCHIVED, CHANGE_UPDATED, connectLive, PROJECTS_CHANGED } from "./live";
+import {
+  CHANGE_ARCHIVED,
+  CHANGE_UPDATED,
+  connectLive,
+  parseProjectTagsChange,
+  PROJECT_TAGS_CHANGED,
+  PROJECTS_CHANGED,
+} from "./live";
 import { card, FakeEventSource, fakeFetch, NOW, settle } from "./testing";
 import type { ChangeCard } from "./types";
 
@@ -261,5 +268,176 @@ describe("connectLive, membership changes", () => {
     expect(timers).toHaveLength(1);
     timers[0]?.callback();
     expect(FakeEventSource.instances).toHaveLength(2);
+  });
+});
+
+// Spec tags, "Tag edits are live" (the web side; tags D6).
+describe("connectLive, Project tag changes", () => {
+  const PAN = { id: "pan-id", code: "PAN", name: "Panopticon" };
+  const ACME = { id: "acme-id", code: "ACME", name: "Acme" };
+  const BUG = { id: "t1", key: "bug", value: null };
+  const AREA = { id: "t2", key: "area", value: "onboarding" };
+  const tagsOf = (element: Element | undefined) =>
+    [...(element?.querySelectorAll(".tag-chip") ?? [])].map((chip) => chip.textContent);
+  const retag = (projectId: string, tags: unknown[]) =>
+    FakeEventSource.latest().emit(PROJECT_TAGS_CHANGED, JSON.stringify({ projectId, tags }));
+
+  async function startTagged() {
+    const started = await start([
+      card({ changeId: "c1", change: "team-auth", project: PAN, projectTags: [AREA, BUG] }),
+      card({
+        changeId: "c2",
+        change: "billing",
+        project: ACME,
+        projectTags: [{ id: "t9", key: "bug", value: null }],
+        lastReportedAt: "2026-11-08T11:50:00Z",
+      }),
+    ]);
+    FakeEventSource.latest().open();
+    await settle();
+    return started;
+  }
+
+  it("A rename shows on the Project's cards at once, in the Project's order, with no reload", async () => {
+    const { fetch, cards } = await startTagged();
+    const fetches = fetch.urls.length;
+
+    // area: onboarding → zone: onboarding, which now sorts after bug.
+    retag("PAN-ID", [BUG, { id: "t2", key: "zone", value: "onboarding" }]);
+
+    expect(tagsOf(cards()[0])).toEqual(["PAN/bug", "PAN/zone: onboarding"]);
+    expect(tagsOf(cards()[1])).toEqual(["ACME/bug"]);
+    expect(fetch.urls).toHaveLength(fetches);
+    expect(cards()[0]?.classList.contains("updated")).toBe(false);
+    expect(cards()[0]?.querySelector(".cell.lighting")).toBeNull();
+  });
+
+  it("A deleted tag goes from every card in the Project, and the last one takes the tag row with it", async () => {
+    const { cards } = await startTagged();
+
+    retag(PAN.id, [AREA]);
+    expect(tagsOf(cards()[0])).toEqual(["PAN/area: onboarding"]);
+
+    retag(PAN.id, []);
+    expect(cards()[0]?.querySelector(".tag-chips")).toBeNull();
+    expect(tagsOf(cards()[1])).toEqual(["ACME/bug"]);
+  });
+
+  it("An added tag leaves cards as they are, and a card keeps its place and its updated mark", async () => {
+    const { app, cards } = await startTagged();
+    send(card({ changeId: "c2", change: "billing", project: ACME, lastReportedAt: later(1) }));
+    expect(cards()[0]?.classList.contains("updated")).toBe(true);
+    const before = cards();
+
+    expect(
+      app.retagProject({
+        projectId: PAN.id,
+        tags: [AREA, BUG, { id: "t3", key: "new", value: null }],
+      }),
+    ).toBe(0);
+    expect(cards()).toEqual(before);
+
+    retag(ACME.id, []);
+    expect(cards()[0]?.querySelector(".card-change")?.textContent).toBe("billing");
+    expect(cards()[0]?.classList.contains("updated")).toBe(true);
+    expect(cards()[0]?.querySelector(".tag-chips")).toBeNull();
+  });
+
+  it("A filtered dashboard drops a card whose chosen tag was deleted, and offers to clear", async () => {
+    const { app, cards, root } = await startTagged();
+    app.setFilters({ filters: { tags: [{ kind: "tag", id: BUG.id }] }, dropped: [] });
+    expect(cards().map((c) => c.querySelector(".card-change")?.textContent)).toEqual(["team-auth"]);
+
+    retag(PAN.id, [AREA]);
+
+    expect(cards()).toHaveLength(0);
+    expect(root.querySelector(".no-match")).not.toBeNull();
+  });
+
+  it("ignores malformed events", async () => {
+    const { cards } = await startTagged();
+
+    FakeEventSource.latest().emit(PROJECT_TAGS_CHANGED, "not json");
+    retag(PAN.id, [{ id: 7, key: "bug" }]);
+    FakeEventSource.latest().emit(PROJECT_TAGS_CHANGED, JSON.stringify({ projectId: PAN.id }));
+
+    expect(tagsOf(cards()[0])).toEqual(["PAN/area: onboarding", "PAN/bug"]);
+  });
+});
+
+describe("parseProjectTagsChange", () => {
+  it("reads the Project and its tags, with a missing value as a bare key", () => {
+    expect(
+      parseProjectTagsChange(
+        JSON.stringify({
+          projectId: "p",
+          tags: [
+            { id: "t1", key: "bug" },
+            { id: "t2", key: "area", value: "x" },
+          ],
+        }),
+      ),
+    ).toEqual({
+      projectId: "p",
+      tags: [
+        { id: "t1", key: "bug", value: null },
+        { id: "t2", key: "area", value: "x" },
+      ],
+    });
+  });
+
+  it("is null for anything else", () => {
+    for (const data of [
+      "",
+      "null",
+      "[]",
+      '{"projectId":1,"tags":[]}',
+      '{"projectId":"p","tags":[null]}',
+    ]) {
+      expect(parseProjectTagsChange(data)).toBeNull();
+    }
+  });
+});
+
+// Spec live-dashboard, "An editor tags a change" (tags D6): a tag edit republishes the card with the same report time.
+describe("connectLive, a change tagged", () => {
+  const PAN = { id: "pan-id", code: "PAN", name: "Panopticon" };
+  const BUG = { id: "t1", key: "bug", value: null };
+  const tagsOf = (element: Element | undefined) =>
+    [...(element?.querySelectorAll(".tag-chip") ?? [])].map((chip) => chip.textContent);
+  const panCard = (projectTags: ChangeCard["projectTags"]) =>
+    card({ changeId: "c1", change: "team-auth", project: PAN, projectTags });
+
+  it("shows a tag put on a change at once, with no motion, and ignores the same card again", async () => {
+    const { app, cards } = await start([panCard([])]);
+    FakeEventSource.latest().open();
+    await settle();
+
+    send(panCard([BUG]));
+    expect(tagsOf(cards()[0])).toEqual(["PAN/bug"]);
+    expect(cards()[0]?.classList.contains("updated")).toBe(false);
+    expect(cards()[0]?.querySelector(".cell.lighting")).toBeNull();
+
+    expect(app.upsert(panCard([BUG]))).toBe(false);
+  });
+
+  it("A filtered dashboard drops the card when the chosen tag is taken off it", async () => {
+    const { app, cards } = await start([panCard([BUG])]);
+    FakeEventSource.latest().open();
+    await settle();
+    app.setFilters({ filters: { tags: [{ kind: "tag", id: BUG.id }] }, dropped: [] });
+    expect(cards()).toHaveLength(1);
+
+    send(panCard([]));
+
+    expect(cards()).toHaveLength(0);
+  });
+
+  it("a refresh takes the server's tags for a card it holds at the same report time", async () => {
+    const { app, cards } = await start([panCard([])]);
+
+    app.render([panCard([BUG])]);
+
+    expect(tagsOf(cards()[0])).toEqual(["PAN/bug"]);
   });
 });

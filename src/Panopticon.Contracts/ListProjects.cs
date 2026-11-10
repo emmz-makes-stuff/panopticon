@@ -4,7 +4,19 @@ namespace Panopticon.Contracts;
 
 /// <summary>One of the reporter's Projects (projects D6): its id is what <c>.panopticon.json</c> holds.</summary>
 /// <param name="Role">The reporter's role in it: <c>owner</c>, <c>editor</c> or <c>viewer</c>.</param>
-public sealed record ProjectSummary(string Id, string Name, string Code, string Role);
+/// <param name="Tags">
+/// The Project's tags in canonical text, by key then value (tags D4): the ones <c>tag_change</c> can put on its changes.
+/// Null from a server older than tags, which counts the same as none.
+/// </param>
+public sealed record ProjectSummary(string Id, string Name, string Code, string Role, IReadOnlyList<string>? Tags = null)
+{
+    public bool Equals(ProjectSummary? other) =>
+        other is not null
+        && (Id, Name, Code, Role) == (other.Id, other.Name, other.Code, other.Role)
+        && (Tags ?? []).SequenceEqual(other.Tags ?? [], StringComparer.Ordinal);
+
+    public override int GetHashCode() => HashCode.Combine(Id, Name, Code, Role);
+}
 
 /// <summary>The <c>list_projects</c> tool's result, from the server and from the bridge alike (projects D6).</summary>
 public sealed record ListProjectsResult(IReadOnlyList<ProjectSummary> Projects)
@@ -25,6 +37,10 @@ public sealed record ListProjectsResult(IReadOnlyList<ProjectSummary> Projects)
         {
             text.Append(project.Code).Append(" · ").Append(project.Name).Append(" · ").Append(project.Role)
                 .Append(" · id ").AppendLine(project.Id);
+            if (project.Tags is { Count: > 0 } tags)
+            {
+                text.Append("  tags: ").AppendJoin(", ", tags).AppendLine();
+            }
         }
 
         return text.Append("To link a repo, write {\"project\": \"<id>\"} to .panopticon.json at its root.").ToString();

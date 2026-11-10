@@ -1,4 +1,5 @@
 import { leadingProjectLabel } from "../projectLabel";
+import { tagPicker } from "../tagPicker";
 import { ApiError, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
 import { el, page, routeLink } from "../dom";
 import { agentName, calendarDate, relativeTime } from "../format";
@@ -6,10 +7,13 @@ import { changeHref } from "../links";
 import {
   CHANGE_ARCHIVED,
   CHANGE_UPDATED,
+  PROJECT_TAGS_CHANGED,
   PROJECTS_CHANGED,
   parseArchivedId,
   parseCard,
   parseProjectsChange,
+  parseProjectTagsChange,
+  retagCard,
 } from "../live";
 import { renderChangeMetrics } from "../metricsPanel";
 import { renderProgressBar } from "../progressBar";
@@ -50,6 +54,11 @@ export function changeView(env: Env): View {
     let closeStream: (() => void) | undefined;
 
     const head = el("header", "change-head");
+    // One for the page's life: a live refresh re-renders the header around it, and an open panel stays open.
+    // The card each tag change returns replaces the page's, so choosing another document doesn't put old chips back.
+    const tags = tagPicker(env, changeId, (card) => {
+      latest = { ...latest, card };
+    });
     const nav = el("nav", "doc-nav");
     nav.setAttribute("aria-label", "Documents");
     const notice = el("p", "doc-notice");
@@ -181,7 +190,9 @@ export function changeView(env: Env): View {
         agents.append(row);
       }
 
-      return [back, repo, el("h2", "change-name", card.change), when, bars, agents];
+      // The tags sit under the change name (web/DESIGN.md "Tags"); no tags and no picker, no row.
+      tags.update(card);
+      return [back, repo, el("h2", "change-name", card.change), tags.element, when, bars, agents];
     }
 
     function renderNav(documents: readonly DocumentEntry[], selected: string | undefined): Node[] {
@@ -296,6 +307,20 @@ export function changeView(env: Env): View {
         if (change && !change.member && project === change.projectId.toLowerCase()) {
           refresh();
         }
+      });
+
+      // tags D6: a rename or delete in this change's Project shows at once, with no refetch of the page. The chips are
+      // the picker's, so it retags them (and reloads the Project's tags, so an added one is offered); the page keeps its
+      // copy current for the next header render.
+      source.addEventListener(PROJECT_TAGS_CHANGED, (event) => {
+        const change = parseProjectTagsChange(event.data);
+        const project = latest.card.project?.id.toLowerCase();
+        if (!change || project !== change.projectId.toLowerCase()) {
+          return;
+        }
+
+        latest = { ...latest, card: retagCard(latest.card, change) };
+        tags.projectTagsChanged(change);
       });
 
       return () => source.close();

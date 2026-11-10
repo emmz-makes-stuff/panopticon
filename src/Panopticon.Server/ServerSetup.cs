@@ -142,7 +142,8 @@ public static class ServerSetup
         services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
             .WithTools<ReportProgressTool>()
-            .WithTools<ListProjectsTool>();
+            .WithTools<ListProjectsTool>()
+            .WithTools<TagChangeTool>();
 
         return builder;
     }
@@ -166,6 +167,7 @@ public static class ServerSetup
         app.MapTokens();
         app.MapDashboard();
         app.MapChanges();
+        app.MapChangeTags();
         app.MapMetrics();
         app.MapProjects();
 

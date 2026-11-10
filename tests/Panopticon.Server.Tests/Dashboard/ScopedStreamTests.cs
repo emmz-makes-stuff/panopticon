@@ -354,6 +354,32 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
         throw new InvalidOperationException("The stream ended.");
     }
 
+    // tags D6; spec live-dashboard "Tag edits are live": a Project's tag changes reach its members, and nobody else.
+    [Fact]
+    public async Task Project_tag_changes_reach_only_that_Projects_members()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var kit = new Viewer(_ids.Kit, [_ids.Acme]);
+        var emmz = new Viewer(_ids.Emmz, [_ids.Pan]);
+        await using var kits = DashboardEndpoints.StreamAsync(broadcaster, kit, subscribed: null, TimeSpan.FromSeconds(30), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        await using var emmzs = DashboardEndpoints.StreamAsync(broadcaster, emmz, subscribed: null, TimeSpan.FromSeconds(30), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        var kitMoving = kits.MoveNextAsync();
+        var emmzMoving = emmzs.MoveNextAsync();
+
+        IReadOnlyList<ProjectTagRef> panTags = [new(Guid.NewGuid(), "defect", null)];
+        broadcaster.PublishProjectTags(_ids.Pan, panTags);
+        var acme = Card("acme-work");
+        broadcaster.Publish(acme, new ChangeScope(_ids.Acme, null));
+
+        Assert.True(await emmzMoving);
+        Assert.Equal(DashboardEndpoints.ProjectTagsChangedEvent, emmzs.Current.EventType);
+        Assert.Equal(new ProjectTagsChanged(_ids.Pan, panTags), emmzs.Current.Data);
+        Assert.True(await kitMoving);
+        Assert.Equal(acme, kits.Current.Data);
+    }
+
     private static async Task<string> NextUpdatedChangeAsync(StreamReader reader, CancellationToken cancellationToken) =>
         JsonDocument.Parse(await NextEventAsync(reader, DashboardEndpoints.ChangeUpdatedEvent, cancellationToken))
             .RootElement.GetProperty("change").GetString()!;

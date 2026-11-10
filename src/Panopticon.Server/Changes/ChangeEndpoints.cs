@@ -44,6 +44,7 @@ public static class ChangeEndpoints
                 string? machine,
                 string? client,
                 string? project,
+                string[]? tag,
                 Viewer viewer,
                 ChangePages pages,
                 CancellationToken cancellationToken) =>
@@ -54,7 +55,7 @@ public static class ChangeEndpoints
                     return TypedResults.BadRequest($"limit must be between 1 and {ChangePages.HistoryPageSize}.");
                 }
 
-                if (!HistoryFilter.TryParse(repo, owner, member, machine, client, project, out var filter, out var error))
+                if (!HistoryFilter.TryParse(repo, owner, member, machine, client, project, tag, out var filter, out var error))
                 {
                     return TypedResults.BadRequest(error);
                 }

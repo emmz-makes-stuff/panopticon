@@ -445,6 +445,39 @@ describe("change page Project label", () => {
     expect(q(root, ".change-repo .project-code").title).toBe("Panopticon");
   });
 
+  it("Tags shown on changes: the header shows the chips under the change name", async () => {
+    const PAN = { id: "p1", code: "PAN", name: "Panopticon" };
+    const server = serverFor(
+      changePage({
+        card: card({
+          changeId: "c1",
+          change: "team-auth",
+          project: PAN,
+          projectTags: [{ id: "t1", key: "area", value: "onboarding" }],
+          personalTags: [{ key: "dev", value: null }],
+        }),
+      }),
+    );
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".change-head .tag-chips") !== null);
+
+    const tags = q(root, ".change-head .tag-chips");
+    expect(q(root, ".change-tags").previousElementSibling?.classList.contains("change-name")).toBe(
+      true,
+    );
+    expect([...tags.querySelectorAll(".tag-chip")].map((chip) => chip.textContent)).toEqual([
+      "PAN/area: onboarding",
+      "dev (only you see this)",
+    ]);
+  });
+
+  it("No tags: the header has no tag row", async () => {
+    const { root } = await startTestShell("/changes/c1", serverFor());
+    await until(() => root.querySelector(".change-name") !== null);
+
+    expect(root.querySelector(".tag-chips")).toBeNull();
+  });
+
   it("personal work's header shows Personal", async () => {
     const server = serverFor(
       changePage({ card: card({ changeId: "c1", change: "team-auth", personal: true }) }),
