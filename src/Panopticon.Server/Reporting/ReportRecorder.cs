@@ -371,6 +371,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             }
 
             personal.ArchivedAt = receivedAt;
+            personal.RetiredToProjectId = scope.ProjectId;
             return (change, personal.Id);
         }
 

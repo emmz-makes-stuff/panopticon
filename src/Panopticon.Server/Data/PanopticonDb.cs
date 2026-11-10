@@ -41,8 +41,17 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
             change.HasIndex(c => c.ProjectId);
             change.HasIndex(c => c.OwnerMemberId);
             change.HasOne(c => c.Project).WithMany().HasForeignKey(c => c.ProjectId);
+            change.HasOne(c => c.RetiredToProject).WithMany().HasForeignKey(c => c.RetiredToProjectId);
             change.HasOne<Member>().WithMany().HasForeignKey(c => c.OwnerMemberId);
-            change.ToTable(t => t.HasCheckConstraint("ck_changes_one_scope", "project_id IS NULL OR owner_member_id IS NULL"));
+            change.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_changes_one_scope", "project_id IS NULL OR owner_member_id IS NULL");
+
+                // projects D4: a retired copy is archived with no folder.
+                t.HasCheckConstraint(
+                    "ck_changes_retired_unfoldered",
+                    "retired_to_project_id IS NULL OR (archived_at IS NOT NULL AND archive_folder IS NULL)");
+            });
             change.OwnsOne(c => c.Snapshot, snapshot => snapshot.ToJson());
             change.HasMany(c => c.Agents).WithOne().HasForeignKey(a => a.ChangeId);
         });

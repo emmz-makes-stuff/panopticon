@@ -24,8 +24,8 @@
 
 ## 5. Server: members rescoped
 
-- [ ] 5.0 Retired personal copies (D4): add `retired_to_project_id` to changes (nullable, a foreign key to projects, with a migration), set when linking retires a personal change. The team metrics leave retired copies out. History entries get a nullable `archiveFolder` and a `linkedTo` Project. Verify the "A copy retired by linking" (history) and "Retired copies don't count" (metrics) scenarios with recorder and endpoint tests.
-- [ ] 5.1 Rescope the member endpoints (D8):
+- [x] 5.0 Retired personal copies (D4): add `retired_to_project_id` to changes (nullable, a foreign key to projects, with a migration), set when linking retires a personal change. The team metrics leave retired copies out. History entries get a nullable `archiveFolder` and a `linkedTo` Project. Verify the "A copy retired by linking" (history) and "Retired copies don't count" (metrics) scenarios with recorder and endpoint tests.
+- [x] 5.1 Rescope the member endpoints (D8):
   - `GET /api/members` lists people who share a Project, and yourself;
   - `POST /api/members` is removed;
   - `DELETE /api/members/{id}` is for initial members only, is refused for a last owner (naming the Projects), and also deletes the member's Project memberships;

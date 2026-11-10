@@ -153,6 +153,10 @@ namespace Panopticon.Server.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("repo_id");
 
+                    b.Property<Guid?>("RetiredToProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("retired_to_project_id");
+
                     b.HasKey("Id")
                         .HasName("pk_changes");
 
@@ -164,6 +168,9 @@ namespace Panopticon.Server.Data.Migrations
 
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_changes_project_id");
+
+                    b.HasIndex("RetiredToProjectId")
+                        .HasDatabaseName("ix_changes_retired_to_project_id");
 
                     b.HasIndex("RepoId", "ArchiveFolder", "ProjectId", "OwnerMemberId")
                         .IsUnique()
@@ -182,6 +189,8 @@ namespace Panopticon.Server.Data.Migrations
                     b.ToTable("changes", null, t =>
                         {
                             t.HasCheckConstraint("ck_changes_one_scope", "project_id IS NULL OR owner_member_id IS NULL");
+
+                            t.HasCheckConstraint("ck_changes_retired_unfoldered", "retired_to_project_id IS NULL OR (archived_at IS NOT NULL AND archive_folder IS NULL)");
                         });
                 });
 
@@ -710,6 +719,11 @@ namespace Panopticon.Server.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_changes_repos_repo_id");
 
+                    b.HasOne("Panopticon.Server.Data.Project", "RetiredToProject")
+                        .WithMany()
+                        .HasForeignKey("RetiredToProjectId")
+                        .HasConstraintName("fk_changes_projects_retired_to_project_id");
+
                     b.OwnsOne("Panopticon.Server.Data.ProgressSnapshot", "Snapshot", b1 =>
                         {
                             b1.Property<Guid>("ChangeId");
@@ -744,6 +758,8 @@ namespace Panopticon.Server.Data.Migrations
                     b.Navigation("Project");
 
                     b.Navigation("Repo");
+
+                    b.Navigation("RetiredToProject");
 
                     b.Navigation("Snapshot")
                         .IsRequired();

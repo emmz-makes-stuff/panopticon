@@ -179,6 +179,7 @@ public class ReportScopeTests(PostgresFixture postgres, S3Fixture s3)
         var retired = await harness.ChangeAsync(personal.ChangeId);
         Assert.Equal((linked.ReceivedAt, (string?)null), (retired.ArchivedAt, retired.ArchiveFolder));
         Assert.Equal(((Guid?)null, (Guid?)emmz), (retired.ProjectId, retired.OwnerMemberId));
+        Assert.Equal(pan, retired.RetiredToProjectId);
 
         // Her next linked report finds only the Project's change: nothing more to retire.
         var again = await harness.RecordAsync(emmz, pan);

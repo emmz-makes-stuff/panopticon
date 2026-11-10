@@ -75,7 +75,7 @@ public class TokenEndpointTests(PostgresFixture postgres, S3Fixture s3)
     {
         await using var factory = await FactoryAsync();
         using var browser = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
-        (await browser.PostApiAsync(MemberEndpoints.MembersPath, new { email = "sam@example.com" }, Ct)).Dispose();
+        await browser.InviteToProjectAsync(await browser.CreateProjectAsync("PAN", Ct), "sam@example.com", "viewer", Ct);
         using var samsBrowser = await factory.CreateSignedInClientAsync("sam@example.com", Ct);
         await LoginAsync(factory, samsBrowser, "sams-vm");
         Guid samsToken;

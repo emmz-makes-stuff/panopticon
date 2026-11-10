@@ -29,7 +29,7 @@ public sealed class Change
     /// <summary>When the change was archived; null while it is active (change-documents-and-history D5).</summary>
     public DateTimeOffset? ArchivedAt { get; set; }
 
-    /// <summary>The archive folder's name, e.g. <c>2026-11-08-team-auth</c>; set together with <see cref="ArchivedAt"/>.</summary>
+    /// <summary>The archive folder's name, e.g. <c>2026-11-08-team-auth</c>; set with <see cref="ArchivedAt"/>, except on a retired copy.</summary>
     public string? ArchiveFolder { get; set; }
 
     public List<ChangeAgent> Agents { get; } = [];
@@ -40,6 +40,15 @@ public sealed class Change
     public Guid? ProjectId { get; set; }
     public Project? Project { get; set; }
     public Guid? OwnerMemberId { get; set; }
+
+    /// <summary>
+    /// The Project that took this personal change's work over when linking retired it (projects D4): set with
+    /// <see cref="ArchivedAt"/>, and no <see cref="ArchiveFolder"/>. Retired copies stay in the history and leave the
+    /// team metrics.
+    /// </summary>
+    public Guid? RetiredToProjectId { get; set; }
+
+    public Project? RetiredToProject { get; set; }
 }
 
 /// <summary>A Project (projects D1): the work and people it groups. Its code is fixed once created.</summary>

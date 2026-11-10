@@ -25,15 +25,18 @@ public sealed record DocumentEntry(string Path, string Kind, string Title, int S
 public sealed record RenderedDocument(string Path, string Html);
 
 /// <summary>One archived change in the history (spec: change-history, History list), with its Project as its card has it.</summary>
+/// <param name="ArchiveFolder">Its archive folder; null for a personal copy retired by linking.</param>
+/// <param name="LinkedTo">For a retired copy, the Project its work went to (projects D4): "Linked to PAN".</param>
 public sealed record HistoryEntry(
     Guid ChangeId,
     CardRepo Repo,
     string Change,
     DateTimeOffset ArchivedAt,
-    string ArchiveFolder,
+    string? ArchiveFolder,
     IReadOnlyList<CardAgent> Agents,
     CardProject? Project,
-    bool Personal);
+    bool Personal,
+    CardProject? LinkedTo);
 
 /// <summary>A page of the history, newest archive first; <see cref="NextBefore"/> is the next page's cursor.</summary>
 public sealed record HistoryPage(IReadOnlyList<HistoryEntry> Changes, DateTimeOffset? NextBefore);
@@ -118,7 +121,7 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
         Viewer viewer,
         CancellationToken cancellationToken)
     {
-        var query = filter.Apply(cards.Query().VisibleTo(viewer).Where(c => c.ArchivedAt != null));
+        var query = filter.Apply(cards.Query().Include(c => c.RetiredToProject).VisibleTo(viewer).Where(c => c.ArchivedAt != null));
         if (before is { } given)
         {
             // Npgsql writes only UTC offsets to timestamptz, and a cursor with any other offset is the same instant.
@@ -154,10 +157,14 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             [.. changes.Select(c =>
             {
                 var card = ChangeCards.ToCard(c);
-                return new HistoryEntry(c.Id, card.Repo, card.Change, c.ArchivedAt!.Value, c.ArchiveFolder!, card.Agents, card.Project, card.Personal);
+                return new HistoryEntry(c.Id, card.Repo, card.Change, c.ArchivedAt!.Value, c.ArchiveFolder, card.Agents, card.Project, card.Personal, LinkedTo(c));
             })],
             next);
     }
+
+    // projects D4: the Project a retired personal copy's work went to, shown in place of its archive folder.
+    private static CardProject? LinkedTo(Change change) =>
+        change.RetiredToProject is { } project ? new CardProject(project.Id, project.Code, project.Name) : null;
 
     /// <summary>
     /// The filter choices among the archived changes the viewer can see, so a hidden change leaks no value. Values that differ only in case are one choice, shown in one of

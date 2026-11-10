@@ -119,9 +119,10 @@ public class ApiTokenReportTests(PostgresFixture postgres, S3Fixture s3)
     {
         await using var factory = await FactoryAsync();
         using var browser = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
-        var sam = (await (await browser.PostApiAsync(MemberEndpoints.MembersPath, new { email = Sam }, Ct)).Content.ReadFromJsonAsync<MemberView>(Ct))!;
+        await browser.InviteToProjectAsync(await browser.CreateProjectAsync("PAN", Ct), Sam, "viewer", Ct);
         var token = await factory.CreateApiTokenAsync(Sam, cancellationToken: Ct);
-        (await browser.SendApiAsync(HttpMethod.Delete, $"{MemberEndpoints.MembersPath}/{sam.Id}", null, Ct)).Dispose();
+        var samId = await factory.MemberIdAsync(Sam, Ct);
+        (await browser.SendApiAsync(HttpMethod.Delete, $"{MemberEndpoints.MembersPath}/{samId}", null, Ct)).Dispose();
 
         using var response = await PostToolCallAsync(factory, token);
 

@@ -103,6 +103,7 @@ public static class ServerSetup
 
         // Members (team-auth): the first ones come from configuration.
         services.AddHostedService<InitialMembers>();
+        services.AddSingleton<InitialMemberList>();
 
         // Sign-in: rate limits and the background email queue.
         services.AddSingleton<AuthLimits>();
