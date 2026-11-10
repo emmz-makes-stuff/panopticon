@@ -19,6 +19,10 @@ public static class PanopticonClaims
     public static Guid? GetMemberId(this ClaimsPrincipal principal) =>
         Guid.TryParse(principal?.FindFirstValue(MemberId), out var id) ? id : null;
 
+    /// <summary>The member's id on a principal that must have one (a session: the Member policy guarantees it).</summary>
+    public static Guid GetRequiredMemberId(this ClaimsPrincipal principal) =>
+        principal.GetMemberId() ?? throw new InvalidOperationException("This principal has no member.");
+
     public static Guid? GetSessionId(this ClaimsPrincipal principal) =>
         Guid.TryParse(principal?.FindFirstValue(SessionId), out var id) ? id : null;
 }

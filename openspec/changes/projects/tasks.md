@@ -7,8 +7,8 @@
 
 ## 2. Server: Projects and their members
 
-- [ ] 2.1 Add `GET`/`POST /api/projects` and `GET`/`PATCH /api/projects/{id}` (D5): code validation and upper-casing, a case-insensitive unique code (409), name rules, owner-only rename, and 404 for non-members. Verify "Creating a Project", "Project codes", "Project names" and "Projects list" with endpoint tests.
-- [ ] 2.2 Add the member endpoints: invite by email with a role (creating or reactivating the `Member`), change a role, remove, and leave (D5). Lock the Project row so the last-owner rule holds. Verify "Inviting to a Project" and "Changing roles and removing" with endpoint tests, including two owners demoting each other at once leaving one owner.
+- [x] 2.1 Add `GET`/`POST /api/projects` and `GET`/`PATCH /api/projects/{id}` (D5): code validation and upper-casing, a case-insensitive unique code (409), name rules, owner-only rename, and 404 for non-members. Verify "Creating a Project", "Project codes", "Project names" and "Projects list" with endpoint tests.
+- [x] 2.2 Add the member endpoints: invite by email with a role (creating or reactivating the `Member`), change a role, remove, and leave (D5). Lock the Project row so the last-owner rule holds. Verify "Inviting to a Project" and "Changing roles and removing" with endpoint tests, including two owners demoting each other at once leaving one owner.
 
 ## 3. Server: reporting into Projects
 
