@@ -54,6 +54,7 @@ internal sealed partial class ProgressReporter(
             var root = await GitRepository.FindRootAsync(settings.WorkingDirectory, cancellationToken);
             var repo = ParseRemote(await GitRepository.GetOriginUrlAsync(root, cancellationToken));
             var folder = await ChangeDocuments.ReadAsync(root, change, cancellationToken);
+            var project = await ProjectLink.ReadAsync(root, cancellationToken);
             var agent = new AgentRef(
                 string.IsNullOrWhiteSpace(clientName) ? UnknownClient : clientName.Trim(),
                 settings.MachineName);
@@ -61,7 +62,7 @@ internal sealed partial class ProgressReporter(
             var result = await forwarder.ForwardAsync(
                 endpoint,
                 token,
-                new ReportProgressArguments(repo, change, agent, folder.Tasks, section, folder.Documents, folder.Archive),
+                new ReportProgressArguments(repo, change, agent, folder.Tasks, section, folder.Documents, folder.Archive, project?.ToString()),
                 settings.TokenFromEnvironment,
                 cancellationToken);
 

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -8,7 +9,7 @@ using Panopticon.Contracts;
 namespace Panopticon.Cli.Bridge;
 
 /// <summary>
-/// Sends a report to the server's online MCP endpoint (design D1) as an MCP client, with the bearer token, and turns
+/// Calls the server's online MCP endpoint (design D1) as an MCP client, for reports and the Project list, with the bearer token, and turns
 /// every failure into a <see cref="BridgeException"/> that never echoes the token.
 /// </summary>
 internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
@@ -27,6 +28,70 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
         bool tokenFromEnvironment,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(report);
+        var progress = await CallAsync(
+            endpoint,
+            token,
+            new ToolCall<ReportProgressResult>(
+                ContractsAssembly.ReportProgressToolName,
+                report.ToToolArguments(),
+                ContractsJsonContext.Default.ReportProgressResult,
+                "the report",
+                "progress result"),
+            tokenFromEnvironment,
+            cancellationToken);
+
+        // Records bind missing members as null; a result without its counts is as unusable as one that won't parse.
+        if (progress.ChangeId is null
+            || progress.Overall is null
+            || progress.CurrentSection is { Title: null } or { Progress: null })
+        {
+            throw Malformed(BridgeSettings.Display(endpoint), "progress result", "a required member is missing.", null);
+        }
+
+        return progress;
+    }
+
+    /// <summary>Lists the reporter's Projects (projects D6), with the same server, token and errors as a report.</summary>
+    public async Task<ListProjectsResult> ListProjectsAsync(
+        Uri endpoint,
+        string token,
+        bool tokenFromEnvironment,
+        CancellationToken cancellationToken)
+    {
+        var list = await CallAsync(
+            endpoint,
+            token,
+            new ToolCall<ListProjectsResult>(
+                ContractsAssembly.ListProjectsToolName,
+                new Dictionary<string, object?>(),
+                ContractsJsonContext.Default.ListProjectsResult,
+                "the Project list",
+                "Project list"),
+            tokenFromEnvironment,
+            cancellationToken);
+
+        if (list.Projects is null || list.Projects.Any(p => p is null || p.Id is null || p.Name is null || p.Code is null || p.Role is null))
+        {
+            throw Malformed(BridgeSettings.Display(endpoint), "Project list", "a required member is missing.", null);
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    /// Calls one of the server's tools and returns its structured result (projects D6). Configuration, transport and
+    /// protocol failures, a refusal, and a missing or malformed result are each a <see cref="BridgeException"/>.
+    /// </summary>
+    public async Task<T> CallAsync<T>(
+        Uri endpoint,
+        string token,
+        ToolCall<T> call,
+        bool tokenFromEnvironment,
+        CancellationToken cancellationToken)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(call);
         var server = BridgeSettings.Display(endpoint);
 
         var http = createHttpClient();
@@ -54,10 +119,7 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
                 new McpClientOptions { ClientInfo = new Implementation { Name = "panopticon-bridge", Version = BridgeHost.Version } },
                 cancellationToken: cancellationToken);
 
-            result = await client.CallToolAsync(
-                ContractsAssembly.ReportProgressToolName,
-                report.ToToolArguments(),
-                cancellationToken: cancellationToken);
+            result = await client.CallToolAsync(call.Name, call.Arguments, cancellationToken: cancellationToken);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested
             && Describe(exception, server, tokenFromEnvironment) is { } message)
@@ -67,43 +129,27 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
 
         if (result.IsError == true)
         {
-            throw new BridgeException($"The Panopticon server refused the report: {Text(result)}");
+            throw new BridgeException($"The Panopticon server refused {call.Action}: {Text(result)}");
         }
 
-        if (result.StructuredContent is not { } structured || Deserialize(structured, server) is not { } progress)
+        T? value = null;
+        if (result.StructuredContent is { } structured)
         {
-            throw new BridgeException($"The Panopticon server at {server} returned no progress result.");
+            try
+            {
+                value = structured.Deserialize(call.Result);
+            }
+            catch (JsonException exception)
+            {
+                throw Malformed(server, call.ResultName, exception.Message, exception);
+            }
         }
 
-        return progress;
+        return value ?? throw new BridgeException($"The Panopticon server at {server} returned no {call.ResultName}.");
     }
 
-    private static ReportProgressResult? Deserialize(JsonElement structured, string server)
-    {
-        ReportProgressResult? progress;
-        try
-        {
-            progress = structured.Deserialize(ContractsJsonContext.Default.ReportProgressResult);
-        }
-        catch (JsonException exception)
-        {
-            throw Malformed(server, exception.Message, exception);
-        }
-
-        // Records bind missing members as null; a result without its counts is as unusable as one that won't parse.
-        if (progress is not null
-            && (progress.ChangeId is null
-                || progress.Overall is null
-                || progress.CurrentSection is { Title: null } or { Progress: null }))
-        {
-            throw Malformed(server, "a required member is missing.", null);
-        }
-
-        return progress;
-    }
-
-    private static BridgeException Malformed(string server, string reason, Exception? inner) =>
-        new($"The Panopticon server at {server} returned a malformed progress result: {reason}", inner);
+    private static BridgeException Malformed(string server, string resultName, string reason, Exception? inner) =>
+        new($"The Panopticon server at {server} returned a malformed {resultName}: {reason}", inner);
 
     // Maps a transport or protocol failure to a message for the agent; null lets anything unexpected propagate.
     private static string? Describe(Exception exception, string server, bool tokenFromEnvironment)
@@ -138,3 +184,16 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
             ? text
             : "(no message)";
 }
+
+/// <summary>One call to a server tool, for <see cref="ServerForwarder.CallAsync{T}"/>.</summary>
+/// <param name="Name">The tool's name.</param>
+/// <param name="Arguments">Its arguments, built without reflection (AOT-safe).</param>
+/// <param name="Result">How to read its structured result.</param>
+/// <param name="Action">What a refusal refused, e.g. "the report": "The Panopticon server refused the report: …".</param>
+/// <param name="ResultName">What the result is called in errors, e.g. "progress result".</param>
+internal sealed record ToolCall<T>(
+    string Name,
+    IReadOnlyDictionary<string, object?> Arguments,
+    JsonTypeInfo<T> Result,
+    string Action,
+    string ResultName);

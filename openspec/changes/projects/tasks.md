@@ -35,9 +35,9 @@
 
 ## 6. CLI: the link file and `list_projects`
 
-- [ ] 6.1 Add `ProjectLink`, which reads `.panopticon.json` at the repo root with source-generated JSON (D7), and send its id with each report. A malformed file is a tool error naming the file, with nothing sent. Verify "Project link file" and "Malformed link file" with bridge tests (a linked repo, no file, invalid JSON, a non-UUID), and that the AOT publish is still warning-free (`make aot`).
-- [ ] 6.2 Add the bridge's `list_projects`, forwarded through a general `ServerForwarder.CallAsync` (D6). Verify "Listing Projects through the bridge" and the modified "Stdio MCP server" scenario with bridge tests against a test server (a result, no login, a refusal). Extend the CLI end-to-end test so a linked repo's report lands in its Project.
-- [ ] 6.3 Document `.panopticon.json` and `list_projects` in `docs/cli.md`: what the file holds, committing it, and asking the agent to link the repo. Verify the wording against the spec.
+- [x] 6.1 Add `ProjectLink`, which reads `.panopticon.json` at the repo root with source-generated JSON (D7), and send its id with each report. A malformed file is a tool error naming the file, with nothing sent. Verify "Project link file" and "Malformed link file" with bridge tests (a linked repo, no file, invalid JSON, a non-UUID), and that the AOT publish is still warning-free (`make aot`).
+- [x] 6.2 Add the bridge's `list_projects`, forwarded through a general `ServerForwarder.CallAsync` (D6). Verify "Listing Projects through the bridge" and the modified "Stdio MCP server" scenario with bridge tests against a test server (a result, no login, a refusal). Extend the CLI end-to-end test so a linked repo's report lands in its Project.
+- [x] 6.3 Document `.panopticon.json` and `list_projects` in `docs/cli.md`: what the file holds, committing it, and asking the agent to link the repo. Verify the wording against the spec.
 
 ## 7. Web: Projects pages and members
 

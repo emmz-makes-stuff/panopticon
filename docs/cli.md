@@ -1,8 +1,8 @@
 # The `panopticon` CLI
 
 `panopticon login` gives this machine an API token, approved in the dashboard. `panopticon mcp` is a local
-MCP server that agents talk to over stdio. It offers one tool,
-`report_progress`, and forwards each report to the Panopticon server's online MCP endpoint (`/mcp`).
+MCP server that agents talk to over stdio. It offers two tools, `report_progress` and `list_projects`, and
+forwards each call to the Panopticon server's online MCP endpoint (`/mcp`).
 
 The agent only names the change. The bridge supplies the rest from the local working copy:
 
@@ -12,6 +12,31 @@ The agent only names the change. The bridge supplies the rest from the local wor
   root, which is the git top-level of the bridge's working directory. See [What the bridge sends](#what-the-bridge-sends).
 - **The agent**: the MCP client name the agent gave when it connected (for example `claude-code`), plus this
   machine's name.
+- **The Project**, from `.panopticon.json` at the repo root, if there is one. See [Linking a repo to a
+  Project](#linking-a-repo-to-a-project).
+
+## Linking a repo to a Project
+
+A repo's work belongs to a Project when the repo root holds a `.panopticon.json` naming it:
+
+```json
+{ "project": "6f1c2a4e-…" }
+```
+
+- **What it holds:** `project` is the Project's id, not its code. Codes and names can't be confused with ids, and
+  a renamed Project keeps its id. Other fields are ignored, so later versions can add to the file.
+- **Commit it.** Everyone who works in the repo then reports into the same Project, and their agents' cards appear on
+  the dashboard of every member of that Project.
+- **Without it,** reports are your own personal work: only you see them.
+- **When it's read:** on every report, with no caching, so adding or editing the file takes effect on the next one.
+  Work you reported before linking moves into the Project with its history. If a teammate linked the repo first,
+  your personal copy of the change leaves your dashboard and stays in your history as "Linked to <code>".
+- **Finding the id:** ask the agent to link the repo. It calls `list_projects`, which returns the Projects you can
+  report into, each with its id, name, code and your role, and writes the file. Or copy the file from the Project's
+  page in the dashboard.
+
+You can report into any Project you're a member of, in any role. A report naming a Project you aren't in, or one
+that doesn't exist, is refused, and nothing is recorded.
 
 ## What the bridge sends
 
@@ -159,7 +184,7 @@ progress, e.g. `Overall 7/20 · section 2 Core 2/5`. For an archived change it e
 
 Any MCP client that can launch a stdio server works the same way. Its command is `panopticon` with the
 arguments `["mcp"]`, and it starts in the repo (or any directory inside it). It uses the saved login, or the two
-variables above.
+variables above. `list_projects` takes no arguments and uses the same server and token as reports.
 
 ## Troubleshooting
 
@@ -172,6 +197,11 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
 - **"'…' is … bytes; the limit is …"** or **"The change's documents total …"**: a document, or the whole folder, is
   over the size limits above. Nothing was sent. Move large files out of the change's folder.
 - **"'…' isn't valid UTF-8"** or **"'…' can't be sent: its path …"**: rename the file, or re-save it as UTF-8.
+- **".panopticon.json isn't valid JSON"**, **"has no \"project\""** or **"\"project\" must be a Project id from
+  list_projects"**: fix the link file (see [Linking a repo to a Project](#linking-a-repo-to-a-project)). Nothing
+  was sent. The bridge never falls back to a personal report, so a typo can't hide the work.
+- **"Project … wasn't found, or you aren't a member of it"**: the link file names a Project you can't report into.
+  Ask an owner to invite you, or call `list_projects` for the ones you can.
 - **"Couldn't reach the Panopticon server at …"**: check `PANOPTICON_SERVER_URL`, and that the server is up.
 - **"isn't configured: … not set"**: run `panopticon login`, or set the variables it names.
 - **"saved login is for …, not PANOPTICON_SERVER_URL"**: the environment points at another server. Log in to
