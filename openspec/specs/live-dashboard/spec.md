@@ -24,9 +24,9 @@ a card: they are in the history (see `change-history`). The most recently report
 - **THEN** the dashboard shows one card, for `team-auth`
 
 ### Requirement: Card content
-Each card SHALL show the repo (host, owner and name), the change name, the agents working on it with the
-member each one belongs to, the current section's number and title, the time of the last report, and whether the
-change is active, idle or stale (see Quiet cards).
+Each card SHALL show the repo (host, owner and name), the change name, its Project's code (or that it's personal),
+the agents working on it with the member each one belongs to, the current section's number and title, the time of
+the last report, and whether the change is active, idle or stale (see Quiet cards).
 
 #### Scenario: Card shows identity and agents
 - **WHEN** Emmz's `claude-code@vm-1` reports on `walking-skeleton` in `github.com/emmz/panopticon`
@@ -36,6 +36,10 @@ change is active, idle or stale (see Quiet cards).
 #### Scenario: Agent without a member
 - **WHEN** an agent reported with the Development bootstrap token, or before this change
 - **THEN** its row shows the client and machine with no member name
+
+#### Scenario: Card shows its Project
+- **WHEN** a change is in Project `PAN`, and another is in the viewer's personal scope
+- **THEN** the first card shows `PAN`, and the second shows that it's personal
 
 ### Requirement: Two progress bars
 Each card SHALL show a progress bar for the current section and a progress bar for the overall change.

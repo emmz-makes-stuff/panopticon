@@ -32,30 +32,19 @@ member is configured.
 - **WHEN** the server starts with no active member and no initial member configured
 - **THEN** start-up fails, naming `Panopticon:InitialMembers`
 
-### Requirement: Members invite members
-Any signed-in member SHALL be able to invite an email address, with an optional display name. That makes it a
-member at once, or makes a removed member active again. The invited person then signs in like any member. No
-invitation email is sent.
-
-#### Scenario: Invite a colleague
-- **WHEN** a member invites `sam@example.com`
-- **THEN** `sam@example.com` appears in the member list and can request a sign-in link
-
-#### Scenario: Invalid address
-- **WHEN** a member invites `not-an-email`
-- **THEN** the invitation is rejected with a message saying the address isn't valid, and nobody is added
-
-#### Scenario: Already a member
-- **WHEN** a member invites an address that is already an active member
-- **THEN** the invitation is rejected with a message saying so, and nothing changes
-
 ### Requirement: Member list
-Any signed-in member SHALL be able to list the active members, with each one's email, display name, and when
-they joined.
+A signed-in member SHALL be able to list the active members who share at least one Project with them, and
+themselves, with each one's email, display name, and when they joined. Members who share no Project with them SHALL
+NOT be listed.
 
 #### Scenario: List members
 - **WHEN** a member opens the members page
-- **THEN** every active member is listed with email, display name and join date, and removed members aren't
+- **THEN** every active member who shares a Project with them is listed with email, display name and join date, and
+  removed members aren't
+
+#### Scenario: Other Projects' people
+- **WHEN** Kit belongs to `PAN`, and Sam belongs only to `ACME`
+- **THEN** Kit's members page doesn't list Sam
 
 ### Requirement: Display names
 A member's display name SHALL default to the part of the email before `@`. Each member SHALL be able to change
@@ -75,19 +64,28 @@ markup.
 - **THEN** the change is rejected and the name stays as it was
 
 ### Requirement: Removing a member
-Any signed-in member SHALL be able to remove another member, but not themselves. Removal SHALL end all of that
-member's sessions, revoke all of their API tokens, and stop them from signing in. Their past reports stay on
-the dashboard.
+An initial member (an address in `Panopticon:InitialMembers`) SHALL be able to remove another member from the server,
+but not themselves. Nobody else SHALL be able to. Removal SHALL end all of that member's sessions, revoke all of
+their API tokens, remove them from every Project, and stop them from signing in. Their past reports stay where they
+were.
 
 #### Scenario: Remove a colleague
-- **WHEN** a member removes `sam@example.com`
+- **WHEN** an initial member removes `sam@example.com`
 - **THEN** Sam's open dashboard sessions stop working, Sam's reporters are refused, and Sam can't request a
   sign-in link
 
 #### Scenario: Can't remove yourself
-- **WHEN** a member tries to remove themselves
+- **WHEN** an initial member tries to remove themselves
 - **THEN** the request is rejected and nothing changes
+
+#### Scenario: Only initial members remove
+- **WHEN** a member who isn't an initial member tries to remove someone from the server
+- **THEN** it is refused, and nothing changes
 
 #### Scenario: Reports remain
 - **WHEN** a removed member's agent had reported on a change
 - **THEN** the change's card still shows that agent with the member's display name
+
+#### Scenario: Last owner removed
+- **WHEN** an initial member removes Sam, who is the only owner of `ACME`
+- **THEN** the removal is refused with a message naming `ACME`, until another member of it is made an owner

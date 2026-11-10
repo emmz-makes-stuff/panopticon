@@ -106,9 +106,17 @@ Each chart's figures SHALL also be available as text.
 - **THEN** the metrics page shows 3 changes, their median time to archive and per section, the weekly chart and the
   slowest sections
 
+### Requirement: Retired copies leave the metrics
+A personal change retired by linking (spec change-visibility, Linking when the Project already has the change) SHALL
+NOT count in the metrics page: its work is measured on the Project's change.
+
+#### Scenario: Retired copies don't count
+- **WHEN** `PAN`'s `cleanup` was archived, and Emmz's personal `cleanup` had been retired when she linked the repo
+- **THEN** Emmz's metrics count one change, `PAN`'s
+
 ### Requirement: Metrics page filters
-The metrics page SHALL take the same filters as the history (repo, owner, person, machine, agent type), from the
-page's address. A filter that matches no archived change SHALL say so, with a way to clear it.
+The metrics page SHALL take the same filters as the history (Project, repo, owner, person, machine, agent type), from
+the page's address. A filter that matches no archived change SHALL say so, with a way to clear it.
 
 #### Scenario: Nothing matches
 - **WHEN** a member filters the metrics page by a machine no archived change ran on
@@ -121,6 +129,10 @@ page's address. A filter that matches no archived change SHALL say so, with a wa
 #### Scenario: Signed out
 - **WHEN** someone without a session asks for the metrics or a change's metrics
 - **THEN** the API answers 401
+
+#### Scenario: One Project's metrics
+- **WHEN** a member of `PAN` and `ACME` filters the metrics page by Project `PAN`
+- **THEN** only `PAN`'s archived changes are counted
 
 ### Requirement: Metrics link
 The signed-in header SHALL include a link to the metrics page.
