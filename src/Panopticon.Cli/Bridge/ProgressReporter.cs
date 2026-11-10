@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using Panopticon.Cli.Config;
 using Panopticon.Cli.Git;
 using Panopticon.Contracts;
 
@@ -62,7 +63,10 @@ internal sealed partial class ProgressReporter(
             var result = await forwarder.ForwardAsync(
                 endpoint,
                 token,
-                new ReportProgressArguments(repo, change, agent, folder.Tasks, section, folder.Documents, folder.Archive, project?.ToString()),
+                new ReportProgressArguments(repo, change, agent, folder.Tasks, section, folder.Documents, folder.Archive, project?.ToString())
+                {
+                    PersonalTags = ReadPersonalTags(),
+                },
                 settings.TokenFromEnvironment,
                 cancellationToken);
 
@@ -88,7 +92,39 @@ internal sealed partial class ProgressReporter(
         }
     }
 
-    private static RepoRef ParseRemote(string originUrl)
+    /// <summary>
+    /// The config's personal tags as they are now, in canonical text; an empty list when there are none, which clears
+    /// the agent's tags on the change (tags D5, D8). A file that can't be read, or holds a tag that isn't one, fails the
+    /// report rather than clearing the tags: the error names the file and the tag, never the token.
+    /// </summary>
+    private IReadOnlyList<string> ReadPersonalTags()
+    {
+        if (settings.Config is not { } config)
+        {
+            return [];
+        }
+
+        CliConfig? saved;
+        try
+        {
+            saved = config.ReadStrict();
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new BridgeException($"{exception.Message} Its personal tags couldn't be sent.", exception);
+        }
+
+        if (!TagText.TryParseAll(saved?.Tags ?? [], TagText.MaxPersonalTags, out var tags, out var error))
+        {
+            throw new BridgeException(
+                $"The personal tags in {config.Path} aren't valid: {error} Fix them with 'panopticon tags', or edit the file.");
+        }
+
+        return [.. tags.Select(t => t.Text)];
+    }
+
+    /// <summary>The repo identity from an origin URL; one that isn't a repo URL is a <see cref="BridgeException"/>.</summary>
+    internal static RepoRef ParseRemote(string originUrl)
     {
         try
         {

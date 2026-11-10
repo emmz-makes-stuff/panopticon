@@ -65,7 +65,7 @@ public class PublishedCliTests(PostgresFixture postgres, S3Fixture s3)
             new McpClientOptions { ClientInfo = new Implementation { Name = "e2e-agent", Version = "1.0.0" } },
             cancellationToken: Ct);
 
-        Assert.Equal(["list_projects", "report_progress"], (await client.ListToolsAsync(cancellationToken: Ct)).Select(t => t.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(["list_projects", "report_progress", "tag_change"], (await client.ListToolsAsync(cancellationToken: Ct)).Select(t => t.Name).Order(StringComparer.Ordinal));
 
         var result = await client.CallToolAsync("report_progress", new Dictionary<string, object?> { ["change"] = "walking-skeleton" }, cancellationToken: Ct);
 
@@ -93,6 +93,57 @@ public class PublishedCliTests(PostgresFixture postgres, S3Fixture s3)
         Assert.True(linked.IsError is not true, string.Join(" ", linked.Content.OfType<TextContentBlock>().Select(b => b.Text)));
         await using var after = server.NewDb();
         Assert.Equal(pan, (await after.Changes.SingleAsync(c => c.Name == "linked-work", Ct)).ProjectId);
+    }
+
+    // tags D8: `panopticon tags add` while the published bridge runs reaches the server on the next report, with no
+    // restart. Its own config directory, so the shared one stays tag-free.
+    [Fact]
+    public async Task Published_binary_sends_a_tag_added_while_it_runs_on_the_next_report()
+    {
+        await using var server = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        server.UseKestrel(0);
+        server.StartServer();
+        var serverUrl = server.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!
+            .Addresses.First();
+        var configHome = Directory.CreateTempSubdirectory("panopticon-cli-tags-").FullName;
+        using var repo = TempGitRepo.Create("git@github.com:emmz/panopticon.git");
+        repo.WriteTasks("walking-skeleton", Tasks);
+        var stderr = new ConcurrentQueue<string>();
+        await using var client = await McpClient.CreateAsync(
+            new StdioClientTransport(new StdioClientTransportOptions
+            {
+                Command = PublishedCli.Path,
+                Arguments = ["mcp"],
+                WorkingDirectory = repo.Root,
+                EnvironmentVariables = new Dictionary<string, string?>
+                {
+                    ["PANOPTICON_SERVER_URL"] = serverUrl,
+                    ["PANOPTICON_TOKEN"] = await server.SeedApiTokenAsync(cancellationToken: Ct),
+                    ["XDG_CONFIG_HOME"] = configHome,
+                    ["APPDATA"] = configHome,
+                },
+                StandardErrorLines = stderr.Enqueue,
+            }),
+            new McpClientOptions { ClientInfo = new Implementation { Name = "e2e-agent", Version = "1.0.0" } },
+            cancellationToken: Ct);
+
+        async Task<IReadOnlyList<PersonalTagRef>> ReportAsync()
+        {
+            var result = await client.CallToolAsync("report_progress", new Dictionary<string, object?> { ["change"] = "walking-skeleton" }, cancellationToken: Ct);
+            Assert.True(result.IsError is not true, $"{string.Join(" ", result.Content.OfType<TextContentBlock>().Select(b => b.Text))}\nstderr:\n{string.Join('\n', stderr)}");
+            await using var db = server.NewDb();
+            var viewer = await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct);
+            return Assert.Single(await new ChangeCards(db).ListAsync(viewer, Ct)).PersonalTags;
+        }
+
+        Assert.Empty(await ReportAsync());
+
+        var added = await RunPublishedAsync(configHome, "tags", "add", "urgent", "language: csharp");
+        Assert.Equal(0, added.ExitCode);
+        var listed = await RunPublishedAsync(configHome, "tags");
+        Assert.Equal(["urgent", "language: csharp"], listed.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        Assert.Equal([new PersonalTagRef("language", "csharp"), new PersonalTagRef("urgent", null)], await ReportAsync());
     }
 
     /// <summary>A Project owned by the server's default member, written straight to the database.</summary>

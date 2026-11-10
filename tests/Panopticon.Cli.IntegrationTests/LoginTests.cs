@@ -125,7 +125,7 @@ public sealed partial class LoginTests(PostgresFixture postgres, S3Fixture s3) :
         var (server, clock) = await ServerAsync();
         await using var _ = server;
         using var browser = await server.CreateSignedInClientAsync(cancellationToken: Ct);
-        Config.Write(new SavedLogin("https://old.example.com/", "pnp_old"));
+        Config.Write(new CliConfig("https://old.example.com/", "pnp_old"));
 
         var run = await LoginAsync(server, clock, ["--server", ServerUrl], Decide(browser, "approve"));
 
@@ -133,6 +133,24 @@ public sealed partial class LoginTests(PostgresFixture postgres, S3Fixture s3) :
         var saved = Config.Read(new StringWriter())!;
         Assert.Equal(ServerUrl, saved.ServerUrl);
         Assert.NotEqual("pnp_old", saved.Token);
+    }
+
+    // tags D8: login writes its part of the config and keeps the rest.
+    [Fact]
+    public async Task Logging_in_keeps_the_personal_tags()
+    {
+        var (server, clock) = await ServerAsync();
+        await using var _ = server;
+        using var browser = await server.CreateSignedInClientAsync(cancellationToken: Ct);
+        Config.Write(new CliConfig("https://old.example.com/", "pnp_old", ["dev", "area: cli"]));
+
+        var run = await LoginAsync(server, clock, ["--server", ServerUrl], Decide(browser, "approve"));
+
+        Assert.Equal(0, run.ExitCode);
+        var saved = Config.Read(new StringWriter())!;
+        Assert.Equal(ServerUrl, saved.ServerUrl);
+        Assert.NotEqual("pnp_old", saved.Token);
+        Assert.Equal(["dev", "area: cli"], saved.Tags!);
     }
 
     // "Deny".

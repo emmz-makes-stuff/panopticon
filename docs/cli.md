@@ -1,8 +1,9 @@
 # The `panopticon` CLI
 
 `panopticon login` gives this machine an API token, approved in the dashboard. `panopticon mcp` is a local
-MCP server that agents talk to over stdio. It offers two tools, `report_progress` and `list_projects`, and
-forwards each call to the Panopticon server's online MCP endpoint (`/mcp`).
+MCP server that agents talk to over stdio. It offers three tools, `report_progress`, `list_projects` and
+`tag_change`, and forwards each call to the Panopticon server's online MCP endpoint (`/mcp`). `panopticon tags`
+keeps the personal tags this machine's reports carry.
 
 The agent only names the change. The bridge supplies the rest from the local working copy:
 
@@ -14,6 +15,7 @@ The agent only names the change. The bridge supplies the rest from the local wor
   machine's name.
 - **The Project**, from `.panopticon.json` at the repo root, if there is one. See [Linking a repo to a
   Project](#linking-a-repo-to-a-project).
+- **Your personal tags**, from the config file. See [Personal tags](#personal-tags).
 
 ## Linking a repo to a Project
 
@@ -37,6 +39,50 @@ A repo's work belongs to a Project when the repo root holds a `.panopticon.json`
 
 You can report into any Project you're a member of, in any role. A report naming a Project you aren't in, or one
 that doesn't exist, is refused, and nothing is recorded.
+
+## Personal tags
+
+Personal tags are your own labels for your work, such as `dev`, `urgent` or `language: csharp`. Each machine keeps
+its own list, and every report from it carries them. Only you see them, on your cards, change pages and history,
+and in the Tags filter.
+
+```sh
+panopticon tags                              # one per line, or "No personal tags."
+panopticon tags add dev "language: csharp"   # prints the list afterwards
+panopticon tags remove DEV                   # tags compare without regard to case
+```
+
+- **What a tag is:** a key, or a key and a value after the first `:`. Spaces around either are trimmed. A key is
+  ASCII letters, digits, `-`, `_` and `.`. A value can hold anything but a line break. Each is at most 40
+  characters.
+- **All or nothing:** a malformed tag, one that's already saved, a 21st tag (20 at most), or removing one that
+  isn't saved makes the command exit 1, saying why. Nothing in the file changes.
+- **Where they're kept:** under `"tags"` in the config file, beside the login (see [Configuration](#configuration)).
+  `panopticon tags` keeps the login, and `panopticon login` keeps the tags.
+- **When they're sent:** the bridge reads them on every report, so an edit counts from the next report, with no
+  restart. With none saved, a report sends an empty list, which clears this machine's tags on that change.
+  - **One change, several machines:** your tags on it are the ones all your machines sent.
+  - **Archived changes:** a change keeps the tags it had when it was archived.
+- **The agent never sees them.** It isn't asked for them, and they aren't in any tool's reply.
+- **A hand-edited file:** if the file holds a tag that isn't valid, reports fail with an error naming the file and
+  the tag, and nothing is sent, rather than clearing your tags. Fix it, or run `panopticon tags remove` with the
+  bad entry's exact text.
+
+Project tags are different: a Project's owners define them, and they're shared by everyone in the Project. To put
+them on changes, use the dashboard, or ask the agent: it calls `tag_change`.
+
+## Tagging a change
+
+`tag_change` puts a Project's existing tags on one of the repo's changes, or takes them off.
+
+- **What the agent gives:** `change`, plus `add` and `remove` as lists of tag texts, as `list_projects` shows them
+  (`"bug"`, `"area: onboarding"`).
+- **What the bridge fills in:** the Project from `.panopticon.json`, and the repo from the `origin` remote. The agent
+  can pass `project` and `repo` to override them.
+- **What it can't do:** an agent can only use tags the Project already has. It can't create one.
+- **Who can use it:** the token must belong to one of the Project's owners or editors.
+- **The reply:** the change's project tags afterwards, for example `walking-skeleton now has PAN/area: cli, PAN/bug.`
+- **Which change:** the active one with that name, or, if there's none, the latest archived one.
 
 ## What the bridge sends
 
@@ -113,7 +159,8 @@ You can see and revoke each machine's token on the dashboard's Tokens page. A re
 
 ## Configuration
 
-The login is saved as `{"serverUrl": …, "token": …}` in:
+The login is saved as `{"serverUrl": …, "token": …}`, with any [personal tags](#personal-tags) under `"tags"`,
+in:
 
 | OS | File |
 | --- | --- |
@@ -184,7 +231,8 @@ progress, e.g. `Overall 7/20 · section 2 Core 2/5`. For an archived change it e
 
 Any MCP client that can launch a stdio server works the same way. Its command is `panopticon` with the
 arguments `["mcp"]`, and it starts in the repo (or any directory inside it). It uses the saved login, or the two
-variables above. `list_projects` takes no arguments and uses the same server and token as reports.
+variables above. `list_projects` takes no arguments and uses the same server and token as reports, and so does
+`tag_change`.
 
 ## Troubleshooting
 
@@ -202,6 +250,12 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
   was sent. The bridge never falls back to a personal report, so a typo can't hide the work.
 - **"Project … wasn't found, or you aren't a member of it"**: the link file names a Project you can't report into.
   Ask an owner to invite you, or call `list_projects` for the ones you can.
+- **"The personal tags in … aren't valid"** or **"The config at … can't be read"**: fix the config file, or run
+  `panopticon tags remove` with the bad entry's exact text. Nothing was sent.
+- **"This repo isn't linked to a Project"** (from `tag_change`): only a linked repo's changes have project tags. Link
+  it first.
+- **"The Panopticon server refused the tag change: …"**: the server's reason follows. For an unknown tag it lists the
+  Project's tags, and for a viewer's token it says only owners and editors can tag.
 - **"Couldn't reach the Panopticon server at …"**: check `PANOPTICON_SERVER_URL`, and that the server is up.
 - **"isn't configured: … not set"**: run `panopticon login`, or set the variables it names.
 - **"saved login is for …, not PANOPTICON_SERVER_URL"**: the environment points at another server. Log in to

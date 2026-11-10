@@ -9,7 +9,7 @@ using Panopticon.Contracts;
 namespace Panopticon.Cli.Bridge;
 
 /// <summary>
-/// Calls the server's online MCP endpoint (design D1) as an MCP client, for reports and the Project list, with the bearer token, and turns
+/// Calls the server's online MCP endpoint (design D1) as an MCP client, for reports, the Project list and tag changes, with the bearer token, and turns
 /// every failure into a <see cref="BridgeException"/> that never echoes the token.
 /// </summary>
 internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
@@ -77,6 +77,38 @@ internal sealed class ServerForwarder(Func<HttpClient> createHttpClient)
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// Forwards <c>tag_change</c> (tags D8), with the same server, token and errors as a report. A refusal, such as an
+    /// unknown tag, comes back with the server's own message, which lists the Project's tags.
+    /// </summary>
+    public async Task<TagChangeResult> TagChangeAsync(
+        Uri endpoint,
+        string token,
+        TagChangeArguments arguments,
+        bool tokenFromEnvironment,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        var tagged = await CallAsync(
+            endpoint,
+            token,
+            new ToolCall<TagChangeResult>(
+                ContractsAssembly.TagChangeToolName,
+                arguments.ToToolArguments(),
+                ContractsJsonContext.Default.TagChangeResult,
+                "the tag change",
+                "tag change result"),
+            tokenFromEnvironment,
+            cancellationToken);
+
+        if (tagged.ChangeId is null || tagged.Change is null || tagged.Code is null || tagged.Tags is null || tagged.Tags.Any(t => t is null))
+        {
+            throw Malformed(BridgeSettings.Display(endpoint), "tag change result", "a required member is missing.", null);
+        }
+
+        return tagged;
     }
 
     /// <summary>

@@ -3,7 +3,7 @@ namespace Panopticon.Cli.Tests;
 public class CliAppTests
 {
     [Fact]
-    public async Task Help_lists_the_login_and_mcp_commands()
+    public async Task Help_lists_the_login_mcp_and_tags_commands()
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
@@ -14,6 +14,9 @@ public class CliAppTests
         var help = stdout.ToString();
         Assert.Contains("  login [--server <url>]", help, StringComparison.Ordinal);
         Assert.Contains("  mcp ", help, StringComparison.Ordinal);
+        Assert.Contains("  tags ", help, StringComparison.Ordinal);
+        Assert.Contains("  tags add <tag>...", help, StringComparison.Ordinal);
+        Assert.Contains("  tags remove <tag>...", help, StringComparison.Ordinal);
         Assert.Contains("config.json", help, StringComparison.Ordinal);
     }
 

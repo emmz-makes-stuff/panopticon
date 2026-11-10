@@ -22,7 +22,7 @@ public sealed class CliConfigTests : IDisposable
     [Fact]
     public void Saved_login_is_used_when_neither_variable_is_set()
     {
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com", "pnp_saved"));
 
         var settings = Resolve([]);
 
@@ -32,7 +32,7 @@ public sealed class CliConfigTests : IDisposable
     [Fact]
     public void Environment_overrides_the_saved_login_value_by_value()
     {
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com", "pnp_saved"));
 
         var tokenOnly = Resolve(new() { [BridgeSettings.TokenVariable] = "pnp_env" });
         var both = Resolve(new() { [BridgeSettings.TokenVariable] = "pnp_env", [BridgeSettings.ServerUrlVariable] = "https://other.example.com" });
@@ -44,7 +44,7 @@ public sealed class CliConfigTests : IDisposable
     [Fact]
     public void A_saved_token_is_not_used_for_another_server()
     {
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com/", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com/", "pnp_saved"));
 
         var settings = Resolve(new() { [BridgeSettings.ServerUrlVariable] = "https://other.example.com" });
 
@@ -63,7 +63,7 @@ public sealed class CliConfigTests : IDisposable
     [InlineData("https://p.example.com:443/mcp/")]
     public void A_saved_token_is_used_when_the_environment_names_the_saved_server(string serverUrl)
     {
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com/", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com/", "pnp_saved"));
 
         var settings = Resolve(new() { [BridgeSettings.ServerUrlVariable] = serverUrl });
 
@@ -81,7 +81,7 @@ public sealed class CliConfigTests : IDisposable
     [Fact]
     public void A_blank_variable_counts_as_unset()
     {
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com", "pnp_saved"));
 
         var settings = Resolve(new() { [BridgeSettings.TokenVariable] = "  " });
 
@@ -92,7 +92,7 @@ public sealed class CliConfigTests : IDisposable
     [Fact]
     public void The_token_records_whether_it_came_from_the_environment()
     {
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com", "pnp_saved"));
 
         Assert.True(Resolve(new() { [BridgeSettings.TokenVariable] = "pnp_env" }).TokenFromEnvironment);
         Assert.False(Resolve([]).TokenFromEnvironment);
@@ -131,7 +131,7 @@ public sealed class CliConfigTests : IDisposable
     public void A_file_without_read_permission_counts_as_unset()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes");
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com", "pnp_saved"));
         File.SetUnixFileMode(ConfigPath, UnixFileMode.None);
         var stderr = new StringWriter();
 
@@ -148,15 +148,85 @@ public sealed class CliConfigTests : IDisposable
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes");
         var config = new CliConfigFile(ConfigPath);
 
-        config.Write(new SavedLogin("https://p.example.com", "pnp_first"));
-        config.Write(new SavedLogin("https://q.example.com", "pnp_second"));
+        config.Write(new CliConfig("https://p.example.com", "pnp_first"));
+        config.Write(new CliConfig("https://q.example.com", "pnp_second"));
 
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(ConfigPath));
         Assert.Equal(
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
             File.GetUnixFileMode(Path.GetDirectoryName(ConfigPath)!));
         Assert.Equal(["config.json"], Directory.GetFiles(Path.GetDirectoryName(ConfigPath)!).Select(Path.GetFileName));
-        Assert.Equal(new SavedLogin("https://q.example.com", "pnp_second"), config.Read(new StringWriter()));
+        Assert.Equal(new CliConfig("https://q.example.com", "pnp_second"), config.Read(new StringWriter()));
+    }
+
+    // tags D8: read-modify-write, so each writer keeps what it doesn't change.
+    [Fact]
+    public void A_tag_write_keeps_the_login_and_a_login_write_keeps_the_tags()
+    {
+        var config = new CliConfigFile(ConfigPath);
+        config.Write(new CliConfig("https://p.example.com", "pnp_saved"));
+
+        config.Update(c => c with { Tags = ["dev"] }, startOverIfUnreadable: false);
+        config.Update(c => c with { ServerUrl = "https://q.example.com", Token = "pnp_new" }, startOverIfUnreadable: true);
+
+        var saved = config.Read(new StringWriter())!;
+        Assert.Equal(("https://q.example.com", "pnp_new"), (saved.ServerUrl, saved.Token));
+        Assert.Equal(["dev"], saved.Tags!);
+        Assert.Contains("\"tags\"", File.ReadAllText(ConfigPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_update_with_no_file_starts_from_an_empty_config()
+    {
+        var written = new CliConfigFile(ConfigPath).Update(c => c with { Tags = ["dev"] }, startOverIfUnreadable: false);
+
+        Assert.Equal((null, null), (written.ServerUrl, written.Token));
+        Assert.Equal(["dev"], new CliConfigFile(ConfigPath).Read(new StringWriter())!.Tags!);
+    }
+
+    [Fact]
+    public void A_tag_write_leaves_an_unreadable_file_alone_and_says_so_without_its_content()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        const string broken = "{ \"token\": \"pnp_secret\", ";
+        File.WriteAllText(ConfigPath, broken);
+        var config = new CliConfigFile(ConfigPath);
+
+        var error = Assert.Throws<InvalidDataException>(() => config.Update(c => c with { Tags = ["dev"] }, startOverIfUnreadable: false));
+
+        Assert.Equal(broken, File.ReadAllText(ConfigPath));
+        Assert.Contains(ConfigPath, error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("pnp_secret", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_login_write_replaces_an_unreadable_file()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, "not json");
+        var config = new CliConfigFile(ConfigPath);
+
+        config.Update(c => c with { ServerUrl = "https://p.example.com", Token = "pnp_new" }, startOverIfUnreadable: true);
+
+        Assert.Equal(new CliConfig("https://p.example.com", "pnp_new"), config.Read(new StringWriter()));
+    }
+
+    [Fact]
+    [UnsupportedOSPlatform("windows")]
+    public void An_update_keeps_the_file_and_directory_for_the_user_only()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes");
+        var config = new CliConfigFile(ConfigPath);
+        config.Write(new CliConfig("https://p.example.com", "pnp_saved"));
+        File.SetUnixFileMode(ConfigPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
+
+        config.Update(c => c with { Tags = ["dev"] }, startOverIfUnreadable: false);
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(ConfigPath));
+        Assert.Equal(
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+            File.GetUnixFileMode(Path.GetDirectoryName(ConfigPath)!));
+        Assert.Equal(["config.json"], Directory.GetFiles(Path.GetDirectoryName(ConfigPath)!).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -168,7 +238,7 @@ public sealed class CliConfigTests : IDisposable
         File.WriteAllText(ConfigPath, "{}");
         File.SetUnixFileMode(ConfigPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
 
-        new CliConfigFile(ConfigPath).Write(new SavedLogin("https://p.example.com", "pnp_saved"));
+        new CliConfigFile(ConfigPath).Write(new CliConfig("https://p.example.com", "pnp_saved"));
 
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(ConfigPath));
     }

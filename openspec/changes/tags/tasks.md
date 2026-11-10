@@ -27,10 +27,10 @@
 
 ## 6. CLI: personal tags and `tag_change`
 
-- [ ] 6.1 Replace `SavedLogin` with `CliConfig` (server, token, tags), with read-modify-write for every writer (D8). Verify with `CliConfigFile` tests: `login` keeps the tags, a tag write keeps the login, and the 0600 file and 0700 directory hold.
-- [ ] 6.2 Add `panopticon tags`, `tags add` and `tags remove` (D8), and list them in the help. Verify "Personal tags in the config" with CLI tests: list, add, case-insensitive remove, malformed, duplicate, the 21st tag, and removing a missing one, each leaving the file unchanged on error.
-- [ ] 6.3 Make the bridge send `PersonalTags` with every report, read fresh each time, and report a malformed hand-edited tag as a tool error naming the file, not the token (D8). Verify "Personal tags sent with reports" with bridge tests, and an end-to-end CLI test against the server where adding a tag shows up on the next report without a restart.
-- [ ] 6.4 Add the bridge's `tag_change`, filling `project` from `.panopticon.json` and `repo` from git when they're left out, and passing errors through (D8). Verify "Tagging through the bridge" with bridge tests: a linked repo, no link file, and a server refusal listing the tags. Document `panopticon tags` and `tag_change` in `docs/cli.md`.
+- [x] 6.1 Replace `SavedLogin` with `CliConfig` (server, token, tags), with read-modify-write for every writer (D8). Verify with `CliConfigFile` tests: `login` keeps the tags, a tag write keeps the login, and the 0600 file and 0700 directory hold.
+- [x] 6.2 Add `panopticon tags`, `tags add` and `tags remove` (D8), and list them in the help. Verify "Personal tags in the config" with CLI tests: list, add, case-insensitive remove, malformed, duplicate, the 21st tag, and removing a missing one, each leaving the file unchanged on error.
+- [x] 6.3 Make the bridge send `PersonalTags` with every report, read fresh each time, and report a malformed hand-edited tag as a tool error naming the file, not the token (D8). Verify "Personal tags sent with reports" with bridge tests, and an end-to-end CLI test against the server where adding a tag shows up on the next report without a restart.
+- [x] 6.4 Add the bridge's `tag_change`, filling `project` from `.panopticon.json` and `repo` from git when they're left out, and passing errors through (D8). Verify "Tagging through the bridge" with bridge tests: a linked repo, no link file, and a server refusal listing the tags. Document `panopticon tags` and `tag_change` in `docs/cli.md`.
 
 ## 7. Design pass
 
