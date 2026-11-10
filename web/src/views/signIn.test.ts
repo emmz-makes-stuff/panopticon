@@ -74,7 +74,7 @@ describe("/sign-in/confirm", () => {
     const server = signedOut();
     const { heading, nav } = await startTestShell("/sign-in/confirm#the-secret", server);
 
-    expect(heading()).toBe("Sign in to a PANOPTICON?");
+    expect(heading()).toBe("Sign in to PANOPTICON?");
     expect(server.to("POST", "/api/auth/confirm")).toHaveLength(0);
     expect(nav.location.hash).toBe("");
   });
@@ -224,7 +224,7 @@ describe("/sign-in/confirm", () => {
     await until(() => asking.heading() === "Check your email");
 
     const confirming = await startTestShell("/sign-in/confirm#s", server, { storage: blocked });
-    expect(confirming.heading()).toBe("Sign in to a PANOPTICON?");
+    expect(confirming.heading()).toBe("Sign in to PANOPTICON?");
     q<HTMLButtonElement>(confirming.root, ".page button").click();
     await until(() => confirming.nav.path() === "/");
     expect(confirming.root.querySelector(".account-name")?.textContent).toBe("Emmz");

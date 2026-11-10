@@ -19,7 +19,7 @@ describe("mountApp", () => {
     const { root } = await mount();
 
     expect(text(root, "h1")).toBe(PRODUCT_NAME);
-    expect(PRODUCT_NAME).toBe("a PANOPTICON");
+    expect(PRODUCT_NAME).toBe("PANOPTICON");
   });
 
   // Spec live-dashboard, "One card per change".

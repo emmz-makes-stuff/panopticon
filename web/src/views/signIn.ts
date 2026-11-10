@@ -139,7 +139,7 @@ export function confirmView(env: Env): View {
 
     root.replaceChildren(
       page(
-        email ? `Sign in as ${email}?` : "Sign in to a PANOPTICON?",
+        email ? `Sign in as ${email}?` : "Sign in to PANOPTICON?",
         el("p", undefined, "This uses your sign-in link."),
         confirm,
         error.element,

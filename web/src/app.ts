@@ -14,7 +14,7 @@ import { DEFAULT_QUIET, type QuietSettings } from "./quiet";
 import type { ChangeCard } from "./types";
 
 /** The product's name, exactly as written (web/DESIGN.md, "Name"). */
-export const PRODUCT_NAME = "a PANOPTICON";
+export const PRODUCT_NAME = "PANOPTICON";
 
 /** Gap between consecutive cells lighting up after a report (web/DESIGN.md, principle 4). */
 export const LIGHTING_STEP_MS = 60;

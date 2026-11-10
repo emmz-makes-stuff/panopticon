@@ -8,11 +8,10 @@ bold idea, and everything around it stays quiet.
 
 ## Name
 
-The site title and wordmark are **"a PANOPTICON"**: a play on "the Panopticon", where the "a" is for
-_agent_. Keep the lower-case "a" and the capitals exactly, in the wordmark, the page `<title>` and anywhere
-else the product is named in the UI. The wordmark is set in Gabarito 700 with `letter-spacing: 0.03em` to
-open up the capitals. The "a" gets the same colour and weight: the joke is in the words, not in the
-styling. (This is a deliberate exception to "no all-caps", because it's the name.)
+The site title and wordmark are **"PANOPTICON"**, in capitals, with no article. Use it exactly so in the
+wordmark, the page `<title>` and anywhere else the product is named in the UI. The wordmark is set in
+Gabarito 700 with `letter-spacing: 0.03em` to open up the capitals. (This is a deliberate exception to "no
+all-caps", because it's the name.)
 
 ## Principles
 
@@ -62,7 +61,7 @@ is cool rather than cream.
 ## Layout
 
 ```
-a PANOPTICON              ● Live  3 changes   Emmz  Members  Tokens  Sign out
+PANOPTICON                ● Live  3 changes   Emmz  Members  Tokens  Sign out
 ──────────────────────────────────────────────────────────────────────────
 ┌──────────────────────────┐ ┌──────────────────────────┐ ┌─────────
 │ github.com               │ │ dev.azure.com            │ │ (dimmed)
@@ -137,7 +136,7 @@ To invite someone, open one of your Projects. Its owners can invite people from 
   terminal. Approve and Deny sit side by side below a sentence saying whose token it makes. Nothing is
   decided on load.
 - **Sign-in confirm:** "Sign in as emmz@example.com?" when this browser asked for the link, otherwise
-  "Sign in to a PANOPTICON?" (the server can't say whose link it is before the confirm). One "Sign in"
+  "Sign in to PANOPTICON?" (the server can't say whose link it is before the confirm). One "Sign in"
   button. A used or expired link explains which, with a "Send me a new link" link.
 
 ## Projects

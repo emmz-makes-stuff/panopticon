@@ -174,14 +174,14 @@ public sealed record SignInLinkJob(string EmailKey, Uri LinkRoot) : IEmailJob
 /// <summary>The sign-in email: plain words, the link, and no tracking.</summary>
 public static class SignInEmail
 {
-    public const string Subject = "Sign in to a PANOPTICON";
+    public const string Subject = "Sign in to PANOPTICON";
 
     public static OutgoingEmail Create(string to, string link)
     {
         var minutes = (int)SignInEndpoints.LinkLifetime.TotalMinutes;
         var text =
             $"""
-            Here's your link to sign in to a PANOPTICON:
+            Here's your link to sign in to PANOPTICON:
 
             {link}
 
@@ -190,7 +190,7 @@ public static class SignInEmail
         var encoded = WebUtility.HtmlEncode(link);
         var html =
             $"""
-            <p>Here's your link to sign in to a PANOPTICON:</p>
+            <p>Here's your link to sign in to PANOPTICON:</p>
             <p><a href="{encoded}">Sign in</a></p>
             <p>It works once, and expires in {minutes} minutes. If you didn't ask to sign in, you can ignore this email.</p>
             """;

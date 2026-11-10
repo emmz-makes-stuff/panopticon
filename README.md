@@ -1,10 +1,12 @@
-# a PANOPTICON
+# PANOPTICON
 
 A live dashboard of coding agents working through [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes.
 Agents report through a small local MCP bridge (the `panopticon` CLI). The server parses each change's
 `tasks.md`, and the dashboard shows one card per change, with section and whole-change progress updating live.
 Each card opens the change's own page, which shows the documents in its folder and how long it and its sections have
 taken. Once a change is archived with `/opsx:archive`, it leaves the dashboard for the history.
+
+The public server runs at [panopticon.team](https://panopticon.team). To host your own, see [Run it in a container](#run-it-in-a-container).
 
 - Requirements: [`docs/DISCOVERY.md`](docs/DISCOVERY.md). Decisions: [`docs/adrs/`](docs/adrs/).
 - Connecting an agent: [`docs/cli.md`](docs/cli.md).
@@ -179,7 +181,7 @@ becomes `__`, e.g. `Panopticon__S3__Bucket`.
 | `Panopticon:InitialMembers` | The first members' email addresses, as a list or one comma-separated value. Each one is added at start-up unless it already has a member record, and the server won't start if there's no active member. |
 | `Panopticon:PublicUrl` | The server's public base URL. Sign-in links and `panopticon login`'s approval link are built on it, never on the request's host. Required outside Development, which uses `http://localhost:7480`. |
 | `Panopticon:Resend:ApiKey` | The [Resend](https://resend.com) API key for sign-in emails. Required outside Development. In Development, leaving it unset logs each email instead of sending it. |
-| `Panopticon:Email:From` | The sender of sign-in emails, e.g. `a PANOPTICON <sign-in@example.com>`, on a domain verified in Resend. Required whenever a Resend key is set. |
+| `Panopticon:Email:From` | The sender of sign-in emails, e.g. `PANOPTICON <sign-in@example.com>`, on a domain verified in Resend. Required whenever a Resend key is set. |
 | `Panopticon:BootstrapToken` | A shared bearer token agents can report with, **in Development only**. The server won't start with it set in any other environment. Use `panopticon login` instead. |
 | `Panopticon:Activity:IdleAfter`, `Panopticon:Activity:StaleAfter` | How long after its last report a dashboard card shows as idle, then as stale, as a TimeSpan (e.g. `00:30:00`). The defaults are 30 minutes and 4 hours. Both must be positive, and the server won't start unless `StaleAfter` is longer than `IdleAfter`. |
 | `Panopticon:S3:ServiceUrl` | The S3 endpoint for change documents. Leave it unset for AWS itself. |
