@@ -37,6 +37,8 @@ namespace Panopticon.Cli.IntegrationTests;
 /// <c>.panopticon.json</c> (projects 10.1);</item>
 /// <item>report a whole change folder through <c>panopticon mcp</c> using only the saved login;</item>
 /// <item>see the card name the member and show the Project's code;</item>
+/// <item>add a Project tag and put it on the change, and see the card carry it beside the personal tag the report
+/// brought from <c>panopticon tags</c> (tags 10.2);</item>
 /// <item>read the change page's documents (change-documents-and-history 6.1);</item>
 /// <item>archive the folder and see the running bridge's watcher move the change to the history.</item>
 /// </list>
@@ -172,6 +174,10 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
 
             Assert.Equal(("E2E", ProjectRoles.Owner), (project.Code, project.Role));
 
+            // 4a. A personal tag on this machine, which every report from it carries (tags 10.2).
+            var tagged = await RunCliAsync("tags", "add", "dev");
+            Assert.True(tagged.ExitCode == 0, $"panopticon tags add exited {tagged.ExitCode}.\nstdout:\n{tagged.Stdout}\nstderr:\n{tagged.Stderr}");
+
             // 4. Report a whole change folder through `panopticon mcp`, with no token in the environment: only the
             //    saved login. The agent links the repo first, from list_projects. The bridge stays up, so its archive
             //    watcher sees step 7.
@@ -195,6 +201,27 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
             Assert.Equal((project.Id, "E2E", false), (card.Project?.Id, card.Project?.Code, card.Personal));
             var agent = Assert.Single(card.Agents);
             Assert.Equal(("e2e-agent", member.DisplayName), (agent.Client, agent.Member));
+            Assert.Equal(["dev"], card.PersonalTags.Select(t => t.Key));
+            Assert.Empty(card.ProjectTags);
+
+            // 5a. As the Project's owner (owners and editors manage tags), add a tag to the Project and put it on the
+            //     change, as the Project page and the change page's picker do. The card carries both kinds.
+            ProjectTagView bug;
+            using (var added = await browser.PostApiAsync(ProjectTagEndpoints.TagsPath(project.Id), new { tag = "bug" }, Ct))
+            {
+                Assert.Equal(HttpStatusCode.Created, added.StatusCode);
+                bug = (await added.Content.ReadFromJsonAsync<ProjectTagView>(Ct))!;
+            }
+
+            using (var put = await browser.PostApiAsync(ChangeTagEndpoints.TagsPath(card.ChangeId), new { add = new[] { bug.Id } }, Ct))
+            {
+                Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+            }
+
+            card = Assert.Single((await browser.GetFromJsonAsync<List<ChangeCard>>(DashboardEndpoints.ChangesPath, Ct))!);
+            Assert.Equal([(bug.Id, "bug", (string?)null)], card.ProjectTags.Select(t => (t.Id, t.Key, t.Value)));
+            Assert.Equal(["dev"], card.PersonalTags.Select(t => t.Key));
+
 
             // 6. The change page lists every document the bridge sent, and renders one.
             var page = (await browser.GetFromJsonAsync<ChangePage>(ChangeEndpoints.ChangePath(card.ChangeId), Ct))!;
@@ -216,6 +243,8 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
                 "the archived change in the history");
             Assert.Equal((card.ChangeId, Change, archiveFolder), (archived.ChangeId, archived.Change, archived.ArchiveFolder));
             Assert.Equal("E2E", archived.Project?.Code);
+            Assert.Equal(["bug"], archived.ProjectTags.Select(t => t.Key));
+            Assert.Equal(["dev"], archived.PersonalTags.Select(t => t.Key));
             Assert.Empty((await browser.GetFromJsonAsync<List<ChangeCard>>(DashboardEndpoints.ChangesPath, Ct))!);
             Assert.NotNull((await browser.GetFromJsonAsync<ChangePage>(ChangeEndpoints.ChangePath(card.ChangeId), Ct))!.ArchivedAt);
 
@@ -330,6 +359,30 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
                 process.Kill();
             }
         }
+    }
+
+    /// <summary>Runs the published CLI with <paramref name="args"/>, against this test's config.</summary>
+    private async Task<Run> RunCliAsync(params string[] args)
+    {
+        var startInfo = new ProcessStartInfo(PublishedCli.Path)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args)
+        {
+            startInfo.ArgumentList.Add(arg);
+        }
+
+        IsolateConfig(startInfo.Environment);
+        using var process = Process.Start(startInfo)!;
+        var stdout = process.StandardOutput.ReadToEndAsync(Ct);
+        var stderr = process.StandardError.ReadToEndAsync(Ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(_stepTimeout);
+        await process.WaitForExitAsync(timeout.Token);
+        return new Run(process.ExitCode, await stdout, await stderr);
     }
 
     /// <summary>A running <c>panopticon mcp</c>, kept up so its archive watcher runs between reports.</summary>

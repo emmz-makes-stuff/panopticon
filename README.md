@@ -66,8 +66,8 @@ page with filters can narrow to one Project or to your personal work.
 - **Making one:** anyone signed in can create a Project on the Projects page, and becomes its owner.
 - **Roles:** each member of a Project is an **owner**, an **editor** or a **viewer**. Every role sees the Project's
   work and can report into it. Owners also rename it and manage its members: they invite an email address with a
-  role, change roles and remove people. Editors will manage the Project's tags in a later change. A Project always
-  keeps at least one owner, so its last owner can't step down, be removed or leave.
+  role, change roles and remove people. Owners and editors also manage the Project's tags (see [Tags](#tags)). A
+  Project always keeps at least one owner, so its last owner can't step down, be removed or leave.
 - **Joining:** inviting an address that isn't on the server yet also lets it sign in. No invitation email is sent,
   so tell them yourself. Anyone can leave a Project from its page.
 
@@ -98,6 +98,31 @@ a report made with the bootstrap token has no member, so a change it makes in no
 **Removing someone from the server** is for the initial members (`Panopticon:InitialMembers`) only. It ends their
 sessions, revokes their tokens and takes them out of every Project. Their past reports stay. If they're the last
 owner of a Project, the removal is refused until someone else there is made an owner.
+
+### Tags
+
+A tag is a label to filter by: a key, with a value if you want one, such as `bug` or `area: onboarding`. A key is 1 to
+40 letters, digits, `-`, `_` or `.`, and a value is up to 40 characters. Tags compare without regard to case. There are
+two kinds:
+
+- **A Project's tags**, such as `PAN/bug`, are shared. Each Project keeps a list of up to 200, and every member sees
+  them.
+  - **Managing them:** owners and editors add, rename and delete them in the Tags section of the Project's page.
+    Viewers see the list, with how many changes carry each tag.
+  - **Renaming or deleting:** a rename shows everywhere at once, on active and archived changes, and keeps filters
+    and links working. Deleting asks first, saying how many changes carry the tag, then takes it off all of them.
+  - **Tagging a change:** owners and editors use **Edit tags** on its change page, and can add a new tag to the
+    Project from there. Agents can do it with the `tag_change` MCP tool, but only with the Project's existing tags,
+    and only for an owner's or editor's token. See [`docs/cli.md`](docs/cli.md#tagging-a-change).
+- **Your personal tags**, such as `dev`, are yours alone. They're kept on each machine with
+  `panopticon tags add dev "language: csharp"`, and every report from that machine carries them. A change has the
+  personal tags of the latest report from each of your agents on it. Only you see them, even on a Project's changes.
+  They're shown with a dashed border. See [`docs/cli.md`](docs/cli.md#personal-tags).
+
+Cards, change pages and history rows show a change's Project tags, then your personal ones, and tag edits show on
+open pages at once. The dashboard, the history and the metrics each have a **Tags** filter. A change shows only when
+it has every tag you choose, and choosing a key alone (`language`, any value) matches any of its values. The tags go
+in the address, so a filtered view can be shared. Project tags go by id there, so renaming one keeps the link working.
 
 ### Reporting progress
 

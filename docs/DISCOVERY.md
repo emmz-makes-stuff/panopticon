@@ -96,7 +96,7 @@ _Source: Emmz, 2026-11-09._
 
 **Built** in the `projects` change (2026-11-10): Projects with an id, a name and a code, linking a repo through a
 committed `.panopticon.json`, the `list_projects` MCP tool, owner, editor and viewer roles with invites, and scoped
-visibility. Editors' tags are not built yet: they come with the tags change below.
+visibility. Editors manage the Project's tags since the `tags` change (below).
 
 - **A Project:** it has three properties, an `Id`, a `Name` and a `Code`. For example: a UUIDv4, `Panopticon` and
   `PAN`.
@@ -111,6 +111,13 @@ visibility. Editors' tags are not built yet: they come with the tags change belo
 #### Tags (small)
 
 _Source: Emmz, 2026-11-09._
+
+**Built** in the `tags` change (2026-11-10). Each Project has a list of tags, managed by its owners and editors on the
+Project page, and they put them on changes from the change page, or agents do it with the `tag_change` MCP tool,
+using existing tags only. Personal tags are kept per machine with `panopticon tags`, carried by reports, and seen
+only by their owner. Chips show on cards, change pages and history rows, and edits show live. A multi-select Tags
+filter on the dashboard, history and metrics matches every chosen tag, or a key alone, and goes in the address.
+Not built: the Project page's Tags list doesn't update live (deferred by Emmz, 2026-11-10).
 
 - **What a tag is:** an arbitrary dimension to filter on. A tag has an optional value, so there could be a `dev` tag
   and a `language: csharp` tag.

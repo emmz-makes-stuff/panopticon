@@ -50,9 +50,9 @@
 
 ## 10. Docs, integration and human verification
 
-- [ ] 10.1 Update the README (tags, who sees which, `panopticon tags`) and `docs/DISCOVERY.md` (Tags built). Verify by reading both against the specs.
-- [ ] 10.2 Extend the `make e2e` container flow: an editor adds a Project tag and tags a change, a report carries a personal tag, and the card shows both. Verify with `make e2e` → `E2E_EXIT:0`.
-- [ ] 10.3 Human verification (stop and ask Emmz): the chips, picker, Project page Tags section and Tags filter as built against `web/DESIGN.md`. Live tag edits between two browsers signed in as different members, with personal tags not crossing. And a real Claude Code calling `list_projects` and `tag_change` through `panopticon mcp`. Verify with Emmz's PASS for each, recorded in a devlog note.
+- [x] 10.1 Update the README (tags, who sees which, `panopticon tags`) and `docs/DISCOVERY.md` (Tags built). Verify by reading both against the specs.
+- [x] 10.2 Extend the `make e2e` container flow: an editor adds a Project tag and tags a change, a report carries a personal tag, and the card shows both. Verify with `make e2e` → `E2E_EXIT:0`.
+- [x] 10.3 Human verification (stop and ask Emmz): the chips, picker, Project page Tags section and Tags filter as built against `web/DESIGN.md`. Live tag edits between two browsers signed in as different members, with personal tags not crossing. And a real Claude Code calling `list_projects` and `tag_change` through `panopticon mcp`. Verify with Emmz's PASS for each, recorded in a devlog note.
 
 ## Workflow follow-up
 
