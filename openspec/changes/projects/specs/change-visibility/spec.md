@@ -81,17 +81,32 @@ not found, and filter choices SHALL NOT include values that appear only on it.
 - **THEN** Kit's machine filter doesn't offer `acme-vm`
 
 ### Requirement: Live updates are scoped
-The live stream SHALL send a viewer updates and archives only for changes in their scopes. When a viewer joins or
-leaves a Project, their open stream SHALL follow within one keep-alive interval. A viewer removed from a Project SHALL
-stop receiving its updates.
+The live stream SHALL send a viewer updates and archives only for changes in their scopes. A viewer removed from a
+Project SHALL stop receiving its updates. Membership changes are covered by "Membership changes take effect live".
 
 #### Scenario: Another Project's report
 - **WHEN** Kit has the dashboard open and a report arrives for an `ACME` change
 - **THEN** Kit's dashboard gets nothing
 
+### Requirement: Membership changes take effect live
+When someone is removed from a Project, or leaves it, their open pages SHALL drop it at once, with no reload:
+- **The dashboard:** its cards and its filter choice go.
+- **A change page of that Project:** it shows that the change wasn't found.
+
+When someone joins a Project, their open dashboard SHALL show its active changes at once, and its live updates from
+then on. History and metrics SHALL follow on their next load.
+
 #### Scenario: Removed while watching
-- **WHEN** Kit has the dashboard open and is removed from `PAN`
-- **THEN** within one keep-alive interval, Kit's stream stops sending `PAN` updates
+- **WHEN** Sam has the dashboard open, showing `PAN` cards, and an owner removes Sam from `PAN`
+- **THEN** the `PAN` cards leave Sam's dashboard at once, and no later `PAN` update reaches it
+
+#### Scenario: Removed while on a change page
+- **WHEN** Sam has a `PAN` change's page open and is removed from `PAN`
+- **THEN** the page says the change wasn't found
+
+#### Scenario: Invited while watching
+- **WHEN** Sam has the dashboard open and an owner invites Sam to `PAN`
+- **THEN** `PAN`'s active cards appear on Sam's dashboard at once, and its later updates arrive live
 
 ### Requirement: Development bootstrap reports
 A report made with the Development bootstrap token has no member. Such a report SHALL be able to name any existing

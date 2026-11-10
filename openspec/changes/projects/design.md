@@ -80,9 +80,16 @@
 - **Each subscription holds its viewer's scope.** `StreamAsync` drops events outside that scope before writing them.
 - **Membership changes** are picked up by the existing keep-alive re-check (team-auth D11), which now also reloads
   the viewer's Project set. So joining or leaving a Project takes effect within one keep-alive.
-- **On joining a Project,** the page doesn't receive the Project's existing cards through the stream. They appear on
-  the next reload or reconnect refresh. The live spec only promises that a removed viewer stops getting updates, so
-  this is acceptable.
+- **Superseded in §11 (Emmz, 2026-11-10, after the 10.2 check).** Removing Sam while he watched left PAN's cards on
+  his page. She asked for membership changes to take effect at once, for joining as well as removal. The keep-alive
+  re-check stays as a backstop, and §11 adds:
+  - **On the server:** after a membership write commits, the endpoint tells the broadcaster
+    (`MembershipChanged(memberId, projectId, isMember)`). The broadcaster updates the scope of every open subscription
+    of that member, and queues a `projects-changed` event `{ projectId, member: bool }` on them. Removal from the
+    server ends the sessions, and with them the streams, as before.
+  - **On the web:** a left Project's cards and filter choice are dropped. A joined one makes the dashboard refetch
+    `/api/changes`. A change page whose Project was left shows not found.
+  - **Not live:** history and metrics follow on their next load.
 - **Alternative rejected: a channel per Project.** It would mean moving subscribers between channels when
   membership changes, which is more code than filtering 64-deep queues.
 
