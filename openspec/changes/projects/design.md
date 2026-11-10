@@ -103,7 +103,14 @@
   runs in order:
   1. **The Project's active change**, by repo and name, with `FOR UPDATE`. If it's found, the report updates it. If the
      reporter also has an active personal change of the same identity, that one gets `archived_at = now`, with no
-     archive folder. So it leaves the dashboard, and an `Archived` event goes to its owner.
+     archive folder, and `retired_to_project_id` set to the Project. So it leaves the dashboard, and an `Archived` event
+     goes to its owner.
+     - **The history:** a retired copy stays in its owner's history. Its entry has a null `archiveFolder` and a
+       `linkedTo` naming the Project (`{ id, code, name }`), so the row shows "Linked to PAN".
+     - **The metrics:** the team metrics leave out retired copies (`retired_to_project_id IS NOT NULL`). Their work is
+       measured on the Project's change, and their time ends at the link. A change's own metrics still answer for it.
+     - Emmz chose both on 2026-11-10, after a side note found that the copy counted as a finished change and reached
+       the history with a null folder.
   2. **Otherwise, the reporter's own active personal change**, by repo and name, with `FOR UPDATE`. If it's found, the
      report sets `project_id` and clears `owner_member_id`, then updates it. Its events, agents and documents hang off
      `change_id`, so they move with it, and its metrics stay whole.

@@ -24,6 +24,7 @@
 
 ## 5. Server: members rescoped
 
+- [ ] 5.0 Retired personal copies (D4): add `retired_to_project_id` to changes (nullable, a foreign key to projects, with a migration), set when linking retires a personal change. The team metrics leave retired copies out. History entries get a nullable `archiveFolder` and a `linkedTo` Project. Verify the "A copy retired by linking" (history) and "Retired copies don't count" (metrics) scenarios with recorder and endpoint tests.
 - [ ] 5.1 Rescope the member endpoints (D8):
   - `GET /api/members` lists people who share a Project, and yourself;
   - `POST /api/members` is removed;
@@ -47,6 +48,7 @@
 
 - [ ] 8.1 Show the Project's code, or "Personal", on cards, the change page header and history rows. Verify with view tests ("Card shows its Project", "History row shows its Project").
 - [ ] 8.2 Add the `project` filter to the dashboard (filtering in the browser, with choices from the cards), the history and the metrics (choices from the server), offered by code and name. Verify "Filter by Project", "Project filter choices" and "One Project's metrics" with view tests, and that live updates respect the Project filter.
+- [ ] 8.3 Show a retired copy's history row as "Linked to <code>" in place of its archive folder, with `archiveFolder` typed `string | null` on history entries. Verify "A copy retired by linking" with a view test.
 
 ## 9. Design pass and docs
 

@@ -2,6 +2,26 @@
 
 ## MODIFIED Requirements
 
+### Requirement: Metrics page
+A signed-in member SHALL be able to open a metrics page over archived changes, showing:
+- the number of changes;
+- their median time to archive;
+- the median time per section;
+- a weekly chart of the median time to archive, over the last 12 weeks;
+- the slowest sections, each naming its change and linking to it.
+
+Each chart's figures SHALL also be available as text. A personal change retired by linking (spec change-visibility,
+Linking when the Project already has the change) SHALL NOT count: its work is measured on the Project's change.
+
+#### Scenario: Team metrics
+- **WHEN** three changes were archived in the last 12 weeks
+- **THEN** the metrics page shows 3 changes, their median time to archive and per section, the weekly chart and the
+  slowest sections
+
+#### Scenario: Retired copies don't count
+- **WHEN** `PAN`'s `cleanup` was archived, and Emmz's personal `cleanup` had been retired when she linked the repo
+- **THEN** Emmz's metrics count one change, `PAN`'s
+
 ### Requirement: Metrics page filters
 The metrics page SHALL take the same filters as the history (Project, repo, owner, person, machine, agent type), from
 the page's address. A filter that matches no archived change SHALL say so, with a way to clear it.
