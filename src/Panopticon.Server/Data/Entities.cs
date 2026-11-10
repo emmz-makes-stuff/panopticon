@@ -33,6 +33,53 @@ public sealed class Change
     public string? ArchiveFolder { get; set; }
 
     public List<ChangeAgent> Agents { get; } = [];
+
+    // projects D1: a change's scope. A Project's change has ProjectId; a personal one has OwnerMemberId; neither is a
+    // Development bootstrap report with no Project, or an old row with no member. Never both (a check constraint).
+
+    public Guid? ProjectId { get; set; }
+    public Project? Project { get; set; }
+    public Guid? OwnerMemberId { get; set; }
+}
+
+/// <summary>A Project (projects D1): the work and people it groups. Its code is fixed once created.</summary>
+public sealed class Project
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; }
+
+    /// <summary>Upper-case, e.g. <c>PAN</c>; <see cref="CodeKey"/> is its lower-case twin carrying the unique index.</summary>
+    public required string Code { get; set; }
+
+    public required string CodeKey { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public Guid CreatedByMemberId { get; set; }
+
+    public List<ProjectMember> Members { get; } = [];
+}
+
+/// <summary>A member's role in a Project (spec projects, Membership roles).</summary>
+public sealed class ProjectMember
+{
+    public Guid ProjectId { get; set; }
+    public Guid MemberId { get; set; }
+    public Member Member { get; set; } = null!;
+
+    /// <summary>One of <see cref="ProjectRoles"/>.</summary>
+    public required string Role { get; set; }
+
+    public DateTimeOffset JoinedAt { get; set; }
+    public Guid? InvitedByMemberId { get; set; }
+}
+
+/// <summary>The roles a Project member can have, as stored.</summary>
+public static class ProjectRoles
+{
+    public const string Owner = "owner";
+    public const string Editor = "editor";
+    public const string Viewer = "viewer";
+
+    public static readonly IReadOnlyList<string> All = [Owner, Editor, Viewer];
 }
 
 /// <summary>A member's MCP client on a machine. No member: a Development bootstrap report, or one from before team-auth.</summary>

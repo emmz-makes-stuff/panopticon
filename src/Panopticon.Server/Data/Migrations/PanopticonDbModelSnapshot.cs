@@ -141,6 +141,14 @@ namespace Panopticon.Server.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name_key");
 
+                    b.Property<Guid?>("OwnerMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_member_id");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
                     b.Property<Guid>("RepoId")
                         .HasColumnType("uuid")
                         .HasColumnName("repo_id");
@@ -151,17 +159,30 @@ namespace Panopticon.Server.Data.Migrations
                     b.HasIndex("LastReportedAt")
                         .HasDatabaseName("ix_changes_last_reported_at");
 
-                    b.HasIndex("RepoId", "ArchiveFolder")
+                    b.HasIndex("OwnerMemberId")
+                        .HasDatabaseName("ix_changes_owner_member_id");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_changes_project_id");
+
+                    b.HasIndex("RepoId", "ArchiveFolder", "ProjectId", "OwnerMemberId")
                         .IsUnique()
-                        .HasDatabaseName("ix_changes_repo_id_archive_folder")
+                        .HasDatabaseName("ix_changes_repo_id_archive_folder_project_id_owner_member_id")
                         .HasFilter("archive_folder IS NOT NULL");
 
-                    b.HasIndex("RepoId", "NameKey")
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("RepoId", "ArchiveFolder", "ProjectId", "OwnerMemberId"), false);
+
+                    b.HasIndex("RepoId", "NameKey", "ProjectId", "OwnerMemberId")
                         .IsUnique()
-                        .HasDatabaseName("ix_changes_repo_id_name_key")
+                        .HasDatabaseName("ix_changes_repo_id_name_key_project_id_owner_member_id")
                         .HasFilter("archived_at IS NULL");
 
-                    b.ToTable("changes", (string)null);
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("RepoId", "NameKey", "ProjectId", "OwnerMemberId"), false);
+
+                    b.ToTable("changes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_changes_one_scope", "project_id IS NULL OR owner_member_id IS NULL");
+                        });
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.ChangeAgent", b =>
@@ -344,6 +365,91 @@ namespace Panopticon.Server.Data.Migrations
                         .HasDatabaseName("ix_members_invited_by_member_id");
 
                     b.ToTable("members", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.Project", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("CodeKey")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code_key");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_member_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_projects");
+
+                    b.HasIndex("CodeKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_projects_code_key");
+
+                    b.HasIndex("CreatedByMemberId")
+                        .HasDatabaseName("ix_projects_created_by_member_id");
+
+                    b.ToTable("projects", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ProjectMember", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("member_id");
+
+                    b.Property<Guid?>("InvitedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invited_by_member_id");
+
+                    b.Property<DateTimeOffset>("JoinedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("role");
+
+                    b.HasKey("ProjectId", "MemberId")
+                        .HasName("pk_project_members");
+
+                    b.HasIndex("InvitedByMemberId")
+                        .HasDatabaseName("ix_project_members_invited_by_member_id");
+
+                    b.HasIndex("MemberId")
+                        .HasDatabaseName("ix_project_members_member_id");
+
+                    b.ToTable("project_members", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_project_members_role", "role IN ('owner', 'editor', 'viewer')");
+                        });
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Repo", b =>
@@ -587,6 +693,16 @@ namespace Panopticon.Server.Data.Migrations
 
             modelBuilder.Entity("Panopticon.Server.Data.Change", b =>
                 {
+                    b.HasOne("Panopticon.Server.Data.Member", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerMemberId")
+                        .HasConstraintName("fk_changes_members_owner_member_id");
+
+                    b.HasOne("Panopticon.Server.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .HasConstraintName("fk_changes_projects_project_id");
+
                     b.HasOne("Panopticon.Server.Data.Repo", "Repo")
                         .WithMany("Changes")
                         .HasForeignKey("RepoId")
@@ -624,6 +740,8 @@ namespace Panopticon.Server.Data.Migrations
                                 .HasForeignKey("ChangeId")
                                 .HasConstraintName("fk_changes_changes_id");
                         });
+
+                    b.Navigation("Project");
 
                     b.Navigation("Repo");
 
@@ -679,6 +797,40 @@ namespace Panopticon.Server.Data.Migrations
                         .WithMany()
                         .HasForeignKey("InvitedByMemberId")
                         .HasConstraintName("fk_members_members_invited_by_member_id");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.Project", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByMemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_projects_members_created_by_member_id");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.ProjectMember", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", null)
+                        .WithMany()
+                        .HasForeignKey("InvitedByMemberId")
+                        .HasConstraintName("fk_project_members_members_invited_by_member_id");
+
+                    b.HasOne("Panopticon.Server.Data.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_members_members_member_id");
+
+                    b.HasOne("Panopticon.Server.Data.Project", null)
+                        .WithMany("Members")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_members_projects_project_id");
+
+                    b.Navigation("Member");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.ReportDocument", b =>
@@ -767,6 +919,11 @@ namespace Panopticon.Server.Data.Migrations
             modelBuilder.Entity("Panopticon.Server.Data.Change", b =>
                 {
                     b.Navigation("Agents");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.Project", b =>
+                {
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Repo", b =>

@@ -49,8 +49,8 @@
   or later; we run 17):
   - `(repo_id, name_key, project_id, owner_member_id) WHERE archived_at IS NULL`;
   - `(repo_id, archive_folder, project_id, owner_member_id) WHERE archive_folder IS NOT NULL`.
-- **The migration** sets `owner_member_id` on existing changes, from the member of the agent on each change's earliest
-  report event (null for a bootstrap or old row). So Emmz's local data becomes her personal work.
+- **The migration** sets `owner_member_id` on existing changes, from the member behind each change's earliest report event
+  that has one (null when no report had a member: a bootstrap or old row). So Emmz's local data becomes her personal work.
   - **Two members on one change:** it goes to the first reporter. That's acceptable before going live.
 - **Alternative rejected:** a single `scope_key` text column (`p:<id>` or `m:<id>`). It's simpler to index, but it
   loses the foreign keys, and every query would have to parse it.

@@ -2,8 +2,8 @@
 
 ## 1. Server: the data model
 
-- [ ] 1.1 Add `Project` and `ProjectMember` (with the role check), and `changes.project_id` and `owner_member_id` (with the not-both check), and rebuild both change identity indexes with the scope columns and `NULLS NOT DISTINCT` (D1). Verify that the migration applies, with a test that two rows differing only by scope can coexist and two with the same scope can't.
-- [ ] 1.2 Backfill `owner_member_id` on existing changes from each change's earliest reporting member, and write the down migration (D1, Migration Plan). Verify with `MigrationTests`: an older change with a member's report becomes theirs, a bootstrap one stays both-null, and the migration rolls back.
+- [x] 1.1 Add `Project` and `ProjectMember` (with the role check), and `changes.project_id` and `owner_member_id` (with the not-both check), and rebuild both change identity indexes with the scope columns and `NULLS NOT DISTINCT` (D1). Verify that the migration applies, with a test that two rows differing only by scope can coexist and two with the same scope can't.
+- [x] 1.2 Backfill `owner_member_id` on existing changes from each change's earliest reporting member, and write the down migration (D1, Migration Plan). Verify with `MigrationTests`: an older change with a member's report becomes theirs, a bootstrap one stays both-null, and the migration rolls back.
 
 ## 2. Server: Projects and their members
 
