@@ -27,6 +27,8 @@ public sealed record RenderedDocument(string Path, string Html);
 /// <summary>One archived change in the history (spec: change-history, History list), with its Project as its card has it.</summary>
 /// <param name="ArchiveFolder">Its archive folder; null for a personal copy retired by linking.</param>
 /// <param name="LinkedTo">For a retired copy, the Project its work went to (projects D4): "Linked to PAN".</param>
+/// <param name="ProjectTags">Its Project's tags on it, as its card has them (tags D6).</param>
+/// <param name="PersonalTags">The viewer's own personal tags on it, as their card has them (tags D6).</param>
 public sealed record HistoryEntry(
     Guid ChangeId,
     CardRepo Repo,
@@ -36,7 +38,9 @@ public sealed record HistoryEntry(
     IReadOnlyList<CardAgent> Agents,
     CardProject? Project,
     bool Personal,
-    CardProject? LinkedTo);
+    CardProject? LinkedTo,
+    IReadOnlyList<ProjectTagRef> ProjectTags,
+    IReadOnlyList<PersonalTagRef> PersonalTags);
 
 /// <summary>A page of the history, newest archive first; <see cref="NextBefore"/> is the next page's cursor.</summary>
 public sealed record HistoryPage(IReadOnlyList<HistoryEntry> Changes, DateTimeOffset? NextBefore);
@@ -48,11 +52,21 @@ public sealed record OwnerChoice(string Host, string Owner);
 public sealed record MemberChoice(Guid Id, string DisplayName);
 
 /// <summary>
+/// A Tags filter choice (tags D7): <see cref="Filter"/> is its <c>tag</c> value, and <see cref="Project"/> is null for
+/// the viewer's own personal tag. <see cref="Value"/> is null for a bare tag or a key offered alone.
+/// </summary>
+public sealed record TagChoice(string Filter, CardProject? Project, string Key, string? Value);
+
+/// <summary>
 /// The history's filter choices (filters-and-idle-cards D5; spec: change-filters, Filter choices): the distinct values
 /// among archived changes, each sorted case-insensitively.
 /// </summary>
 /// <param name="Projects">The viewer's Projects with an archived change, by code (projects D9).</param>
 /// <param name="Personal">Whether the viewer has an archived personal change, so "Personal" is offered.</param>
+/// <param name="Tags">
+/// The tags on those changes as the viewer sees them (tags D7): their own personal tags, then each Project's by code,
+/// each group by key then value, with a key that has values also offered alone, above them.
+/// </param>
 public sealed record HistoryChoices(
     IReadOnlyList<CardRepo> Repos,
     IReadOnlyList<OwnerChoice> Owners,
@@ -60,7 +74,8 @@ public sealed record HistoryChoices(
     IReadOnlyList<string> Machines,
     IReadOnlyList<string> Clients,
     IReadOnlyList<CardProject> Projects,
-    bool Personal);
+    bool Personal,
+    IReadOnlyList<TagChoice> Tags);
 
 /// <summary>Reads change pages, documents and the history for the read API.</summary>
 public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDocumentStore store, DocumentRenderer renderer)
@@ -82,7 +97,7 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             .ToListAsync(cancellationToken);
 
         return new ChangePage(
-            ChangeCards.ToCard(change),
+            ChangeCards.ToCard(change, viewer.MemberId),
             change.ArchivedAt,
             change.ArchiveFolder,
             Order(documents.Select(d => Describe(d.Path, d.SizeBytes))));
@@ -121,7 +136,7 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
         Viewer viewer,
         CancellationToken cancellationToken)
     {
-        var query = filter.Apply(cards.Query().Include(c => c.RetiredToProject).VisibleTo(viewer).Where(c => c.ArchivedAt != null));
+        var query = filter.Apply(cards.Query().Include(c => c.RetiredToProject).VisibleTo(viewer).Where(c => c.ArchivedAt != null), viewer.MemberId);
         if (before is { } given)
         {
             // Npgsql writes only UTC offsets to timestamptz, and a cursor with any other offset is the same instant.
@@ -156,8 +171,10 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
         return new HistoryPage(
             [.. changes.Select(c =>
             {
-                var card = ChangeCards.ToCard(c);
-                return new HistoryEntry(c.Id, card.Repo, card.Change, c.ArchivedAt!.Value, c.ArchiveFolder, card.Agents, card.Project, card.Personal, LinkedTo(c));
+                var card = ChangeCards.ToCard(c, viewer.MemberId);
+                return new HistoryEntry(
+                    c.Id, card.Repo, card.Change, c.ArchivedAt!.Value, c.ArchiveFolder, card.Agents, card.Project, card.Personal, LinkedTo(c),
+                    card.ProjectTags, card.PersonalTags);
             })],
             next);
     }
@@ -198,6 +215,7 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             .Distinct()
             .ToListAsync(cancellationToken);
         var personal = await archived.AnyAsync(c => c.OwnerMemberId == viewer.MemberId, cancellationToken);
+        var tags = await TagChoicesAsync(archived, viewer, cancellationToken);
 
         var byLabel = StringComparer.OrdinalIgnoreCase;
         return new HistoryChoices(
@@ -216,7 +234,72 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             [.. agents.DistinctBy(a => a.MachineNameKey, StringComparer.Ordinal).Select(a => a.MachineName).Order(byLabel)],
             [.. agents.DistinctBy(a => a.ClientNameKey, StringComparer.Ordinal).Select(a => a.ClientName).Order(byLabel)],
             [.. projects.Select(p => new CardProject(p.Id, p.Code, p.Name)).OrderBy(p => p.Code, byLabel)],
-            personal);
+            personal,
+            tags);
+    }
+
+    // tags D7: personal tags from the viewer's own agents only, so no other member's can be offered.
+    private static async Task<IReadOnlyList<TagChoice>> TagChoicesAsync(IQueryable<Change> archived, Viewer viewer, CancellationToken cancellationToken)
+    {
+        var personalTags = await archived
+            .SelectMany(c => c.Agents)
+            .Where(a => a.Agent.MemberId == viewer.MemberId)
+            .SelectMany(a => a.Tags)
+            .Select(t => new { t.Key, t.Value, t.KeyKey, t.ValueKey })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var projectTags = await archived
+            .Where(c => c.Project != null)
+            .SelectMany(c => c.ProjectTags.Select(t => new
+            {
+                t.Tag.Id,
+                t.Tag.Key,
+                t.Tag.Value,
+                t.Tag.KeyKey,
+                t.Tag.ValueKey,
+                t.Tag.ProjectId,
+                c.Project!.Code,
+                c.Project.Name,
+            }))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        // Within a group: by key; then the key alone, a bare tag, and the valued tags by value. For a personal tag, the
+        // key alone and the bare tag are one filter (p:<key>), so one choice.
+        // Casings of one tag are one choice; the spelling shown is the one sorting last ordinally, so lower case
+        // where any was reported, and the same on every read.
+        var spelled = personalTags
+            .OrderByDescending(t => t.Key, StringComparer.Ordinal).ThenByDescending(t => t.Value, StringComparer.Ordinal)
+            .ToList();
+        var choices = new List<TagChoice>();
+        choices.AddRange(spelled
+            .Select(t => (t.KeyKey, Rank: t.Value is null ? 0 : 1, t.ValueKey, Choice: new TagChoice(
+                new TagFilter.Personal(t.KeyKey, t.Value is null ? null : t.ValueKey).ToString(), null, t.Key, t.Value)))
+            .Concat(spelled
+                .Where(t => t.Value is not null)
+                .Select(t => (t.KeyKey, Rank: 0, ValueKey: string.Empty, Choice: new TagChoice(
+                    new TagFilter.Personal(t.KeyKey, null).ToString(), null, t.Key, null))))
+            .DistinctBy(c => c.Choice.Filter, StringComparer.Ordinal)
+            .OrderBy(c => c.KeyKey, StringComparer.Ordinal).ThenBy(c => c.Rank).ThenBy(c => c.ValueKey, StringComparer.Ordinal)
+            .Select(c => c.Choice));
+
+        foreach (var group in projectTags.GroupBy(t => t.ProjectId).OrderBy(g => g.First().Code, StringComparer.OrdinalIgnoreCase))
+        {
+            var project = new CardProject(group.Key, group.First().Code, group.First().Name);
+            choices.AddRange(group
+                .DistinctBy(t => t.Id)
+                .Select(t => (t.KeyKey, Rank: t.Value is null ? 1 : 2, t.ValueKey, Choice: new TagChoice(
+                    new TagFilter.ProjectTag(t.Id).ToString(), project, t.Key, t.Value)))
+                .Concat(group
+                    .Where(t => t.Value is not null)
+                    .DistinctBy(t => t.KeyKey)
+                    .Select(t => (t.KeyKey, Rank: 0, ValueKey: string.Empty, Choice: new TagChoice(
+                        new TagFilter.ProjectKey(group.Key, t.KeyKey).ToString(), project, t.Key, null))))
+                .OrderBy(c => c.KeyKey, StringComparer.Ordinal).ThenBy(c => c.Rank).ThenBy(c => c.ValueKey, StringComparer.Ordinal)
+                .Select(c => c.Choice));
+        }
+
+        return choices;
     }
 
     /// <summary>Proposal, design, tasks, specs by capability, devlog notes newest first, then anything else by path.</summary>

@@ -15,8 +15,19 @@ public abstract record ChangeEvent
     {
     }
 
-    /// <summary>A report moved an active change on; sent as <c>change-updated</c> with the card.</summary>
-    public sealed record Updated(ChangeCard Card, ChangeScope Scope) : ChangeEvent;
+    /// <summary>
+    /// A report or a tag edit moved an active change on; sent as <c>change-updated</c> with the card. <see cref="Card"/>
+    /// has no personal tags; <see cref="PersonalTags"/> has each member's, and each subscriber gets only their own
+    /// (tags D6). The map is never serialised.
+    /// </summary>
+    public sealed record Updated(
+        ChangeCard Card,
+        ChangeScope Scope,
+        IReadOnlyDictionary<Guid, IReadOnlyList<PersonalTagRef>> PersonalTags) : ChangeEvent
+    {
+        /// <summary>The card for one subscriber: with their own personal tags, and nobody else's.</summary>
+        public ChangeCard CardFor(Guid memberId) => new LiveCard(Card, PersonalTags).For(memberId);
+    }
 
     /// <summary>The change was archived and leaves the live view; sent as <c>change-archived</c>.</summary>
     public sealed record Archived(Guid ChangeId, ChangeScope Scope) : ChangeEvent;
@@ -77,11 +88,28 @@ public sealed class ChangeBroadcaster
         return new Subscription(this, channel);
     }
 
-    public void Publish(ChangeCard card, ChangeScope scope)
+    /// <summary>Publishes a card with each member's personal tags (tags D6).</summary>
+    public void Publish(LiveCard card, ChangeScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        Publish(card.Card, scope, card.PersonalTags);
+    }
+
+    /// <summary>Publishes a card with no personal tags on it.</summary>
+    /// <exception cref="ArgumentException">The card carries personal tags: they would reach every subscriber.</exception>
+    public void Publish(
+        ChangeCard card,
+        ChangeScope scope,
+        IReadOnlyDictionary<Guid, IReadOnlyList<PersonalTagRef>>? personalTags = null)
     {
         ArgumentNullException.ThrowIfNull(card);
         ArgumentNullException.ThrowIfNull(scope);
-        Publish(new ChangeEvent.Updated(card, scope));
+        if (card.PersonalTags.Count > 0)
+        {
+            throw new ArgumentException("A published card carries no personal tags: pass them by member instead (tags D6).", nameof(card));
+        }
+
+        Publish(new ChangeEvent.Updated(card, scope, personalTags ?? new Dictionary<Guid, IReadOnlyList<PersonalTagRef>>()));
     }
 
     public void PublishArchived(Guid changeId, ChangeScope scope)

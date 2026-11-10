@@ -30,10 +30,11 @@ public static class MetricsEndpoints
                 string? machine,
                 string? client,
                 string? project,
+                string[]? tag,
                 Viewer viewer,
                 MetricsReader metrics,
                 CancellationToken cancellationToken) =>
-                HistoryFilter.TryParse(repo, owner, member, machine, client, project, out var filter, out var error)
+                HistoryFilter.TryParse(repo, owner, member, machine, client, project, tag, out var filter, out var error)
                     ? TypedResults.Ok(await metrics.ForTeamAsync(filter, viewer, cancellationToken))
                     : TypedResults.BadRequest(error))
             .RequireAuthorization(AuthPolicies.Member);

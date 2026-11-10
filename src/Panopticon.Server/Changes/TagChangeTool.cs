@@ -122,9 +122,9 @@ public sealed class TagChangeTool
 
         var result = new TagChangeResult(
             target.Id.ToString(),
-            card.Change,
+            card.Card.Change,
             found.Code,
-            [.. card.ProjectTags.Select(t => new Tag(t.Key, t.Value).Text)]);
+            [.. card.Card.ProjectTags.Select(t => new Tag(t.Key, t.Value).Text)]);
         return new CallToolResult
         {
             Content = [new TextContentBlock { Text = result.Describe() }],

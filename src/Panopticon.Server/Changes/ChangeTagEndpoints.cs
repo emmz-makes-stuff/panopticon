@@ -72,6 +72,6 @@ public static class ChangeTagEndpoints
             broadcaster.Publish(card, new ChangeScope(projectId, change.OwnerMemberId));
         }
 
-        return TypedResults.Ok(card);
+        return TypedResults.Ok(card.For(viewer.MemberId));
     }
 }

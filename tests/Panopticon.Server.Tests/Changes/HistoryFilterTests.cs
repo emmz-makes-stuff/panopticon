@@ -94,7 +94,7 @@ public class HistoryFilterTests(PostgresFixture postgres, S3Fixture s3)
     [InlineData(" GitHub.com/Emmz/Panopticon ", "github.com", "emmz", "panopticon")]
     public void A_repo_filter_splits_host_owner_and_name(string repo, string host, string owner, string name)
     {
-        Assert.True(HistoryFilter.TryParse(repo, null, null, null, null, null, out var filter, out _));
+        Assert.True(HistoryFilter.TryParse(repo, null, null, null, null, null, null, out var filter, out _));
 
         Assert.Equal(new RepoKey(host, owner, name), filter.Repo);
     }

@@ -84,7 +84,7 @@ public sealed class MetricsReader(PanopticonDb db, TimeProvider clock)
         ArgumentNullException.ThrowIfNull(filter);
 
         // projects D4: a personal copy retired by linking isn't a finished change; its work is measured on the Project's.
-        var archived = filter.Apply(db.Changes.AsNoTracking().VisibleTo(viewer).Where(c => c.ArchivedAt != null && c.RetiredToProjectId == null));
+        var archived = filter.Apply(db.Changes.AsNoTracking().VisibleTo(viewer).Where(c => c.ArchivedAt != null && c.RetiredToProjectId == null), viewer.MemberId);
         var changes = await archived
             .Select(c => new
             {

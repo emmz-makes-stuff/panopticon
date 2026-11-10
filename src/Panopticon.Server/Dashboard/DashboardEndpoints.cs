@@ -222,9 +222,10 @@ public static class DashboardEndpoints
                 // projects D3: only the changes this viewer can see.
                 var (scope, item) = change switch
                 {
-                    ChangeEvent.Updated(var card, var cardScope) => (cardScope, new SseItem<object?>(card, ChangeUpdatedEvent)
+                    // tags D6: the subscriber's own personal tags only, from the event's map; no database read.
+                    ChangeEvent.Updated updated => (updated.Scope, new SseItem<object?>(updated.CardFor(viewer.MemberId), ChangeUpdatedEvent)
                     {
-                        EventId = card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
+                        EventId = updated.Card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
                     }),
                     ChangeEvent.Archived(var changeId, var archivedScope) =>
                         (archivedScope, new SseItem<object?>(new ArchivedChange(changeId), ChangeArchivedEvent)),

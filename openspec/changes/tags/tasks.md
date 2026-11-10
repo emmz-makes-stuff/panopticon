@@ -21,9 +21,9 @@
 
 ## 5. Server: tags in every read, per viewer
 
-- [ ] 5.1 Add `projectTags` and `personalTags` to `ChangeCard` (so to `ChangePage` and history entries too), filling the personal ones from the viewer's own agents in `ChangeCards`, `ChangePages` and the history (D6). Verify "Tags shown on changes" and "Personal tags are private" with endpoint tests, and extend the outsider sweep test so Sam's responses never contain Emmz's personal tag text.
-- [ ] 5.2 Make the live stream per viewer (D6): `Updated` carries the server-side map of personal tags by member, and `StreamAsync` writes each subscriber its own. Verify "Tag edits are live" (server side) with `StreamAsync` tests: Emmz's stream carries her tag on a shared `PAN` card, and Sam's stream for the same event never contains it.
-- [ ] 5.3 Add the Tags filter to `HistoryFilter` and the history and metrics endpoints: repeated `tag` values in the `t:`, `k:` and `p:` forms, one `EXISTS` each, a 400 for a malformed one, and at most 20 (D7). Add `tags` to `HistoryChoices`, with personal tags from the viewer's own agents only. Verify "Filter by tags" and "Tag filter choices" (history), and the `change-metrics` "Metrics by tag" and "Metrics by a personal tag" scenarios, with endpoint tests.
+- [x] 5.1 Add `projectTags` and `personalTags` to `ChangeCard` (so to `ChangePage` and history entries too), filling the personal ones from the viewer's own agents in `ChangeCards`, `ChangePages` and the history (D6). Verify "Tags shown on changes" and "Personal tags are private" with endpoint tests, and extend the outsider sweep test so Sam's responses never contain Emmz's personal tag text.
+- [x] 5.2 Make the live stream per viewer (D6): `Updated` carries the server-side map of personal tags by member, and `StreamAsync` writes each subscriber its own. Verify "Tag edits are live" (server side) with `StreamAsync` tests: Emmz's stream carries her tag on a shared `PAN` card, and Sam's stream for the same event never contains it.
+- [x] 5.3 Add the Tags filter to `HistoryFilter` and the history and metrics endpoints: repeated `tag` values in the `t:`, `k:` and `p:` forms, one `EXISTS` each, a 400 for a malformed one, and at most 20 (D7). Add `tags` to `HistoryChoices`, with personal tags from the viewer's own agents only. Verify "Filter by tags" and "Tag filter choices" (history), and the `change-metrics` "Metrics by tag" and "Metrics by a personal tag" scenarios, with endpoint tests.
 
 ## 6. CLI: personal tags and `tag_change`
 
