@@ -75,6 +75,53 @@ public class ReportRecorderTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(2, await db.ReportEvents.CountAsync(ct));
     }
 
+    // tags D5: the agent's latest report sets its personal tags; an older one committing last can't bring one back.
+    [Fact]
+    public async Task Personal_tags_follow_the_agents_latest_report_only()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+        var older = harness.Clock.GetUtcNow();
+        harness.Clock.Advance(TimeSpan.FromMinutes(5));
+        var newer = harness.Clock.GetUtcNow();
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, ThreeOfFour) { PersonalTags = Tags("urgent") }, ct);
+        harness.Clock.Advance(older - newer);
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour) { PersonalTags = Tags("dev") }, ct);
+
+        await using var db = harness.NewDb();
+        Assert.Equal(["urgent"], await db.ChangeAgentTags.Select(t => t.Key).ToListAsync(ct));
+    }
+
+    [Fact]
+    public async Task Personal_tags_are_replaced_left_alone_when_absent_and_cleared_when_empty()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var harness = await Harness.CreateAsync(postgres, s3, ct);
+        async Task<List<string>> TagsAsync()
+        {
+            await using var db = harness.NewDb();
+            return await db.ChangeAgentTags.OrderBy(t => t.KeyKey).Select(t => t.Value == null ? t.Key : t.Key + ": " + t.Value).ToListAsync(ct);
+        }
+
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour) { PersonalTags = Tags("dev", "Language: CSharp") }, ct);
+        Assert.Equal(["dev", "Language: CSharp"], await TagsAsync());
+
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour) { PersonalTags = Tags("language: csharp") }, ct);
+        Assert.Equal(["language: csharp"], await TagsAsync());
+
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour), ct);
+        Assert.Equal(["language: csharp"], await TagsAsync());
+
+        harness.Clock.Advance(TimeSpan.FromMinutes(1));
+        await harness.RecordAsync(new ReportInput(_panopticon, "walking-skeleton", _claudeOnVm1, null, TwoOfFour) { PersonalTags = [] }, ct);
+        Assert.Empty(await TagsAsync());
+    }
+
+    private static IReadOnlyList<Contracts.Tag> Tags(params string[] texts) =>
+        [.. texts.Select(text => Contracts.TagText.TryParse(text, out var tag, out _) ? tag : throw new ArgumentException(text))];
+
     [Fact]
     public async Task Identity_is_case_insensitive()
     {

@@ -17,7 +17,7 @@
 
 ## 4. Server: personal tags in reports
 
-- [ ] 4.1 Add `PersonalTags` to `ReportProgressArguments` and `ReportInput`. Validate them before recording (20 at most, malformed refused), and replace the agent's `change_agent_tags` set inside the report's transaction, leaving it alone when the field is absent (D5). Verify "Personal tags in reports" and "Personal tags on a change" with recorder and MCP endpoint tests: two agents of one member, a tag removed, `null` versus `[]`, an archived change frozen, and a linked personal change keeping its agents' tags when it moves into a Project.
+- [x] 4.1 Add `PersonalTags` to `ReportProgressArguments` and `ReportInput`. Validate them before recording (20 at most, malformed refused), and replace the agent's `change_agent_tags` set inside the report's transaction, leaving it alone when the field is absent (D5). Verify "Personal tags in reports" and "Personal tags on a change" with recorder and MCP endpoint tests: two agents of one member, a tag removed, `null` versus `[]`, an archived change frozen, and a linked personal change keeping its agents' tags when it moves into a Project.
 
 ## 5. Server: tags in every read, per viewer
 

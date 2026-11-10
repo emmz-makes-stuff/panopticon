@@ -35,6 +35,12 @@ public sealed record ReportInput(
 
     /// <summary>The Project the report names, from the repo's <c>.panopticon.json</c> (projects D4); null for none.</summary>
     public Guid? ProjectId { get; init; }
+
+    /// <summary>
+    /// The reporter's personal tags (tags D5), checked: they replace the agent's set on the change. Null leaves the set as
+    /// it is, as from a CLI older than tags.
+    /// </summary>
+    public IReadOnlyList<Contracts.Tag>? PersonalTags { get; init; }
 }
 
 /// <summary>What a report did to the change's archive state (change-documents-and-history D7).</summary>
@@ -207,13 +213,32 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         }
 
         var changeAgent = await db.ChangeAgents.FindAsync([change.Id, agent.Id], cancellationToken);
+
+        // tags D5: only the agent's latest report on the change sets its personal tags, so an older one committing last
+        // can't bring back a tag that was removed. The change row is locked, so two reports on it take turns here.
+        var latestForAgent = changeAgent is null || receivedAt >= changeAgent.LastReportedAt;
         if (changeAgent is null)
         {
-            db.ChangeAgents.Add(new ChangeAgent { ChangeId = change.Id, AgentId = agent.Id, LastReportedAt = receivedAt });
+            changeAgent = new ChangeAgent { ChangeId = change.Id, AgentId = agent.Id, LastReportedAt = receivedAt };
+            db.ChangeAgents.Add(changeAgent);
         }
         else if (receivedAt > changeAgent.LastReportedAt)
         {
             changeAgent.LastReportedAt = receivedAt;
+        }
+
+        if (report.PersonalTags is { } personalTags && latestForAgent)
+        {
+            await db.ChangeAgentTags.Where(t => t.ChangeId == change.Id && t.AgentId == agent.Id).ExecuteDeleteAsync(cancellationToken);
+            changeAgent.Tags.AddRange(personalTags.Select(t => new ChangeAgentTag
+            {
+                ChangeId = change.Id,
+                AgentId = agent.Id,
+                Key = t.Key,
+                Value = t.Value,
+                KeyKey = t.KeyKey,
+                ValueKey = t.ValueKey,
+            }));
         }
 
         var reportEvent = new ReportEvent

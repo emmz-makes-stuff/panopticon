@@ -56,11 +56,13 @@ public sealed class TagWorld : IAsyncDisposable
         string change,
         Guid? project,
         string machine = "vm-1",
-        bool archived = false) =>
+        bool archived = false,
+        IReadOnlyList<string>? personalTags = null) =>
         new(new RepoRef("github.com", "emmz", "panopticon"), change, new AgentRef("claude-code", machine), Tasks)
         {
             Project = project?.ToString(),
             Archive = archived ? $"2026-11-10-{change}" : null,
+            PersonalTags = personalTags,
         };
 
     /// <summary>Reports, failing the test if the server refuses; returns the result.</summary>
