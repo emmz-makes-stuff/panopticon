@@ -213,7 +213,12 @@ export function memoryStorage(initial: Record<string, string> = {}) {
   };
 }
 
-export const MEMBER = { id: "m1", email: "emmz@example.com", displayName: "Emmz" };
+export const MEMBER = {
+  id: "m1",
+  email: "emmz@example.com",
+  displayName: "Emmz",
+  canRemoveMembers: true,
+};
 
 /** Waits until `check` passes (or fails after a few event-loop turns), for UI that updates after fetches. */
 export async function until(check: () => boolean, turns = 20): Promise<void> {

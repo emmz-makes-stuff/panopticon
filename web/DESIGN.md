@@ -92,7 +92,7 @@ a PANOPTICON              ● Live  3 changes   Emmz  Members  Tokens  Sign out
   colour). On the dashboard, the live state follows, pushed right: a `--spark` dot and "Live", or a
   hollow dot and "Offline, reconnecting…" while disconnected, with the number of changes beside it. Other
   pages leave that slot empty. When signed in, the account sits last: your display name (600), then
-  Members, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,
+  Projects, Members, History, Metrics, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,
   with the account on its own line.
 - **Empty dashboard:** "No agents have reported yet." Below it, one line: connect one with the panopticon
   CLI, then ask it to report progress on a change. Then the two commands in a copyable block:
@@ -104,27 +104,29 @@ These are tools, not views of progress, so they stay quieter than the cards and 
 
 ```
 Members
+Everyone who shares a Project with you.
 ──────────────────────────────────────────────
 Emmz (you)      emmz@example.com   Joined 8 Nov 2026
   Your display name [Emmz            ] [Save]
 ──────────────────────────────────────────────
 Sam             sam@example.com    Joined 9 Nov 2026     [Remove]
 ──────────────────────────────────────────────
-
-Invite someone
-They become a member at once, and sign in with their email.
-Email [               ]  Display name (optional) [        ]  [Invite]
+To invite someone, open one of your Projects. Its owners can invite people from there.
 ```
 
+- **Members:** there's no invite form, since people join through a Project. Instead there's one muted line
+  with a link to `/projects`. Remove appears only for initial members (`canRemoveMembers` on the session),
+  and its confirmation says the person leaves every Project.
+
 - **One left-aligned column**, 38rem wide, under the header. The page heading is Gabarito 700 at 25px, the
-  same as the empty state's. Subheadings ("Invite someone") are Gabarito at 20px. Lead text is
+  same as the empty state's. Subheadings ("New Project", "Invite someone") are Gabarito at 20px. Lead text is
   `--ink-muted`.
 - **Lists, not cards:** members and tokens are rows between hairline `--rule` dividers. The name (or the
   machine) is 600, and the email, dates and last use follow in small muted text. Cards stay reserved for
   changes.
 - **Forms:** a label above each input (small, 600). Inputs and their button sit on one line and wrap on
   phones. Inputs have a 4px radius and a border dark enough to meet 3:1.
-- **Buttons:** the main action of a page (Send me a link, Sign in, Invite, Continue, Approve) is solid
+- **Buttons:** the main action of a page (Send me a link, Sign in, Create Project, Invite, Continue, Approve) is solid
   `--ink` with `--card` text. Teal stays the progress colour only. Others are outlined. Remove and Revoke
   are small outlined buttons at the row's right: the confirmation that follows does the warning, so they
   don't shout. Sign out and "Use a different address" are link buttons.
@@ -137,6 +139,98 @@ Email [               ]  Display name (optional) [        ]  [Invite]
 - **Sign-in confirm:** "Sign in as emmz@example.com?" when this browser asked for the link, otherwise
   "Sign in to a PANOPTICON?" (the server can't say whose link it is before the confirm). One "Sign in"
   button. A used or expired link explains which, with a "Send me a new link" link.
+
+## Projects
+
+A Project's code is the number on its cell's door. The tower has many cells, and the plate says whose is whose.
+That gives the Projects pages their one deliberate thing, the **code plate**. Everything else is in the tools'
+quiet voice, as above.
+
+```
+Projects
+──────────────────────────────────────────────
+┌─────┐
+│ PAN │  Panopticon                     Owner
+└─────┘
+──────────────────────────────────────────────
+┌──────┐
+│ ACME │ Acme client work               Viewer
+└──────┘
+──────────────────────────────────────────────
+
+New Project
+Name [                ]  Code [      ]  [Create Project]
+                         2 to 10 letters or digits, starting with a letter.
+```
+
+```
+All Projects
+┌─────┐
+│ PAN │                    (the plate at 31px: the loudest thing on the page)
+└─────┘
+Panopticon                 (h2)
+You're an owner. Id 6f1c2e4a-…   (small, muted; the id is selectable)
+Name [Panopticon      ] [Save]          (owners only)
+
+Link a repo
+Commit this as .panopticon.json at the root of a repo, and its reports go to PAN.
+┌──────────────────────────────────────────────┐
+│ { "project": "6f1c2e4a-…" }                  │
+└──────────────────────────────────────────────┘
+[Copy]  Copied.
+
+Members
+──────────────────────────────────────────────
+Emmz (you)   emmz@example.com           [Owner ▾]
+──────────────────────────────────────────────
+Sam          sam@example.com            [Viewer ▾] [Remove]
+──────────────────────────────────────────────
+
+Invite someone                          (owners only)
+Email [              ]  Role [Viewer ▾]  [Invite]
+
+[Leave this Project]
+```
+
+- **The code plate** (`.project-code`) is the code in Gabarito 700 with `letter-spacing: 0.08em`, inside a 1px
+  `--ink-muted` border with a 3px radius. It's tighter than an agent pill's, so the two never read alike. Codes
+  are data, so their capitals aren't an all-caps label. Three sizes, and only the size changes:
+    - **The Project page:** 31px, and the loudest thing on the page, like the device code, because it's what
+      you'll look for on the cards.
+    - **The Projects list:** 16px, in a fixed 6.5rem column so the names line up.
+    - **Cards, the change page header and history rows:** 12.8px.
+- **"Personal"** (`.project-code.personal`) is the same plate with a dashed `--rule` border, in the body font
+  at 400, `--ink-muted` and sentence case. The dash is the empty bar's vocabulary: no Project here.
+- **Plain colours only.** Plates are never teal, since `--lit` is progress, and never `--spark`, since that's
+  the live signal. A Project has no colour of its own.
+- **The list:** rows between hairlines, like Members. The plate, then the name (600, the row's link, with no
+  underline until hover or focus), then the role at the right in small `--ink-muted` text, as "Owner",
+  "Editor" or "Viewer". Phones wrap the role under the name. With no Projects: "You're not in any Projects
+  yet.", then a muted line: create one below, or ask a Project's owner to invite you.
+- **Creating a Project:** a "New Project" subheading, then the Name and Code fields on one line, with "Create
+  Project" as the primary button. The code input shows capitals as you type
+  (`text-transform: uppercase`, with the plate's letter-spacing), and the value is sent in capitals. The rule
+  sits under the Code field as small muted help text, linked by `aria-describedby`. Errors use the usual
+  alert line under the form ("The code PAN is taken. Choose another."). A created Project opens its page.
+- **The Project page:**
+    - **The header:** a small muted "All Projects" back link, then the plate, then the name as the h2. Under
+      them, one small muted line gives your role ("You're an owner.") and the id.
+    - **Renaming:** owners get the rename form under that line (Name, then Save), like your display name on
+      Members.
+    - **Link a repo:** the file's content in the empty state's `pre` block, then an outlined Copy button with a
+      status line ("Copied."). If the clipboard isn't available, the status says to select the text and copy
+      it, so the block is the fallback.
+    - **Members:** owners get each role as a small `select` in the row, with a visually hidden label ("Role for
+      Sam"). A change applies at once and the status line confirms it ("Sam is now an editor."). The exception
+      is stepping down on your own row: that asks first, because only another owner can undo it. Everyone else
+      sees the role as muted text. Remove is the small outlined button, after a confirmation.
+    - **Invite someone** is owners only: Email, Role (Viewer by default) and the primary Invite button, with one
+      muted line: if they aren't on this server yet, this lets them sign in too, and no email is sent.
+    - **Leave this Project** is an outlined button at the end, after a confirmation, and it goes back to
+      `/projects`. The last owner's refusals ("A Project needs an owner. Make someone else an owner first.")
+      appear in the alert line by the control that was used.
+- **A Project you aren't in:** "There's no such Project." with the back link, the same as one that doesn't
+  exist.
 
 ## Pages: a change, and the history
 

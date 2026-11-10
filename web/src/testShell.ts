@@ -13,6 +13,7 @@ import {
 
 export interface TestShellOptions {
   confirm?: (message: string) => boolean;
+  copy?: (text: string) => Promise<void>;
   /** What localStorage holds at start. */
   local?: Record<string, string>;
   /** Replaces localStorage altogether, e.g. with one that throws, as blocked site data does. */
@@ -39,6 +40,7 @@ export async function startTestShell(
     events,
     now: () => new Date("2026-11-08T12:00:00Z"),
     confirm: options.confirm ?? (() => true),
+    copy: options.copy ?? (() => Promise.resolve()),
   });
   const heading = () => root.querySelector(".view h2")?.textContent;
   return { root, nav, local, shell, heading, events };

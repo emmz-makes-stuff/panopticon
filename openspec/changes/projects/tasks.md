@@ -41,8 +41,8 @@
 
 ## 7. Web: Projects pages and members
 
-- [ ] 7.1 Add `/projects`: the list with roles, and a create form with code validation and the taken-code message. Add `/projects/{id}`: the name (editable by owners), code and id, the copyable `.panopticon.json`, members with roles, and owners' invite, role-change and remove, plus Leave and the last-owner message. Add the Projects header link. Verify with view tests against the fake server, covering an owner and a viewer.
-- [ ] 7.2 Update the Members page: no invite form (a line pointing to Projects), and Remove shown only when `canRemoveMembers`. Verify with view tests, and update the shell's and the other pages' header link expectations.
+- [x] 7.1 Add `/projects`: the list with roles, and a create form with code validation and the taken-code message. Add `/projects/{id}`: the name (editable by owners), code and id, the copyable `.panopticon.json`, members with roles, and owners' invite, role-change and remove, plus Leave and the last-owner message. Add the Projects header link. Verify with view tests against the fake server, covering an owner and a viewer.
+- [x] 7.2 Update the Members page: no invite form (a line pointing to Projects), and Remove shown only when `canRemoveMembers`. Verify with view tests, and update the shell's and the other pages' header link expectations.
 
 ## 8. Web: the Project in the views
 

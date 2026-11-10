@@ -147,4 +147,6 @@ export interface SessionMember {
   id: string;
   email: string;
   displayName: string;
+  /** Whether they may remove members from the server: initial members only (projects D8). */
+  canRemoveMembers: boolean;
 }

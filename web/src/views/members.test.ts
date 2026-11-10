@@ -38,7 +38,7 @@ function submit(form: Element | null) {
   form.dispatchEvent(new Event("submit", { cancelable: true }));
 }
 
-// Spec team-members: "Member list", "Members invite members", "Display names", "Removing a member".
+// Spec team-members: "Member list", "Display names", "Removing a member".
 describe("/members", () => {
   it("List members: each with email, display name and join date; rename for you, remove for others", async () => {
     const { root, heading } = await open(withMembers([me, sam]));
@@ -72,57 +72,42 @@ describe("/members", () => {
     expect(name.querySelector("b, script")).toBeNull();
   });
 
-  it("Invite a colleague: posts the address (and name if given), and the list shows them", async () => {
-    let members = [me];
-    const server = signedIn()
-      .on("GET", "/api/members", () => ({ status: 200, body: members }))
-      .on("POST", "/api/members", (call) => {
-        members = [...members, sam];
-        return { status: 201, body: { ...sam, ...(call.body as object) } };
-      });
-    const { root } = await open(server);
-    q<HTMLInputElement>(root, ".invite-form input[name=email]").value = " sam@example.com ";
-    q<HTMLInputElement>(root, ".invite-form input[name=displayName]").value = "Sam";
+  it("has no invite form, and points to Projects for inviting", async () => {
+    const { root } = await open(withMembers([me, sam]));
 
-    submit(root.querySelector(".invite-form"));
-    await until(() => rows(root).length === 2);
+    expect(root.querySelector(".invite-form")).toBeNull();
+    const hint = q(root, ".members-invite-hint");
+    expect(hint.textContent).toBe(
+      "To invite someone, open one of your Projects. Its owners can invite people from there.",
+    );
+    expect(hint.querySelector("a")?.getAttribute("href")).toBe("/projects");
+  });
 
-    expect(server.to("POST", "/api/members")[0]?.body).toEqual({
-      email: "sam@example.com",
-      displayName: "Sam",
+  it("Only initial members remove: without canRemoveMembers, nobody has a Remove button", async () => {
+    const { root } = await open(
+      withMembers([me, sam]).on("GET", "/api/session", {
+        status: 200,
+        body: { ...MEMBER, canRemoveMembers: false },
+      }),
+    );
+
+    expect(rows(root).map((row) => row.remove)).toEqual([false, false]);
+  });
+
+  it("Last owner removed: shows the server's refusal naming the Project", async () => {
+    const detail = "Sam is the only owner of ACME. Make someone else its owner first.";
+    const server = withMembers([me, sam]).on("DELETE", "/api/members/m2", {
+      status: 409,
+      body: { detail },
     });
-    expect(rows(root).map((row) => row.email)).toEqual(["emmz@example.com", "sam@example.com"]);
-    expect(root.querySelector(".form-status")?.textContent).toContain("Invited sam@example.com");
-  });
-
-  it("an invite without a name sends only the address", async () => {
-    const server = withMembers([me]).on("POST", "/api/members", { status: 201, body: sam });
     const { root } = await open(server);
-    q<HTMLInputElement>(root, ".invite-form input[name=email]").value = "sam@example.com";
 
-    submit(root.querySelector(".invite-form"));
-    await until(() => server.to("POST", "/api/members").length === 1);
+    q<HTMLButtonElement>(root, ".danger-button").click();
+    await until(() => !!root.querySelector(".page > .form-error")?.textContent);
 
-    expect(server.to("POST", "/api/members")[0]?.body).toEqual({ email: "sam@example.com" });
+    expect(root.querySelector(".page > .form-error")?.textContent).toBe(detail);
+    expect(rows(root)).toHaveLength(2);
   });
-
-  it.each([
-    [400, "That isn't a valid email address."],
-    [409, "sam@example.com is already a member."],
-  ])(
-    "Invalid address and Already a member: shows the server's message (%i)",
-    async (status, detail) => {
-      const server = withMembers([me]).on("POST", "/api/members", { status, body: { detail } });
-      const { root } = await open(server);
-      q<HTMLInputElement>(root, ".invite-form input[name=email]").value = "not-an-email";
-
-      submit(root.querySelector(".invite-form"));
-      await until(() => !!root.querySelector(".invite-form .form-error")?.textContent);
-
-      expect(root.querySelector(".invite-form .form-error")?.textContent).toBe(detail);
-      expect(rows(root)).toHaveLength(1);
-    },
-  );
 
   it("Rename yourself: saves the trimmed name, and the list and header show it", async () => {
     let members = [me];
@@ -170,7 +155,7 @@ describe("/members", () => {
     q<HTMLButtonElement>(root, ".danger-button").click();
     await until(() => rows(root).length === 1);
 
-    expect(confirm.mock.calls[0]?.[0]).toContain("Remove Sam (sam@example.com)?");
+    expect(confirm.mock.calls[0]?.[0]).toContain("Remove Sam (sam@example.com) from the server?");
     expect(server.to("DELETE", "/api/members/m2")).toHaveLength(1);
   });
 
