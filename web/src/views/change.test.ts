@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CHANGE_ARCHIVED, CHANGE_UPDATED } from "../live";
+import { CHANGE_ARCHIVED, CHANGE_UPDATED, PROJECTS_CHANGED } from "../live";
 import { savedReturn, signedIn, signedOut, startTestShell } from "../testShell";
 import { card, FakeEventSource, q, until } from "../testing";
 import type { ChangeMetrics, ChangePage, DocumentEntry, SectionMetric } from "../types";
@@ -73,6 +73,7 @@ describe("change page", () => {
     expect(q(root, "article.doc h1").textContent).toBe("proposal.md");
     expect(q(root, '.doc-nav a[aria-current="page"]').textContent).toBe("Proposal");
     expect(q(root, ".change-repo").textContent).toBe("github.com emmz/panopticon");
+    expect(root.querySelector(".change-repo .project-code")).toBeNull();
   });
 
   it("selecting a document opens it by ?doc=, which a reload keeps", async () => {
@@ -422,5 +423,66 @@ describe("change page helpers", () => {
     expect(defaultDocument(TEAM_AUTH.slice(1))?.path).toBe("tasks.md");
     expect(defaultDocument([doc("x.md", "other", "x.md")])?.path).toBe("x.md");
     expect(defaultDocument([])).toBeUndefined();
+  });
+});
+
+// Projects D9: the change page header shows the Project's code, like the card.
+describe("change page Project label", () => {
+  it("the header's repo line starts with the Project's code plate", async () => {
+    const server = serverFor(
+      changePage({
+        card: card({
+          changeId: "c1",
+          change: "team-auth",
+          project: { id: "p1", code: "PAN", name: "Panopticon" },
+        }),
+      }),
+    );
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".change-repo") !== null);
+
+    expect(q(root, ".change-repo").textContent).toBe("PAN github.com emmz/panopticon");
+    expect(q(root, ".change-repo .project-code").title).toBe("Panopticon");
+  });
+
+  it("personal work's header shows Personal", async () => {
+    const server = serverFor(
+      changePage({ card: card({ changeId: "c1", change: "team-auth", personal: true }) }),
+    );
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".change-repo") !== null);
+
+    expect(q(root, ".change-repo .project-code.personal").textContent).toBe("Personal");
+  });
+});
+
+// Spec change-visibility, "Membership changes take effect live" (Removed while on a change page; projects D3, §11).
+describe("change page membership changes", () => {
+  const PAN = { id: "Pan-Id", code: "PAN", name: "Panopticon" };
+  const panPage = () =>
+    changePage({ card: card({ changeId: "c1", change: "team-auth", project: PAN }) });
+
+  it("Removed while on a change page: the page says the change wasn't found, and stops following", async () => {
+    let removed = false;
+    const server = serverFor(panPage()).on("GET", "/api/changes/c1", () =>
+      removed ? { status: 404, body: { detail: "Not found." } } : { status: 200, body: panPage() },
+    );
+    const { root, heading } = await startTestShell("/changes/c1", server);
+    await until(() => shownPath(root) === "proposal.md");
+    const source = FakeEventSource.latest();
+    source.open();
+
+    // Leaving another Project, or being invited, leaves the page alone.
+    const before = server.to("GET", "/api/changes/c1").length;
+    source.emit(PROJECTS_CHANGED, JSON.stringify({ projectId: "acme-id", member: false }));
+    source.emit(PROJECTS_CHANGED, JSON.stringify({ projectId: PAN.id, member: true }));
+    expect(server.to("GET", "/api/changes/c1")).toHaveLength(before);
+
+    removed = true;
+    source.emit(PROJECTS_CHANGED, JSON.stringify({ projectId: "pan-id", member: false }));
+    await until(() => heading() === "Change not found");
+
+    expect(root.querySelector("article.doc")).toBeNull();
+    expect(source.closed).toBe(true);
   });
 });

@@ -3,12 +3,15 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Cli.Tests.Infrastructure;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Data;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
 
 namespace Panopticon.Cli.IntegrationTests;
@@ -62,8 +65,7 @@ public class PublishedCliTests(PostgresFixture postgres, S3Fixture s3)
             new McpClientOptions { ClientInfo = new Implementation { Name = "e2e-agent", Version = "1.0.0" } },
             cancellationToken: Ct);
 
-        var tool = Assert.Single(await client.ListToolsAsync(cancellationToken: Ct));
-        Assert.Equal("report_progress", tool.Name);
+        Assert.Equal(["list_projects", "report_progress"], (await client.ListToolsAsync(cancellationToken: Ct)).Select(t => t.Name).Order(StringComparer.Ordinal));
 
         var result = await client.CallToolAsync("report_progress", new Dictionary<string, object?> { ["change"] = "walking-skeleton" }, cancellationToken: Ct);
 
@@ -72,13 +74,37 @@ public class PublishedCliTests(PostgresFixture postgres, S3Fixture s3)
         Assert.StartsWith("Overall 3/4", text, StringComparison.Ordinal);
 
         await using var db = server.NewDb();
-        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         var agent = Assert.Single(card.Agents);
         Assert.Equal(("e2e-agent", Environment.MachineName), (agent.Client, agent.Machine));
 
         // Logs go to stderr (the protocol owns stdout).
         Assert.Contains(stderr, line => line.Contains("Reported change walking-skeleton", StringComparison.Ordinal));
+
+        // projects: the agent lists the Projects, links the repo, and the next report lands in the Project.
+        var pan = await SeedProjectAsync(server, "PAN");
+        var listed = await client.CallToolAsync("list_projects", cancellationToken: Ct);
+        Assert.True(listed.IsError is not true, string.Join(" ", listed.Content.OfType<TextContentBlock>().Select(b => b.Text)));
+        Assert.Equal(pan.ToString(), listed.StructuredContent!.Value.GetProperty("projects")[0].GetProperty("id").GetString());
+        await File.WriteAllTextAsync(Path.Combine(repo.Root, ".panopticon.json"), $"{{ \"project\": \"{pan}\" }}", Ct);
+        repo.WriteTasks("linked-work", Tasks);
+        var linked = await client.CallToolAsync("report_progress", new Dictionary<string, object?> { ["change"] = "linked-work" }, cancellationToken: Ct);
+        Assert.True(linked.IsError is not true, string.Join(" ", linked.Content.OfType<TextContentBlock>().Select(b => b.Text)));
+        await using var after = server.NewDb();
+        Assert.Equal(pan, (await after.Changes.SingleAsync(c => c.Name == "linked-work", Ct)).ProjectId);
+    }
+
+    /// <summary>A Project owned by the server's default member, written straight to the database.</summary>
+    private static async Task<Guid> SeedProjectAsync(PanopticonFactory server, string code)
+    {
+        var owner = await server.MemberIdAsync(cancellationToken: Ct);
+        await using var db = server.NewDb();
+        var project = new Project { Id = Guid.NewGuid(), Name = code, Code = code, CodeKey = code.ToLowerInvariant(), CreatedAt = DateTimeOffset.UtcNow, CreatedByMemberId = owner };
+        db.Projects.Add(project);
+        db.ProjectMembers.Add(new ProjectMember { ProjectId = project.Id, MemberId = owner, Role = ProjectRoles.Owner, JoinedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync(Ct);
+        return project.Id;
     }
 
     [Fact]

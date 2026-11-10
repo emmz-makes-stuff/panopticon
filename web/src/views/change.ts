@@ -1,8 +1,16 @@
+import { leadingProjectLabel } from "../projectLabel";
 import { ApiError, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
 import { el, page, routeLink } from "../dom";
 import { agentName, calendarDate, relativeTime } from "../format";
 import { changeHref } from "../links";
-import { CHANGE_ARCHIVED, CHANGE_UPDATED, parseArchivedId, parseCard } from "../live";
+import {
+  CHANGE_ARCHIVED,
+  CHANGE_UPDATED,
+  PROJECTS_CHANGED,
+  parseArchivedId,
+  parseCard,
+  parseProjectsChange,
+} from "../live";
 import { renderChangeMetrics } from "../metricsPanel";
 import { renderProgressBar } from "../progressBar";
 import type { View } from "../router";
@@ -141,6 +149,7 @@ export function changeView(env: Env): View {
       const repo = el(
         "div",
         "change-repo",
+        ...leadingProjectLabel(card),
         el("span", "change-host", card.repo.host),
         " ",
         el("span", "change-repo-name", `${card.repo.owner}/${card.repo.name}`),
@@ -239,8 +248,22 @@ export function changeView(env: Env): View {
 
             return show(next, ++ticket);
           },
-          () => {
-            // The page keeps what it shows; the next event or reconnect tries again.
+          (failure: unknown) => {
+            // Gone from this viewer's scope (projects D3, §11): the change isn't found, as it would be on a reload.
+            if (
+              mine === refreshing &&
+              closeStream !== undefined &&
+              failure instanceof ApiError &&
+              failure.status === 404
+            ) {
+              ticket++;
+              metricsTicket++;
+              closeStream();
+              closeStream = undefined;
+              root.replaceChildren(notFound());
+            }
+
+            // Otherwise the page keeps what it shows; the next event or reconnect tries again.
           },
         );
       };
@@ -263,6 +286,14 @@ export function changeView(env: Env): View {
       });
       source.addEventListener(CHANGE_ARCHIVED, (event) => {
         if (parseArchivedId(event.data) === changeId) {
+          refresh();
+        }
+      });
+      // spec change-visibility, "Removed while on a change page": leaving this change's Project makes it not found.
+      source.addEventListener(PROJECTS_CHANGED, (event) => {
+        const change = parseProjectsChange(event.data);
+        const project = latest.card.project?.id.toLowerCase();
+        if (change && !change.member && project === change.projectId.toLowerCase()) {
           refresh();
         }
       });

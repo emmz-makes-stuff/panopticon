@@ -45,6 +45,7 @@ describe("startShell", () => {
     expect(
       [...account.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")]),
     ).toEqual([
+      ["Projects", "/projects"],
       ["Members", "/members"],
       ["History", "/history"],
       ["Metrics", "/metrics"],

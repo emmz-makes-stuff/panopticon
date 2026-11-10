@@ -11,6 +11,7 @@ using Panopticon.Server.Documents;
 using Panopticon.Server.Live;
 using Panopticon.Server.Metrics;
 using Panopticon.Server.Progress;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Reporting;
 using Resend;
 
@@ -102,6 +103,7 @@ public static class ServerSetup
 
         // Members (team-auth): the first ones come from configuration.
         services.AddHostedService<InitialMembers>();
+        services.AddSingleton<InitialMemberList>();
 
         // Sign-in: rate limits and the background email queue.
         services.AddSingleton<AuthLimits>();
@@ -139,7 +141,8 @@ public static class ServerSetup
 
         services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
-            .WithTools<ReportProgressTool>();
+            .WithTools<ReportProgressTool>()
+            .WithTools<ListProjectsTool>();
 
         return builder;
     }
@@ -164,6 +167,7 @@ public static class ServerSetup
         app.MapDashboard();
         app.MapChanges();
         app.MapMetrics();
+        app.MapProjects();
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file
         // extension (the built assets) out of the fallback, so UseStaticFiles serves them: an endpoint matched here would

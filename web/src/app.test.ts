@@ -402,3 +402,113 @@ describe("mountApp review fixes", () => {
     expect(q(root, ".filter-note").hidden).toBe(true);
   });
 });
+
+// Spec change-filters (projects): "Filter by Project", "Project filter choices", and live updates respecting it.
+describe("mountApp Project filter", () => {
+  const PAN = { id: "6f1c2e4a-0000-4000-8000-000000000001", code: "PAN", name: "Panopticon" };
+  const ACME = { id: "6f1c2e4a-0000-4000-8000-000000000002", code: "ACME", name: "Acme" };
+  const inProject = (id: string, project: typeof PAN | null, personal = false) => ({
+    ...repoCard(id, id),
+    project,
+    personal,
+  });
+
+  async function mountFiltered(cards: ChangeCard[], query: string) {
+    const root = document.createElement("main");
+    const app = await mountApp(root, {
+      fetch: fakeFetch(cards),
+      now: () => NOW,
+      filters: filtered(query),
+    });
+    return { root, app };
+  }
+
+  const names = (root: HTMLElement) => cardsIn(root).map((c) => text(c, ".card-change"));
+  const projectOptions = (root: HTMLElement) =>
+    [...q<HTMLSelectElement>(root, "select[name=project]").options].map((o) => [
+      o.value,
+      o.textContent,
+    ]);
+
+  it("One Project: filtering by PAN's id shows only PAN's cards", async () => {
+    const { root } = await mountFiltered(
+      [inProject("pan", PAN), inProject("acme", ACME), inProject("mine", null, true)],
+      `project=${PAN.id.toUpperCase()}`,
+    );
+
+    expect(names(root)).toEqual(["pan"]);
+    expect(q<HTMLSelectElement>(root, "select[name=project]").value).toBe(PAN.id);
+  });
+
+  it("Personal only: shows personal cards, not a Project's or a bootstrap reporter's", async () => {
+    const { root } = await mountFiltered(
+      [inProject("pan", PAN), inProject("mine", null, true), inProject("boot", null, false)],
+      "project=Personal",
+    );
+
+    expect(names(root)).toEqual(["mine"]);
+  });
+
+  it("Someone else's Project in the address: nothing matches, and the page offers to clear", async () => {
+    const { root } = await mountFiltered(
+      [inProject("pan", PAN)],
+      "project=6f1c2e4a-0000-4000-8000-0000000000ff",
+    );
+
+    expect(names(root)).toEqual([]);
+    expect(text(root, ".no-match h2")).toBe("No changes match these filters");
+    expect(projectOptions(root)[1]).toEqual([
+      "6f1c2e4a-0000-4000-8000-0000000000ff",
+      "Unknown Project (no changes)",
+    ]);
+  });
+
+  it("drops a project value that isn't an id or personal", async () => {
+    const { root } = await mountFiltered([inProject("pan", PAN)], "project=PAN");
+
+    expect(names(root)).toEqual(["pan"]);
+  });
+
+  it("Only Projects with changes: offered by code and name, by code, with Personal last", async () => {
+    const { root } = await mountFiltered(
+      [inProject("pan", PAN), inProject("acme", ACME), inProject("mine", null, true)],
+      "",
+    );
+
+    expect(projectOptions(root)).toEqual([
+      ["", "All Projects"],
+      [ACME.id, "ACME: Acme"],
+      [PAN.id, "PAN: Panopticon"],
+      ["personal", "Personal"],
+    ]);
+  });
+
+  it("offers no Personal without personal work, and names a Project as on its newest card", async () => {
+    const { root } = await mountFiltered(
+      [
+        { ...inProject("old", PAN), lastReportedAt: minutesAgo(60) },
+        {
+          ...inProject("new", { ...PAN, name: "Panopticon server" }),
+          lastReportedAt: minutesAgo(1),
+        },
+      ],
+      "",
+    );
+
+    expect(projectOptions(root)).toEqual([
+      ["", "All Projects"],
+      [PAN.id, "PAN: Panopticon server"],
+    ]);
+  });
+
+  it("Live updates respect the Project filter: another Project's report stays hidden, PAN's shows", async () => {
+    const { root, app } = await mountFiltered([inProject("pan", PAN)], `project=${PAN.id}`);
+
+    app.upsert({ ...inProject("acme", ACME), lastReportedAt: NOW.toISOString() });
+    expect(names(root)).toEqual(["pan"]);
+    expect(text(root, ".change-count")).toBe("1 of 2 changes");
+
+    app.upsert({ ...inProject("pan2", PAN), lastReportedAt: NOW.toISOString() });
+    expect(names(root)).toEqual(["pan2", "pan"]);
+  });
+});

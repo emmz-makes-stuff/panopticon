@@ -7,6 +7,18 @@ export const CHANGE_UPDATED = "change-updated";
 /** The SSE event the server sends when a change is archived: its card leaves (change-documents-and-history D10). */
 export const CHANGE_ARCHIVED = "change-archived";
 
+/**
+ * The SSE event the server sends when the viewer joins a Project, leaves it or changes role there (projects D3, §11;
+ * spec change-visibility, "Membership changes take effect live").
+ */
+export const PROJECTS_CHANGED = "projects-changed";
+
+/** A `projects-changed` event's data: the Project, and whether the viewer is in it now. */
+export interface ProjectsChange {
+  projectId: string;
+  member: boolean;
+}
+
 /** The parts of the browser's EventSource this module uses, so tests can supply a fake. */
 export interface EventSourceLike {
   readonly readyState: number;
@@ -77,6 +89,26 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
       }
     });
 
+    current.addEventListener(PROJECTS_CHANGED, (event) => {
+      const change = parseProjectsChange(event.data);
+      if (!change) {
+        return;
+      }
+
+      if (!change.member) {
+        app.leaveProject(change.projectId);
+        return;
+      }
+
+      // Joined (or a new role): the Project's active cards come from the server. If that load fails, the dashboard is
+      // behind, so it reconnects, and the reconnect's refresh catches up.
+      app.refresh().catch(() => {
+        app.setStatus("offline");
+        current.close();
+        retry();
+      });
+    });
+
     current.onerror = () => {
       app.setStatus("offline");
       if (options.checkSignedIn) {
@@ -123,6 +155,18 @@ export function parseArchivedId(data: string): string | null {
   try {
     const value = JSON.parse(data) as { changeId?: unknown } | null;
     return typeof value?.changeId === "string" ? value.changeId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A `projects-changed` event's data, or null when it isn't one. */
+export function parseProjectsChange(data: string): ProjectsChange | null {
+  try {
+    const value = JSON.parse(data) as Partial<ProjectsChange> | null;
+    return typeof value?.projectId === "string" && typeof value.member === "boolean"
+      ? { projectId: value.projectId, member: value.member }
+      : null;
   } catch {
     return null;
   }

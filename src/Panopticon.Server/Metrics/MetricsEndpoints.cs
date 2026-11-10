@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Changes;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Metrics;
 
@@ -15,8 +16,8 @@ public static class MetricsEndpoints
     {
         endpoints.MapGet(
             "/api/changes/{id:guid}/metrics",
-            async Task<Results<Ok<ChangeMetrics>, NotFound>> (Guid id, MetricsReader metrics, CancellationToken cancellationToken) =>
-                await metrics.ForChangeAsync(id, cancellationToken) is { } found ? TypedResults.Ok(found) : TypedResults.NotFound())
+            async Task<Results<Ok<ChangeMetrics>, NotFound>> (Guid id, Viewer viewer, MetricsReader metrics, CancellationToken cancellationToken) =>
+                await metrics.ForChangeAsync(id, viewer, cancellationToken) is { } found ? TypedResults.Ok(found) : TypedResults.NotFound())
             .RequireAuthorization(AuthPolicies.Member);
 
         // The history's filters, parsed the same way, so a malformed value is a 400 naming it.
@@ -28,10 +29,12 @@ public static class MetricsEndpoints
                 string? member,
                 string? machine,
                 string? client,
+                string? project,
+                Viewer viewer,
                 MetricsReader metrics,
                 CancellationToken cancellationToken) =>
-                HistoryFilter.TryParse(repo, owner, member, machine, client, out var filter, out var error)
-                    ? TypedResults.Ok(await metrics.ForTeamAsync(filter, cancellationToken))
+                HistoryFilter.TryParse(repo, owner, member, machine, client, project, out var filter, out var error)
+                    ? TypedResults.Ok(await metrics.ForTeamAsync(filter, viewer, cancellationToken))
                     : TypedResults.BadRequest(error))
             .RequireAuthorization(AuthPolicies.Member);
 

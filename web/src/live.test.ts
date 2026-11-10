@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mountApp } from "./app";
-import { CHANGE_ARCHIVED, CHANGE_UPDATED, connectLive } from "./live";
+import { CHANGE_ARCHIVED, CHANGE_UPDATED, connectLive, PROJECTS_CHANGED } from "./live";
 import { card, FakeEventSource, fakeFetch, NOW, settle } from "./testing";
 import type { ChangeCard } from "./types";
 
@@ -239,5 +239,27 @@ describe("connectLive, archived changes", () => {
     FakeEventSource.latest().emit(CHANGE_ARCHIVED, JSON.stringify({ changeId: "team-auth" }));
     expect(cards()).toHaveLength(0);
     expect(root.querySelector(".empty-state")).not.toBeNull();
+  });
+});
+
+// Spec change-visibility, "Membership changes take effect live" (projects D3, §11).
+describe("connectLive, membership changes", () => {
+  it("reconnects when the refetch after joining a Project fails, so the reconnect's refresh catches up", async () => {
+    const { fetch, timers, status } = await start();
+    FakeEventSource.latest().open();
+    await settle();
+
+    fetch.status = 500;
+    FakeEventSource.latest().emit(
+      PROJECTS_CHANGED,
+      JSON.stringify({ projectId: "pan", member: true }),
+    );
+    await settle();
+
+    expect(status()).toBe("Offline, reconnecting…");
+    expect(FakeEventSource.latest().closed).toBe(true);
+    expect(timers).toHaveLength(1);
+    timers[0]?.callback();
+    expect(FakeEventSource.instances).toHaveLength(2);
   });
 });

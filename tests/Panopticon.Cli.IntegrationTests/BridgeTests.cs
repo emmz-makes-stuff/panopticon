@@ -4,6 +4,7 @@ using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Cli.Tests.Infrastructure;
 using Panopticon.Contracts;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
 
 [assembly: AssemblyFixture(typeof(PostgresFixture))]
@@ -36,15 +37,15 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
     // --- Stdio MCP server ---
 
     [Fact]
-    public async Task Agent_lists_report_progress_with_change_required_and_section_optional()
+    public async Task Agent_lists_report_progress_with_change_required_and_section_optional_and_list_projects()
     {
         using var repo = TempGitRepo.Create();
         await using var bridge = await BridgeHarness.StartAsync(Settings(repo.Root), () => new HttpClient(), "claude-code", Ct);
 
         var tools = await bridge.Client.ListToolsAsync(cancellationToken: Ct);
 
-        var tool = Assert.Single(tools);
-        Assert.Equal("report_progress", tool.Name);
+        Assert.Equal(["list_projects", "report_progress"], tools.Select(t => t.Name).Order(StringComparer.Ordinal));
+        var tool = tools.Single(t => t.Name == "report_progress");
         var schema = tool.ProtocolTool.InputSchema;
         var properties = schema.GetProperty("properties");
         Assert.True(properties.TryGetProperty("change", out _));
@@ -70,7 +71,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.DoesNotContain("PANOPTICON_SERVER_URL", BridgeHarness.Text(result), StringComparison.Ordinal);
 
         // Still serving.
-        Assert.Single(await bridge.Client.ListToolsAsync(cancellationToken: Ct));
+        Assert.Equal(2, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
         Assert.True((await bridge.ReportAsync("walking-skeleton", null, Ct)).IsError);
     }
 
@@ -198,7 +199,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(new SectionSummary(2, "Core", new ProgressCount(1, 2)), progress.CurrentSection);
 
         await using var db = server.NewDb();
-        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         Assert.Equal("walking-skeleton", card.Change);
         var agent = Assert.Single(card.Agents);
@@ -217,7 +218,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         Assert.True(result.IsError is not true, BridgeHarness.Text(result));
         await using var db = server.NewDb();
-        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         Assert.DoesNotContain("secret", bridge.Log, StringComparison.Ordinal);
         Assert.DoesNotContain("secret", BridgeHarness.Text(result), StringComparison.Ordinal);
@@ -241,7 +242,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains("http://127.0.0.1:9/mcp", text, StringComparison.Ordinal);
         Assert.DoesNotContain("pw", text, StringComparison.Ordinal);
 
-        Assert.Single(await bridge.Client.ListToolsAsync(cancellationToken: Ct));
+        Assert.Equal(2, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
         Assert.True((await bridge.ReportAsync("walking-skeleton", null, Ct)).IsError);
     }
 
@@ -268,7 +269,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.DoesNotContain("not-the-right-token", bridge.Log, StringComparison.Ordinal);
 
         await using var db = server.NewDb();
-        Assert.Empty(await new ChangeCards(db).ListAsync(Ct));
+        Assert.Empty(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
     }
 
     [Fact]

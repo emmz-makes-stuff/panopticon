@@ -1,5 +1,5 @@
 import { ApiError } from "../api";
-import { alertLine, button, el, field, page } from "../dom";
+import { alertLine, button, el, field, page, routeLink } from "../dom";
 import { calendarDate } from "../format";
 import type { View } from "../router";
 import type { Env } from "../shell";
@@ -20,7 +20,8 @@ const failureText = (failure: unknown) =>
   failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
- * `/members` (spec team-members): every active member, inviting someone, renaming yourself, and removing anyone else.
+ * `/members` (spec team-members): everyone who shares a Project with you, renaming yourself, and (for initial members,
+ * `canRemoveMembers`) removing anyone else from the server. People join through a Project, so there is no invite here.
  * Names are always set as text.
  */
 export function membersView(env: Env): View {
@@ -53,14 +54,14 @@ export function membersView(env: Env): View {
       if (isMe) {
         name.append(el("span", "member-you", " (you)"));
         item.append(renameForm(member));
-      } else {
+      } else if (env.member()?.canRemoveMembers) {
         item.append(
           button(
             "Remove",
             () => {
               if (
                 !env.confirm(
-                  `Remove ${member.displayName} (${member.email})? Their sessions end and their tokens stop working at once. Their past reports stay.`,
+                  `Remove ${member.displayName} (${member.email}) from the server? They leave every Project, their sessions end and their tokens stop working at once. Their past reports stay.`,
                 )
               ) {
                 return;
@@ -114,67 +115,20 @@ export function membersView(env: Env): View {
       return form;
     }
 
-    const { element: emailField, input: email } = field("Email", {
-      type: "email",
-      name: "email",
-      required: true,
-    });
-    const { element: nameField, input: displayName } = field("Display name (optional)", {
-      name: "displayName",
-      maxLength: DISPLAY_NAME_MAX,
-    });
-    const invite = el("button", "primary", "Invite");
-    invite.type = "submit";
-    const inviteError = alertLine();
-    const inviteForm = el(
-      "form",
-      "invite-form",
-      emailField,
-      nameField,
-      invite,
-      inviteError.element,
-    );
-    inviteForm.noValidate = true;
-    inviteForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const address = email.value.trim();
-      if (!address) {
-        inviteError.show("Enter the email address to invite.");
-        return;
-      }
-
-      inviteError.clear();
-      const name = displayName.value.trim();
-      env.api
-        .send<Member>(
-          "POST",
-          "/api/members",
-          name ? { email: address, displayName: name } : { email: address },
-        )
-        .then(
-          async (added) => {
-            email.value = "";
-            displayName.value = "";
-            status.textContent = `Invited ${added.email}. They can sign in with that address now.`;
-            await load();
-          },
-          (failure: unknown) => inviteError.show(failureText(failure)),
-        );
-    });
-
     root.replaceChildren(
       page(
         "Members",
+        el("p", undefined, "Everyone who shares a Project with you."),
         status,
         listError.element,
         list,
-        el("h3", undefined, "Invite someone"),
         el(
           "p",
-          undefined,
-          "They become a member at once, and sign in with their email. No invitation email is sent.",
+          "members-invite-hint",
+          "To invite someone, open one of your ",
+          routeLink("/projects", "Projects"),
+          ". Its owners can invite people from there.",
         ),
-        inviteForm,
       ),
     );
     await load();

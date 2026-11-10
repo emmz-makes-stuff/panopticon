@@ -18,7 +18,15 @@ import type { Env } from "../shell";
 import type { SlowSection, TeamMetrics } from "../types";
 import { HISTORY_KEYS } from "./history";
 
-const NO_CHOICES: FilterChoices = { repos: [], owners: [], members: [], machines: [], clients: [] };
+const NO_CHOICES: FilterChoices = {
+  repos: [],
+  owners: [],
+  members: [],
+  machines: [],
+  clients: [],
+  projects: [],
+  personal: false,
+};
 
 const failureText = (failure: unknown) =>
   failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";

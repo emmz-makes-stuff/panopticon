@@ -23,6 +23,7 @@ interface Dimension {
 }
 
 const DIMENSIONS: readonly Dimension[] = [
+  { key: "project", label: "Project", all: "All Projects" },
   { key: "repo", label: "Repo", all: "All repos" },
   { key: "owner", label: "Owner", all: "All owners" },
   { key: "member", label: "Person", all: "Everyone" },

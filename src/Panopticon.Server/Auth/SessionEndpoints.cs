@@ -17,11 +17,15 @@ public static class SessionEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> GetAsync(ClaimsPrincipal user, PanopticonDb db, CancellationToken cancellationToken)
+    private static async Task<IResult> GetAsync(
+        ClaimsPrincipal user,
+        PanopticonDb db,
+        InitialMemberList initialMembers,
+        CancellationToken cancellationToken)
     {
         var memberId = user.GetMemberId();
         var member = await db.Members.AsNoTracking().SingleAsync(m => m.Id == memberId, cancellationToken);
-        return TypedResults.Ok(new SessionMember(member.Id, member.Email, member.DisplayName));
+        return TypedResults.Ok(new SessionMember(member.Id, member.Email, member.DisplayName, initialMembers.Contains(member.EmailKey)));
     }
 
     private static async Task<IResult> SignOutAsync(

@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Panopticon.Server.Data;
 using Panopticon.Server.Tests.Infrastructure;
 
@@ -217,19 +219,179 @@ public class MigrationTests(PostgresFixture postgres)
         Assert.Empty(await db.Database.GetPendingMigrationsAsync(ct));
     }
 
+    // projects D1: the scope is part of a change's identity, with nulls equal.
+    [Fact]
+    public async Task Active_changes_differing_only_by_scope_coexist_and_the_same_scope_twice_is_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var (emmz, kit) = (NewMember("emmz@example.com"), NewMember("kit@example.com"));
+        var project = NewProject("PAN", emmz.Id);
+        var repo = NewRepo();
+        db.AddRange(emmz, kit, project, repo);
+        await db.SaveChangesAsync(ct);
+
+        db.Changes.AddRange(
+            NewChange(repo.Id, projectId: project.Id),
+            NewChange(repo.Id, ownerMemberId: emmz.Id),
+            NewChange(repo.Id, ownerMemberId: kit.Id),
+            NewChange(repo.Id));
+        await db.SaveChangesAsync(ct);
+        Assert.Equal(4, await db.Changes.CountAsync(ct));
+
+        foreach (var duplicate in new[]
+        {
+            NewChange(repo.Id, projectId: project.Id),
+            NewChange(repo.Id, ownerMemberId: emmz.Id),
+            NewChange(repo.Id),
+        })
+        {
+            db.ChangeTracker.Clear();
+            db.Changes.Add(duplicate);
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        }
+    }
+
+    [Fact]
+    public async Task A_change_cannot_be_in_a_project_and_personal_at_once()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var project = NewProject("PAN", emmz.Id);
+        var repo = NewRepo();
+        db.AddRange(emmz, project, repo);
+        await db.SaveChangesAsync(ct);
+
+        db.Changes.Add(NewChange(repo.Id, projectId: project.Id, ownerMemberId: emmz.Id));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+    }
+
+    [Fact]
+    public async Task Project_codes_are_unique_and_roles_are_checked()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var project = NewProject("PAN", emmz.Id);
+        db.AddRange(emmz, project);
+        await db.SaveChangesAsync(ct);
+
+        db.ChangeTracker.Clear();
+        db.Projects.Add(NewProject("PAN", emmz.Id));
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+
+        db.ChangeTracker.Clear();
+        db.ProjectMembers.Add(new ProjectMember { ProjectId = project.Id, MemberId = emmz.Id, Role = "admin" });
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+    }
+
+    // projects D1, Migration Plan: older changes become their first reporting member's personal work.
+    [Fact]
+    public async Task Older_changes_become_the_personal_work_of_their_first_reporting_member()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await postgres.CreateDatabaseAsync(MetricsMigration, ct);
+        var (repoId, memberChange, bootstrapChange) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var (emmz, kit, bootstrapAgent, emmzAgent, kitAgent) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await using (var before = PostgresFixture.CreateDb(connectionString))
+        {
+            await before.Database.ExecuteSqlAsync(
+                $"INSERT INTO repos (id, host, owner, name, host_key, owner_key, name_key) VALUES ({repoId}, 'github.com', 'emmz', 'panopticon', 'github.com', 'emmz', 'panopticon')",
+                ct);
+            foreach (var (id, email) in new[] { (emmz, "emmz@example.com"), (kit, "kit@example.com") })
+            {
+                await before.Database.ExecuteSqlAsync(
+                    $"INSERT INTO members (id, email, email_key, display_name, created_at) VALUES ({id}, {email}, {email}, {email}, now())",
+                    ct);
+            }
+
+            foreach (var (id, member, machine) in new[] { (bootstrapAgent, (Guid?)null, "vm-0"), (emmzAgent, emmz, "vm-1"), (kitAgent, kit, "vm-2") })
+            {
+                await before.Database.ExecuteSqlAsync(
+                    $"INSERT INTO agents (id, member_id, client_name, machine_name, client_name_key, machine_name_key) VALUES ({id}, {member}, 'claude-code', {machine}, 'claude-code', {machine})",
+                    ct);
+            }
+
+            foreach (var (id, name) in new[] { (memberChange, "team-auth"), (bootstrapChange, "walking-skeleton") })
+            {
+                await before.Database.ExecuteSqlAsync(
+                    $$"""INSERT INTO changes (id, repo_id, name, name_key, last_reported_at, snapshot) VALUES ({{id}}, {{repoId}}, {{name}}, {{name}}, now(), '{"OverallDone":0,"OverallTotal":1,"CurrentSectionDone":0,"CurrentSectionTotal":0}')""",
+                    ct);
+            }
+
+            // team-auth: a bootstrap report first, then Emmz, then Kit. walking-skeleton: bootstrap reports only.
+            foreach (var (change, agent, minutes) in new[] { (memberChange, bootstrapAgent, 1), (memberChange, emmzAgent, 2), (memberChange, kitAgent, 3), (bootstrapChange, bootstrapAgent, 1) })
+            {
+                var at = DateTimeOffset.UnixEpoch.AddMinutes(minutes);
+                await before.Database.ExecuteSqlAsync(
+                    $"INSERT INTO report_events (change_id, agent_id, tasks_sha256, received_at) VALUES ({change}, {agent}, {new string('a', 64)}, {at})",
+                    ct);
+            }
+        }
+
+        await using var db = PostgresFixture.CreateDb(connectionString);
+        await db.Database.MigrateAsync(ct);
+
+        var scopes = await db.Changes.ToDictionaryAsync(c => c.Id, c => (c.ProjectId, c.OwnerMemberId), ct);
+        Assert.Equal((null, emmz), scopes[memberChange]);
+        Assert.Equal((null, null), scopes[bootstrapChange]);
+    }
+
+    [Fact]
+    public async Task The_projects_migration_rolls_back_keeping_one_change_per_old_identity()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var project = NewProject("PAN", emmz.Id);
+        var repo = NewRepo();
+        db.AddRange(emmz, project, repo);
+        await db.SaveChangesAsync(ct);
+        var personal = NewChange(repo.Id, ownerMemberId: emmz.Id, lastReportedAt: DateTimeOffset.UnixEpoch);
+        db.Changes.AddRange(personal, NewChange(repo.Id, projectId: project.Id, lastReportedAt: DateTimeOffset.UnixEpoch.AddDays(1)));
+        await db.SaveChangesAsync(ct);
+
+        await db.GetService<IMigrator>().MigrateAsync(MetricsMigration, cancellationToken: ct);
+
+        var remaining = await db.Database.SqlQuery<Guid>($"SELECT id AS \"Value\" FROM changes").ToListAsync(ct);
+        Assert.Equal([personal.Id], remaining);
+        Assert.Equal(0, await db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM information_schema.tables WHERE table_name = 'projects'").SingleAsync(ct));
+    }
+
+    private const string MetricsMigration = "20261109164834_ChangeMetrics";
     private const string DocumentsMigration = "20261108184053_ChangeDocumentsAndHistory";
     private const string InitialMigration = "20261108001226_Initial";
     private const string TeamAuthMigration = "20261108150815_TeamAuth";
 
-    private static Change NewChange(Guid repoId, string? archiveFolder = null) => new()
+    private static Change NewChange(
+        Guid repoId,
+        string? archiveFolder = null,
+        Guid? projectId = null,
+        Guid? ownerMemberId = null,
+        DateTimeOffset lastReportedAt = default) => new()
+        {
+            Id = Guid.NewGuid(),
+            RepoId = repoId,
+            Name = "cleanup",
+            NameKey = "cleanup",
+            Snapshot = new ProgressSnapshot(),
+            ArchivedAt = archiveFolder is null ? null : DateTimeOffset.UnixEpoch,
+            ArchiveFolder = archiveFolder,
+            ProjectId = projectId,
+            OwnerMemberId = ownerMemberId,
+            LastReportedAt = lastReportedAt,
+        };
+
+    private static Project NewProject(string code, Guid createdBy) => new()
     {
         Id = Guid.NewGuid(),
-        RepoId = repoId,
-        Name = "cleanup",
-        NameKey = "cleanup",
-        Snapshot = new ProgressSnapshot(),
-        ArchivedAt = archiveFolder is null ? null : DateTimeOffset.UnixEpoch,
-        ArchiveFolder = archiveFolder,
+        Name = code,
+        Code = code,
+        CodeKey = code.ToLowerInvariant(),
+        CreatedAt = DateTimeOffset.UnixEpoch,
+        CreatedByMemberId = createdBy,
     };
 
     private static Member NewMember(string email) => new()

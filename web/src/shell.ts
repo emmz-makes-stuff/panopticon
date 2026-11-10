@@ -17,6 +17,7 @@ import { deviceView } from "./views/device";
 import { historyView } from "./views/history";
 import { metricsView } from "./views/metrics";
 import { membersView } from "./views/members";
+import { projectView, projectsView } from "./views/projects";
 import { confirmView, signInView } from "./views/signIn";
 import { tokensView } from "./views/tokens";
 
@@ -53,6 +54,8 @@ export interface Env {
   createEventSource?: EventSourceFactory | undefined;
   /** Confirms a destructive action (removing a member, revoking a token). */
   confirm: (message: string) => boolean;
+  /** Puts text on the clipboard (a Project's link file). Rejects when the browser won't allow it. */
+  copy: (text: string) => Promise<void>;
 }
 
 export interface ShellDeps {
@@ -64,6 +67,7 @@ export interface ShellDeps {
   events?: Pick<Window, "addEventListener" | "removeEventListener"> | undefined;
   now?: (() => Date) | undefined;
   confirm?: ((message: string) => boolean) | undefined;
+  copy?: ((text: string) => Promise<void>) | undefined;
 }
 
 export interface Shell {
@@ -141,6 +145,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     });
     account.replaceChildren(
       name,
+      routeLink("/projects", "Projects"),
       routeLink("/members", "Members"),
       routeLink("/history", "History"),
       routeLink("/metrics", "Metrics"),
@@ -218,12 +223,15 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     now: deps.now ?? (() => new Date()),
     createEventSource: deps.createEventSource,
     confirm: deps.confirm ?? ((message) => window.confirm(message)),
+    copy: deps.copy ?? ((text) => navigator.clipboard.writeText(text)),
   };
 
   const routes: Record<string, View> = {
     "/": cardsView(env),
     "/sign-in": signInView(env),
     "/sign-in/confirm": confirmView(env),
+    "/projects": projectsView(env),
+    "/projects/:id": projectView(env),
     "/members": membersView(env),
     "/tokens": tokensView(env),
     "/device": deviceView(env),

@@ -181,3 +181,39 @@ describe("renderCard bars", () => {
     );
   });
 });
+
+// Spec change-visibility / projects D9: "Card shows its Project".
+describe("renderCard Project label", () => {
+  const PAN = { id: "p1", code: "PAN", name: "Panopticon" };
+
+  it("Card shows its Project: the code plate leads the host line, with the name as its tooltip", () => {
+    const element = renderCard(card({ project: PAN, personal: false }), NOW);
+
+    const plate = query(element, ".card-host .project-code");
+    expect(plate.textContent).toBe("PAN");
+    expect(plate.title).toBe("Panopticon");
+    expect(plate.classList.contains("personal")).toBe(false);
+    expect(text(element, ".card-host")).toBe("PAN github.com");
+  });
+
+  it("personal work shows the Personal plate", () => {
+    const element = renderCard(card({ project: null, personal: true }), NOW);
+
+    expect(query(element, ".card-host .project-code.personal").textContent).toBe("Personal");
+    expect(text(element, ".card-host")).toBe("Personal github.com");
+  });
+
+  it("a bootstrap reporter's change, in no Project and nobody's personal work, shows no label", () => {
+    const element = renderCard(card({ project: null, personal: false }), NOW);
+
+    expect(element.querySelector(".project-code")).toBeNull();
+    expect(text(element, ".card-host")).toBe("github.com");
+  });
+
+  it("a code is set as text", () => {
+    const element = renderCard(card({ project: { ...PAN, code: "<b>X</b>" } }), NOW);
+
+    expect(query(element, ".project-code").textContent).toBe("<b>X</b>");
+    expect(element.querySelector(".project-code b")).toBeNull();
+  });
+});

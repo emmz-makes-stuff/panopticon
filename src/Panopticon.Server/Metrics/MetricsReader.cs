@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Panopticon.Server.Changes;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Metrics;
 
@@ -48,10 +49,11 @@ public sealed class MetricsReader(PanopticonDb db, TimeProvider clock)
     public const int WeekCount = 12;
     public const int SlowestCount = 10;
 
-    /// <summary>The change's metrics, or null when there's no such change.</summary>
-    public async Task<ChangeMetrics?> ForChangeAsync(Guid changeId, CancellationToken cancellationToken)
+    /// <summary>The change's metrics, or null when there's no such change or the viewer can't see it.</summary>
+    public async Task<ChangeMetrics?> ForChangeAsync(Guid changeId, Viewer viewer, CancellationToken cancellationToken)
     {
         var change = await db.Changes.AsNoTracking()
+            .VisibleTo(viewer)
             .Where(c => c.Id == changeId)
             .Select(c => new { c.ArchivedAt, c.LastReportedAt })
             .SingleOrDefaultAsync(cancellationToken);
@@ -76,12 +78,13 @@ public sealed class MetricsReader(PanopticonDb db, TimeProvider clock)
                 s.Number, s.Title, s.StartedAt, s.FinishedAt, Seconds(s.Duration(now)), s.InProgress))]);
     }
 
-    /// <summary>The metrics over the archived changes the filter matches.</summary>
-    public async Task<TeamMetrics> ForTeamAsync(HistoryFilter filter, CancellationToken cancellationToken)
+    /// <summary>The metrics over the archived changes the viewer can see that the filter matches.</summary>
+    public async Task<TeamMetrics> ForTeamAsync(HistoryFilter filter, Viewer viewer, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filter);
 
-        var archived = filter.Apply(db.Changes.AsNoTracking().Where(c => c.ArchivedAt != null));
+        // projects D4: a personal copy retired by linking isn't a finished change; its work is measured on the Project's.
+        var archived = filter.Apply(db.Changes.AsNoTracking().VisibleTo(viewer).Where(c => c.ArchivedAt != null && c.RetiredToProjectId == null));
         var changes = await archived
             .Select(c => new
             {

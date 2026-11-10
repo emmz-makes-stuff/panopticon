@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Contracts;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Live;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
 
 namespace Panopticon.Server.Tests.Dashboard;
@@ -14,6 +15,9 @@ namespace Panopticon.Server.Tests.Dashboard;
 // this change; plus the app shell served from wwwroot (design D10).
 public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
 {
+    /// <summary>A viewer who sees only bootstrap changes, which is all these stream tests publish.</summary>
+    private static readonly Viewer _anyone = new(Guid.NewGuid(), []);
+
     private static ReportProgressArguments Report(string owner, string repo, string change, string tasks) => new(
         new RepoRef("github.com", owner, repo),
         change,
@@ -267,7 +271,7 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         var broadcaster = new ChangeBroadcaster();
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, DashboardEndpoints.DefaultKeepAlive, stillAllowed: null, cancel.Token)
+        var enumerator = DashboardEndpoints.StreamAsync(broadcaster, _anyone, subscribed: null, DashboardEndpoints.DefaultKeepAlive, recheck: null, cancel.Token)
             .GetAsyncEnumerator(ct);
         var moving = enumerator.MoveNextAsync();
         Assert.Equal(1, broadcaster.SubscriberCount);
@@ -293,14 +297,14 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
             new CardProgress(0, 1),
             DateTimeOffset.UnixEpoch);
 
-        await using var enumerator = DashboardEndpoints.StreamAsync(broadcaster, subscribed: null, TimeSpan.FromMilliseconds(50), stillAllowed: null, ct)
+        await using var enumerator = DashboardEndpoints.StreamAsync(broadcaster, _anyone, subscribed: null, TimeSpan.FromMilliseconds(50), recheck: null, ct)
             .GetAsyncEnumerator(ct);
 
         Assert.True(await enumerator.MoveNextAsync());
         Assert.Equal(DashboardEndpoints.PingEvent, enumerator.Current.EventType);
         Assert.Null(enumerator.Current.Data);
 
-        broadcaster.Publish(card);
+        broadcaster.Publish(card, ChangeScope.Bootstrap);
         Assert.True(await enumerator.MoveNextAsync());
         Assert.Equal(DashboardEndpoints.ChangeUpdatedEvent, enumerator.Current.EventType);
         Assert.Equal(card, enumerator.Current.Data);

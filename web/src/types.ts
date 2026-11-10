@@ -24,6 +24,13 @@ export interface CardAgent {
   memberId?: string | null;
 }
 
+/** A change's Project, as its card, page and history row show it (projects D9). */
+export interface CardProject {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface CardSection {
   number: number;
   title: string;
@@ -39,6 +46,10 @@ export interface ChangeCard {
   overall: Progress;
   /** ISO 8601. */
   lastReportedAt: string;
+  /** Its Project, or null for personal work and a bootstrap reporter's. */
+  project: CardProject | null;
+  /** Its owner's personal work (shown as "Personal"); false for a bootstrap change, which shows no label. */
+  personal: boolean;
 }
 
 // The change page and history (server: Panopticon.Server.Changes, change-documents-and-history D9).
@@ -78,8 +89,13 @@ export interface HistoryEntry {
   change: string;
   /** ISO 8601. */
   archivedAt: string;
-  archiveFolder: string;
+  /** Its archive folder; null for a personal copy retired by linking (projects D4). */
+  archiveFolder: string | null;
   agents: CardAgent[];
+  project: CardProject | null;
+  personal: boolean;
+  /** For a retired copy, the Project its work went to: shown as "Linked to PAN". */
+  linkedTo: CardProject | null;
 }
 
 /** `GET /api/history`: newest archive first; `nextBefore` is the next page's cursor, or null on the last page. */

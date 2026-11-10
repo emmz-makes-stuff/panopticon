@@ -3,7 +3,7 @@
  * the address's query means, how to write it back, and whether a change matches.
  */
 import type { QuietState } from "./quiet";
-import type { CardAgent, CardRepo, ChangeCard } from "./types";
+import type { CardAgent, CardProject, CardRepo, ChangeCard } from "./types";
 
 export interface OwnerRef {
   host: string;
@@ -13,6 +13,8 @@ export interface OwnerRef {
 
 /** One value per dimension, each optional. A change matches only when it matches every one given. */
 export interface Filters {
+  /** A Project id (lower case), or `PERSONAL` for the viewer's personal work (projects D9). */
+  project?: string;
   repo?: CardRepo;
   owner?: OwnerRef;
   /** A member id. */
@@ -28,6 +30,7 @@ export type FilterKey = keyof Filters;
 
 /** The query keys, in the order the app writes them, so the same filters always give the same address. */
 export const FILTER_KEYS: readonly FilterKey[] = [
+  "project",
   "repo",
   "owner",
   "member",
@@ -37,6 +40,11 @@ export const FILTER_KEYS: readonly FilterKey[] = [
 ];
 
 const STATUSES: readonly QuietState[] = ["active", "idle", "stale"];
+
+/** The `project` value for personal work, as the server reads it (HistoryFilter.PersonalValue). */
+export const PERSONAL = "personal";
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface ParsedFilters {
   filters: Filters;
@@ -49,6 +57,15 @@ export function parseFilters(params: URLSearchParams): ParsedFilters {
   const filters: Filters = {};
   const dropped: FilterKey[] = [];
   const value = (key: FilterKey) => params.get(key)?.trim() || undefined;
+
+  const project = value("project");
+  if (project !== undefined) {
+    if (project.toLowerCase() === PERSONAL || GUID.test(project)) {
+      filters.project = project.toLowerCase();
+    } else {
+      dropped.push("project");
+    }
+  }
 
   const repo = value("repo");
   if (repo !== undefined) {
@@ -72,7 +89,7 @@ export function parseFilters(params: URLSearchParams): ParsedFilters {
 
   const member = value("member");
   if (member !== undefined) {
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(member)) {
+    if (GUID.test(member)) {
       filters.member = member.toLowerCase();
     } else {
       dropped.push("member");
@@ -167,6 +184,8 @@ export const hasFilters = (filters: Filters, keys: readonly FilterKey[] = FILTER
 export interface Filterable {
   repo: CardRepo;
   agents: CardAgent[];
+  project: CardProject | null;
+  personal: boolean;
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -177,7 +196,17 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
  * and is skipped when no state is given.
  */
 export function matches(change: Filterable, filters: Filters, state?: QuietState): boolean {
-  const { repo, owner, member, machine, client, status } = filters;
+  const { project, repo, owner, member, machine, client, status } = filters;
+  // A Project matches by id, so a rename doesn't break it; one the viewer isn't in matches nothing, as no card has it.
+  if (
+    project &&
+    !(project === PERSONAL
+      ? change.personal && change.project === null
+      : change.project?.id.toLowerCase() === project)
+  ) {
+    return false;
+  }
+
   if (
     repo &&
     !(
@@ -215,6 +244,10 @@ export interface FilterChoices {
   members: { id: string; displayName: string }[];
   machines: string[];
   clients: string[];
+  /** The viewer's Projects with a change on the page, by code. */
+  projects: CardProject[];
+  /** Whether the viewer has a personal change on the page, so "Personal" is offered. */
+  personal: boolean;
 }
 
 /**
@@ -252,7 +285,15 @@ export function filterChoices(cards: readonly ChangeCard[]): FilterChoices {
   const members = new Map<string, string>();
   const machines = new Map<string, string>();
   const clients = new Map<string, string>();
+  const projects = new Map<string, CardProject>();
+  let personal = false;
   for (const card of newestFirst) {
+    // Named as on its most recent card, so a rename shows at once.
+    if (card.project && !projects.has(card.project.id.toLowerCase())) {
+      projects.set(card.project.id.toLowerCase(), card.project);
+    }
+
+    personal ||= card.personal && card.project === null;
     const repoKey = repoValue(card.repo).toLowerCase();
     if (!repos.has(repoKey)) {
       repos.set(repoKey, card.repo);
@@ -289,6 +330,8 @@ export function filterChoices(cards: readonly ChangeCard[]): FilterChoices {
       .sort((a, b) => byLabel(a.displayName, b.displayName) || a.id.localeCompare(b.id)),
     machines: [...machines.values()].sort(byLabel),
     clients: [...clients.values()].sort(byLabel),
+    projects: [...projects.values()].sort((a, b) => byLabel(a.code, b.code)),
+    personal,
   };
 }
 
@@ -307,6 +350,14 @@ export type FilterOptions = Record<Exclude<FilterKey, "status">, FilterOption[]>
  */
 export function filterOptions(choices: FilterChoices, filters: Filters): FilterOptions {
   const options: FilterOptions = {
+    // Offered by code and name, chosen by id (projects D9); "Personal" last, when the viewer has personal work here.
+    project: [
+      ...choices.projects.map((p) => ({
+        value: p.id.toLowerCase(),
+        label: `${p.code}: ${p.name}`,
+      })),
+      ...(choices.personal ? [{ value: PERSONAL, label: "Personal" }] : []),
+    ],
     repo: choices.repos.map((repo) => ({ value: repoValue(repo), label: repoValue(repo) })),
     owner: choices.owners.map((owner) => ({ value: ownerValue(owner), label: ownerValue(owner) })),
     member: choices.members.map((m) => ({ value: m.id.toLowerCase(), label: m.displayName })),
@@ -317,7 +368,14 @@ export function filterOptions(choices: FilterChoices, filters: Filters): FilterO
   for (const key of Object.keys(options) as (keyof FilterOptions)[]) {
     const chosen = filterValue(filters, key);
     if (chosen !== undefined && !options[key].some((option) => same(option.value, chosen))) {
-      const label = key === "member" ? "Unknown member" : chosen;
+      const label =
+        key === "member"
+          ? "Unknown member"
+          : key === "project"
+            ? chosen === PERSONAL
+              ? "Personal"
+              : "Unknown Project"
+            : chosen;
       options[key].unshift({ value: chosen, label: `${label} (no changes)`, missing: true });
     }
   }

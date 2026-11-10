@@ -69,6 +69,26 @@ export function field(
   return { element, input: control };
 }
 
+/** A labelled select of `[value, text]` options, with `value` chosen. */
+export function selectField(
+  label: string,
+  name: string,
+  options: readonly (readonly [value: string, text: string])[],
+  value: string,
+): { element: HTMLLabelElement; select: HTMLSelectElement } {
+  const select = document.createElement("select");
+  select.name = name;
+  for (const [optionValue, text] of options) {
+    const option = el("option", undefined, text);
+    option.value = optionValue;
+    select.append(option);
+  }
+
+  select.value = value;
+  const element = el("label", "field", el("span", "field-label", label), select);
+  return { element, select };
+}
+
 /** A link the router handles in place (`<a data-route>`). */
 export function routeLink(href: string, text: string, className?: string): HTMLAnchorElement {
   const link = el("a", className, text);

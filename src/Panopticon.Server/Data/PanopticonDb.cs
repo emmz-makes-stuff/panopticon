@@ -16,6 +16,8 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<DeviceLogin> DeviceLogins => Set<DeviceLogin>();
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,9 +31,27 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
         {
             // change-documents-and-history D5: a name is unique among active changes only, so a name reused after an
             // archive gets a fresh row; an archive folder is unique per repo, which makes an archived report idempotent.
-            change.HasIndex(c => new { c.RepoId, c.NameKey }).IsUnique().HasFilter("archived_at IS NULL");
-            change.HasIndex(c => new { c.RepoId, c.ArchiveFolder }).IsUnique().HasFilter("archive_folder IS NOT NULL");
+            // projects D1: both identity indexes include the change's scope, with nulls equal, so one scope's change
+            // never shares a row with another's.
+            change.HasIndex(c => new { c.RepoId, c.NameKey, c.ProjectId, c.OwnerMemberId })
+                .IsUnique().AreNullsDistinct(false).HasFilter("archived_at IS NULL");
+            change.HasIndex(c => new { c.RepoId, c.ArchiveFolder, c.ProjectId, c.OwnerMemberId })
+                .IsUnique().AreNullsDistinct(false).HasFilter("archive_folder IS NOT NULL");
             change.HasIndex(c => c.LastReportedAt);
+            change.HasIndex(c => c.ProjectId);
+            change.HasIndex(c => c.OwnerMemberId);
+            change.HasOne(c => c.Project).WithMany().HasForeignKey(c => c.ProjectId);
+            change.HasOne(c => c.RetiredToProject).WithMany().HasForeignKey(c => c.RetiredToProjectId);
+            change.HasOne<Member>().WithMany().HasForeignKey(c => c.OwnerMemberId);
+            change.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_changes_one_scope", "project_id IS NULL OR owner_member_id IS NULL");
+
+                // projects D4: a retired copy is archived with no folder.
+                t.HasCheckConstraint(
+                    "ck_changes_retired_unfoldered",
+                    "retired_to_project_id IS NULL OR (archived_at IS NOT NULL AND archive_folder IS NULL)");
+            });
             change.OwnsOne(c => c.Snapshot, snapshot => snapshot.ToJson());
             change.HasMany(c => c.Agents).WithOne().HasForeignKey(a => a.ChangeId);
         });
@@ -84,6 +104,27 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
             token.HasIndex(t => t.MemberId);
             token.Property(t => t.MachineName).HasMaxLength(100);
             token.HasOne(t => t.Member).WithMany().HasForeignKey(t => t.MemberId);
+        });
+
+        // projects D1.
+        modelBuilder.Entity<Project>(project =>
+        {
+            project.HasIndex(p => p.CodeKey).IsUnique();
+            project.Property(p => p.Name).HasMaxLength(100);
+            project.Property(p => p.Code).HasMaxLength(10);
+            project.Property(p => p.CodeKey).HasMaxLength(10);
+            project.HasOne<Member>().WithMany().HasForeignKey(p => p.CreatedByMemberId);
+            project.HasMany(p => p.Members).WithOne().HasForeignKey(m => m.ProjectId);
+        });
+
+        modelBuilder.Entity<ProjectMember>(membership =>
+        {
+            membership.HasKey(m => new { m.ProjectId, m.MemberId });
+            membership.HasIndex(m => m.MemberId);
+            membership.Property(m => m.Role).HasMaxLength(10);
+            membership.HasOne(m => m.Member).WithMany().HasForeignKey(m => m.MemberId);
+            membership.HasOne<Member>().WithMany().HasForeignKey(m => m.InvitedByMemberId);
+            membership.ToTable(t => t.HasCheckConstraint("ck_project_members_role", "role IN ('owner', 'editor', 'viewer')"));
         });
 
         modelBuilder.Entity<ChangeAgent>(changeAgent =>

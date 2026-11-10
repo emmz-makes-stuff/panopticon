@@ -1,12 +1,10 @@
 using System.Net;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using Panopticon.Server.Data;
+using Panopticon.Server.Live;
 
 namespace Panopticon.Server.Auth;
-
-public sealed record InviteRequest(string? Email, string? DisplayName);
 
 public sealed record RenameRequest(string? DisplayName);
 
@@ -21,8 +19,9 @@ public sealed record MemberView(Guid Id, string Email, string DisplayName, DateT
 }
 
 /// <summary>
-/// Listing, inviting, renaming and removing members (spec team-members; design D11). Every endpoint needs a session; the
-/// state-changing ones also need the D6 header, which <see cref="RequestHeaderMiddleware"/> enforces for all of <c>/api</c>.
+/// Listing, renaming and removing members (spec team-members; design D11, projects D8). People join through a
+/// Project's invite now. Every endpoint needs a session; the state-changing ones also need the D6 header, which
+/// <see cref="RequestHeaderMiddleware"/> enforces for all of <c>/api</c>.
 /// </summary>
 public static class MemberEndpoints
 {
@@ -32,38 +31,61 @@ public static class MemberEndpoints
     public static IEndpointRouteBuilder MapMembers(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(MembersPath, ListAsync).RequireAuthorization(AuthPolicies.Member);
-        endpoints.MapPost(MembersPath, InviteAsync).RequireAuthorization(AuthPolicies.Member);
         endpoints.MapPatch(MePath, RenameAsync).RequireAuthorization(AuthPolicies.Member);
         endpoints.MapDelete($"{MembersPath}/{{id:guid}}", RemoveAsync).RequireAuthorization(AuthPolicies.Member);
         return endpoints;
     }
 
     /// <summary>
-    /// Removes another member (spec team-members, "Removing a member"). In one transaction it sets
-    /// <c>removed_at</c>, deletes their sessions, revokes their API tokens, and deletes their unused sign-in links, so
-    /// a link sent before removal can't sign them in if they're invited back. Their open dashboard streams end on the
-    /// next keep-alive check (design D11). The row stays, so their past reports keep their name.
+    /// Removes another member from the server (spec team-members, "Removing a member"); only an initial member may. In
+    /// one transaction it sets <c>removed_at</c>, deletes their sessions, revokes their API tokens, deletes their unused
+    /// sign-in links (so a link sent before removal can't sign them in if they're invited back), and takes them out of
+    /// every Project. It's refused while they're the last owner of a Project, naming it (projects D8). Their open
+    /// dashboard streams end at once (projects D3, §11). The row stays, so their past reports keep their
+    /// name.
     /// </summary>
     internal static async Task<IResult> RemoveAsync(
         Guid id,
         ClaimsPrincipal user,
         PanopticonDb db,
+        InitialMemberList initialMembers,
         TimeProvider time,
+        ChangeBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
-        if (id == user.GetMemberId())
+        var remover = user.GetRequiredMemberId();
+        if (id == remover)
         {
             return SignInEndpoints.Problem(HttpStatusCode.BadRequest, "You can't remove yourself. Ask another member to.");
         }
 
+        if (!await CanRemoveMembersAsync(db, initialMembers, remover, cancellationToken))
+        {
+            return SignInEndpoints.Problem(HttpStatusCode.Forbidden, "Only an initial member can remove members from the server.");
+        }
+
         var now = time.GetUtcNow();
-        var remover = user.GetMemberId();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        // Lock every active member row (in id order, so two removals can't deadlock). Two members removing each other at
-        // once then take turns: the second sees that its remover has gone, so the team never ends up with nobody.
+        // Review fix 12.4: locks in the Project endpoints' order, Projects first and then members, so a removal and an
+        // invite can't deadlock. First every Project they belong to, in id order, as the Project endpoints lock them, so
+        // no role change or removal there can slip in between the last-owner check and the delete.
+        var locked = await db.Projects
+            .FromSql($"""
+                SELECT * FROM projects
+                WHERE id IN (SELECT project_id FROM project_members WHERE member_id = {id})
+                ORDER BY id
+                FOR UPDATE
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var lockedIds = locked.Select(p => p.Id).ToHashSet();
+
+        // Then every active member row (in id order, so two removals can't deadlock). Two members removing each other at
+        // once then take turns: the second sees that its remover has gone, so the team never ends up with nobody. FOR NO
+        // KEY UPDATE, since only removed_at changes: the foreign keys' KEY SHARE checks (a report, an invite) don't wait.
         var active = await db.Members
-            .FromSql($"SELECT * FROM members WHERE removed_at IS NULL ORDER BY id FOR UPDATE")
+            .FromSql($"SELECT * FROM members WHERE removed_at IS NULL ORDER BY id FOR NO KEY UPDATE")
             .AsNoTracking()
             .ToListAsync(cancellationToken);
         if (!active.Any(m => m.Id == id))
@@ -77,6 +99,39 @@ public static class MemberEndpoints
             return SignInEndpoints.Problem(HttpStatusCode.Conflict, "You've been removed, so you can't remove anyone.");
         }
 
+        // A fresh read, now that the locks are held. With their member row locked, they can't join another Project: an invite
+        // or a new Project locks that row first (review fix 12.5), so it waits on this transaction, then sees them removed. But one may have committed just
+        // before the lock: that Project isn't locked, and a Project can't be locked after a member, so it's a 409.
+        var memberships = await db.ProjectMembers.AsNoTracking()
+            .Where(m => m.MemberId == id)
+            .Select(m => new { m.ProjectId, m.Role })
+            .ToListAsync(cancellationToken);
+        if (memberships.Any(m => !lockedIds.Contains(m.ProjectId)))
+        {
+            return SignInEndpoints.Problem(
+                HttpStatusCode.Conflict,
+                "They joined a Project while you were removing them. Try again.");
+        }
+
+        // projects D8: never leave a Project without an owner, checked under the Project locks.
+        var ownedIds = memberships.Where(m => m.Role == ProjectRoles.Owner).Select(m => m.ProjectId).ToList();
+        var coOwned = await db.ProjectMembers
+            .Where(m => ownedIds.Contains(m.ProjectId) && m.MemberId != id && m.Role == ProjectRoles.Owner)
+            .Select(m => m.ProjectId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var lastOwnerOf = await db.Projects.AsNoTracking()
+            .Where(p => ownedIds.Contains(p.Id) && !coOwned.Contains(p.Id))
+            .Select(p => p.Code)
+            .ToListAsync(cancellationToken);
+        lastOwnerOf.Sort(StringComparer.Ordinal);
+        if (lastOwnerOf.Count > 0)
+        {
+            return SignInEndpoints.Problem(
+                HttpStatusCode.Conflict,
+                $"They're the only owner of {string.Join(", ", lastOwnerOf)}. Make another member an owner there first.");
+        }
+
         await db.Members
             .Where(m => m.Id == id)
             .ExecuteUpdateAsync(m => m.SetProperty(x => x.RemovedAt, now), cancellationToken);
@@ -86,89 +141,43 @@ public static class MemberEndpoints
         await db.ApiTokens
             .Where(t => t.MemberId == id && t.RevokedAt == null)
             .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAt, now), cancellationToken);
+        await db.ProjectMembers.Where(m => m.MemberId == id).ExecuteDeleteAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        // projects D3, §11: their open streams end now, not at the next keep-alive.
+        broadcaster.PublishMemberRemoved(id);
         return TypedResults.NoContent();
     }
 
-    internal static async Task<IResult> ListAsync(PanopticonDb db, CancellationToken cancellationToken)
+    /// <summary>Whether the member is an initial member, so may remove others (projects D8).</summary>
+    internal static async Task<bool> CanRemoveMembersAsync(
+        PanopticonDb db,
+        InitialMemberList initialMembers,
+        Guid memberId,
+        CancellationToken cancellationToken)
     {
+        var emailKey = await db.Members.AsNoTracking()
+            .Where(m => m.Id == memberId)
+            .Select(m => m.EmailKey)
+            .SingleAsync(cancellationToken);
+        return initialMembers.Contains(emailKey);
+    }
+
+    /// <summary>
+    /// The active members who share a Project with the caller, and the caller (spec team-members, "Member list";
+    /// projects D8).
+    /// </summary>
+    internal static async Task<IResult> ListAsync(ClaimsPrincipal user, PanopticonDb db, CancellationToken cancellationToken)
+    {
+        var me = user.GetRequiredMemberId();
+        var myProjects = db.ProjectMembers.Where(m => m.MemberId == me).Select(m => m.ProjectId);
         var members = await db.Members.AsNoTracking()
-            .Where(m => m.RemovedAt == null)
+            .Where(m => m.RemovedAt == null
+                && (m.Id == me || db.ProjectMembers.Any(pm => pm.MemberId == m.Id && myProjects.Contains(pm.ProjectId))))
             .OrderBy(m => m.CreatedAt)
             .ThenBy(m => m.EmailKey)
             .ToListAsync(cancellationToken);
         return TypedResults.Ok(members.Select(MemberView.From).ToList());
-    }
-
-    /// <summary>
-    /// Adds the address as a member, or makes its removed member active again (keeping their id, so their past
-    /// reports stay theirs). No email is sent: the invited person signs in like anyone else.
-    /// </summary>
-    internal static async Task<IResult> InviteAsync(
-        InviteRequest request,
-        ClaimsPrincipal user,
-        PanopticonDb db,
-        TimeProvider time,
-        CancellationToken cancellationToken)
-    {
-        if (!MemberEmail.IsValid(request.Email))
-        {
-            return SignInEndpoints.Problem(HttpStatusCode.BadRequest, "That isn't a valid email address.");
-        }
-
-        string? displayName = null;
-        if (request.DisplayName is not null)
-        {
-            displayName = MemberNames.Validate(request.DisplayName);
-            if (displayName is null)
-            {
-                return BadName();
-            }
-        }
-
-        var key = MemberEmail.Key(request.Email!);
-        var existing = await db.Members.SingleOrDefaultAsync(m => m.EmailKey == key, cancellationToken);
-        if (existing is { IsActive: true })
-        {
-            return AlreadyMember(existing.Email);
-        }
-
-        var inviter = user.GetMemberId();
-        var member = existing;
-        if (member is null)
-        {
-            member = new Member
-            {
-                Email = MemberEmail.Clean(request.Email!),
-                EmailKey = key,
-                DisplayName = displayName ?? MemberEmail.DefaultDisplayName(request.Email!),
-                CreatedAt = time.GetUtcNow(),
-                InvitedByMemberId = inviter,
-            };
-            db.Members.Add(member);
-        }
-        else
-        {
-            member.RemovedAt = null;
-            member.InvitedByMemberId = inviter;
-            if (displayName is not null)
-            {
-                member.DisplayName = displayName;
-            }
-        }
-
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (existing is null
-            && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-        {
-            // Someone invited the same address at the same moment; theirs won.
-            return AlreadyMember(MemberEmail.Clean(request.Email!));
-        }
-
-        return TypedResults.Created($"{MembersPath}/{member.Id}", MemberView.From(member));
     }
 
     internal static async Task<IResult> RenameAsync(
@@ -189,9 +198,6 @@ public static class MemberEndpoints
         await db.SaveChangesAsync(cancellationToken);
         return TypedResults.Ok(MemberView.From(member));
     }
-
-    private static IResult AlreadyMember(string email) =>
-        SignInEndpoints.Problem(HttpStatusCode.Conflict, $"{email} is already a member.");
 
     private static IResult BadName() =>
         SignInEndpoints.Problem(

@@ -61,6 +61,8 @@ const CHOICES = {
   members: [],
   machines: ["laptop", "vm-1"],
   clients: ["claude-code"],
+  projects: [{ id: "6f1c2e4a-0000-4000-8000-000000000001", code: "PAN", name: "Panopticon" }],
+  personal: true,
 };
 
 /** A metrics server answering by the query it's asked with. */
@@ -235,5 +237,21 @@ describe("metrics page", () => {
 
   it("labels weeks by their Monday in UTC", () => {
     expect(weekLabel("2026-11-02T00:00:00+00:00")).toBe("2 Nov");
+  });
+});
+
+// Spec change-metrics (projects): "One Project's metrics".
+describe("metrics Project filter", () => {
+  it("One Project's metrics: the address's Project is asked for, and shown in the bar", async () => {
+    const PAN_ID = "6f1c2e4a-0000-4000-8000-000000000001";
+    const server = metricsServer({ [`project=${PAN_ID}`]: { ...TEAM, changes: 3 } });
+    const { root } = await startTestShell(`/metrics?project=${PAN_ID}`, server);
+    await until(() => root.querySelector(".metrics-figures") !== null);
+
+    expect(server.to("GET", "/api/metrics").map((c) => c.url)).toEqual([
+      `/api/metrics?project=${PAN_ID}`,
+    ]);
+    expect(figures(root)[0]).toEqual(["Changes archived", "3"]);
+    expect(q<HTMLSelectElement>(root, "select[name=project]").value).toBe(PAN_ID);
   });
 });

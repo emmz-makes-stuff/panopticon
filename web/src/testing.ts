@@ -14,6 +14,9 @@ export function card(overrides: Partial<ChangeCard> = {}): ChangeCard {
     currentSection: { number: 2, title: "Core", progress: { done: 2, total: 5 } },
     overall: { done: 7, total: 20 },
     lastReportedAt: "2026-11-08T11:57:00Z",
+    // A bootstrap reporter's change by default: no Project label, so other tests' text stays as it was.
+    project: null,
+    personal: false,
     ...overrides,
   };
 }
@@ -213,7 +216,12 @@ export function memoryStorage(initial: Record<string, string> = {}) {
   };
 }
 
-export const MEMBER = { id: "m1", email: "emmz@example.com", displayName: "Emmz" };
+export const MEMBER = {
+  id: "m1",
+  email: "emmz@example.com",
+  displayName: "Emmz",
+  canRemoveMembers: true,
+};
 
 /** Waits until `check` passes (or fails after a few event-loop turns), for UI that updates after fetches. */
 export async function until(check: () => boolean, turns = 20): Promise<void> {

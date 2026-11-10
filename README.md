@@ -43,7 +43,8 @@ Those settings match `compose.yaml`, the initial member is `dev@localhost.test`,
 
 ### The first sign-in
 
-Members come from `Panopticon:InitialMembers` at first, and anyone signed in can invite more from the Members page.
+Members come from `Panopticon:InitialMembers` at first. Everyone else joins through a Project: a Project's owner
+invites their address, and that lets them sign in (see [Projects](#projects)).
 
 1. On the sign-in page, enter an initial member's address (`dev@localhost.test` locally), and choose **Send me a
    link**.
@@ -53,6 +54,48 @@ Members come from `Panopticon:InitialMembers` at first, and anyone signed in can
 3. Choose **Sign in**. Opening the link alone doesn't sign you in, so a mail scanner that follows it can't.
 
 Rename yourself on the Members page: the name appears on the cards next to every agent you run.
+
+### Projects
+
+A Project groups work and people. It has a name, a code such as `PAN` (2 to 10 letters or digits, starting with a
+letter, which can't change once it's made) and an id. Cards, change pages and history rows show the code, and every
+page with filters can narrow to one Project or to your personal work.
+
+- **Making one:** anyone signed in can create a Project on the Projects page, and becomes its owner.
+- **Roles:** each member of a Project is an **owner**, an **editor** or a **viewer**. Every role sees the Project's
+  work and can report into it. Owners also rename it and manage its members: they invite an email address with a
+  role, change roles and remove people. Editors will manage the Project's tags in a later change. A Project always
+  keeps at least one owner, so its last owner can't step down, be removed or leave.
+- **Joining:** inviting an address that isn't on the server yet also lets it sign in. No invitation email is sent,
+  so tell them yourself. Anyone can leave a Project from its page.
+
+**Linking a repo.** A repo's reports go to a Project when the repo has a `.panopticon.json` at its root naming the
+Project's id:
+
+```json
+{
+  "project": "6f1c2e4a-…"
+}
+```
+
+Copy it from the Project's page, or ask your agent to link the repo: the bridge's `list_projects` tool gives your
+Projects' ids. Commit the file, so everyone working on the repo reports into the same Project. Linking moves your own
+active personal changes in that repo into the Project, with their history and timings. If a teammate already linked
+the same change, yours is retired to your history as "Linked to PAN". More is in
+[`docs/cli.md`](docs/cli.md#linking-a-repo-to-a-project).
+
+**Who sees what.** You see a change when it's in a Project you belong to, in any role, or when it's your own personal
+work. A change from a repo with no `.panopticon.json` is personal, and only its reporter sees it. That holds on the
+dashboard and its live updates, change pages and documents, the history and the metrics. A change you can't see
+answers as though it didn't exist. Membership changes take effect on open pages at once. When you leave a Project or
+are removed from it, its cards leave your dashboard, and an open page for one of its active changes says it wasn't
+found. An archived change's page catches up on its next load. When you join a Project, its cards appear. The Members
+page lists the people who share a Project with you. (In Development,
+a report made with the bootstrap token has no member, so a change it makes in no Project is visible to everyone.)
+
+**Removing someone from the server** is for the initial members (`Panopticon:InitialMembers`) only. It ends their
+sessions, revokes their tokens and takes them out of every Project. Their past reports stay. If they're the last
+owner of a Project, the removal is refused until someone else there is made an owner.
 
 ### Reporting progress
 
