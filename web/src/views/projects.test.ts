@@ -321,9 +321,11 @@ describe("/projects/{id}", () => {
       .on("GET", PATH, () => ({ status: 200, body: details("owner", members) }))
       .on("PATCH", `${PATH}/members/m2`, (call) => {
         members = [emmz, { ...sam, role: (call.body as { role: ProjectMember["role"] }).role }];
-        return { status: 200, body: members[1] };
+        // As the server does: the Project's page as it is now.
+        return { status: 200, body: details("owner", members) };
       });
     const { root } = await openPage(server);
+    const loads = server.to("GET", PATH).length;
     const select = q<HTMLSelectElement>(root, ".project-members .member:nth-child(2) select");
     select.value = "owner";
 
@@ -335,6 +337,7 @@ describe("/projects/{id}", () => {
 
     expect(server.to("PATCH", `${PATH}/members/m2`)[0]?.body).toEqual({ role: "owner" });
     expect(root.querySelector(".form-status")?.textContent).toBe("Sam is now an owner.");
+    expect(server.to("GET", PATH)).toHaveLength(loads);
   });
 
   it("Last owner stays: demoting yourself shows the message and puts the role back", async () => {
@@ -373,7 +376,7 @@ describe("/projects/{id}", () => {
   it("changing someone else's role doesn't ask", async () => {
     const server = withDetails(details("owner")).on("PATCH", `${PATH}/members/m2`, {
       status: 200,
-      body: { ...sam, role: "editor" },
+      body: details("owner", [emmz, { ...sam, role: "editor" }]),
     });
     const confirm = vi.fn(() => true);
     const { root } = await openPage(server, { confirm });

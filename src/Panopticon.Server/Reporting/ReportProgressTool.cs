@@ -58,9 +58,9 @@ public sealed class ReportProgressTool
         }
 
         // projects D4: a personal change retired by linking its repo leaves its owner's dashboard.
-        if (recorded.RetiredChangeId is { } retired)
+        if (recorded.Retired is { } retired)
         {
-            broadcaster.PublishArchived(retired, new ChangeScope(null, input.Agent.MemberId));
+            broadcaster.PublishArchived(retired.ChangeId, retired.Scope);
         }
 
         // D7: an archived report removes the card; a repeat of it (AlreadyArchived) changed nothing, so says nothing.

@@ -19,7 +19,14 @@ public sealed record ChangeCard(
     bool Personal = false);
 
 /// <summary>A change's Project on its card, history row and page: chosen by id, shown by its code (projects D9).</summary>
-public sealed record CardProject(Guid Id, string Code, string Name);
+public sealed record CardProject(Guid Id, string Code, string Name)
+{
+    public static CardProject Of(Project project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return new(project.Id, project.Code, project.Name);
+    }
+}
 
 public sealed record CardRepo(string Host, string Owner, string Name);
 
@@ -85,7 +92,7 @@ public sealed class ChangeCards(PanopticonDb db)
             section,
             new CardProgress(snapshot.OverallDone, snapshot.OverallTotal),
             change.LastReportedAt,
-            change.Project is { } project ? new CardProject(project.Id, project.Code, project.Name) : null,
+            change.Project is { } project ? CardProject.Of(project) : null,
             change.OwnerMemberId is not null);
     }
 }

@@ -41,7 +41,7 @@ public static class MemberEndpoints
     /// one transaction it sets <c>removed_at</c>, deletes their sessions, revokes their API tokens, deletes their unused
     /// sign-in links (so a link sent before removal can't sign them in if they're invited back), and takes them out of
     /// every Project. It's refused while they're the last owner of a Project, naming it (projects D8). Their open
-    /// dashboard streams end on the next keep-alive check (design D11). The row stays, so their past reports keep their
+    /// dashboard streams end at once (projects D3, §11). The row stays, so their past reports keep their
     /// name.
     /// </summary>
     internal static async Task<IResult> RemoveAsync(
@@ -67,10 +67,25 @@ public static class MemberEndpoints
         var now = time.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        // Lock every active member row (in id order, so two removals can't deadlock). Two members removing each other at
-        // once then take turns: the second sees that its remover has gone, so the team never ends up with nobody.
+        // Review fix 12.4: locks in the Project endpoints' order, Projects first and then members, so a removal and an
+        // invite can't deadlock. First every Project they belong to, in id order, as the Project endpoints lock them, so
+        // no role change or removal there can slip in between the last-owner check and the delete.
+        var locked = await db.Projects
+            .FromSql($"""
+                SELECT * FROM projects
+                WHERE id IN (SELECT project_id FROM project_members WHERE member_id = {id})
+                ORDER BY id
+                FOR UPDATE
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var lockedIds = locked.Select(p => p.Id).ToHashSet();
+
+        // Then every active member row (in id order, so two removals can't deadlock). Two members removing each other at
+        // once then take turns: the second sees that its remover has gone, so the team never ends up with nobody. FOR NO
+        // KEY UPDATE, since only removed_at changes: the foreign keys' KEY SHARE checks (a report, an invite) don't wait.
         var active = await db.Members
-            .FromSql($"SELECT * FROM members WHERE removed_at IS NULL ORDER BY id FOR UPDATE")
+            .FromSql($"SELECT * FROM members WHERE removed_at IS NULL ORDER BY id FOR NO KEY UPDATE")
             .AsNoTracking()
             .ToListAsync(cancellationToken);
         if (!active.Any(m => m.Id == id))
@@ -84,24 +99,32 @@ public static class MemberEndpoints
             return SignInEndpoints.Problem(HttpStatusCode.Conflict, "You've been removed, so you can't remove anyone.");
         }
 
-        // projects D8: never leave a Project without an owner. The Projects they own are locked, as the Project
-        // endpoints lock them, so a role change can't slip in between the check and the delete.
-        var owned = await db.Projects
-            .FromSql($"""
-                SELECT * FROM projects
-                WHERE id IN (SELECT project_id FROM project_members WHERE member_id = {id} AND role = {ProjectRoles.Owner})
-                ORDER BY id
-                FOR UPDATE
-                """)
-            .AsNoTracking()
+        // A fresh read, now that the locks are held. With their member row locked, they can't join another Project: an invite
+        // or a new Project locks that row first (review fix 12.5), so it waits on this transaction, then sees them removed. But one may have committed just
+        // before the lock: that Project isn't locked, and a Project can't be locked after a member, so it's a 409.
+        var memberships = await db.ProjectMembers.AsNoTracking()
+            .Where(m => m.MemberId == id)
+            .Select(m => new { m.ProjectId, m.Role })
             .ToListAsync(cancellationToken);
-        var ownedIds = owned.Select(p => p.Id).ToList();
+        if (memberships.Any(m => !lockedIds.Contains(m.ProjectId)))
+        {
+            return SignInEndpoints.Problem(
+                HttpStatusCode.Conflict,
+                "They joined a Project while you were removing them. Try again.");
+        }
+
+        // projects D8: never leave a Project without an owner, checked under the Project locks.
+        var ownedIds = memberships.Where(m => m.Role == ProjectRoles.Owner).Select(m => m.ProjectId).ToList();
         var coOwned = await db.ProjectMembers
             .Where(m => ownedIds.Contains(m.ProjectId) && m.MemberId != id && m.Role == ProjectRoles.Owner)
             .Select(m => m.ProjectId)
             .Distinct()
             .ToListAsync(cancellationToken);
-        var lastOwnerOf = owned.Where(p => !coOwned.Contains(p.Id)).Select(p => p.Code).Order(StringComparer.Ordinal).ToList();
+        var lastOwnerOf = await db.Projects.AsNoTracking()
+            .Where(p => ownedIds.Contains(p.Id) && !coOwned.Contains(p.Id))
+            .Select(p => p.Code)
+            .ToListAsync(cancellationToken);
+        lastOwnerOf.Sort(StringComparer.Ordinal);
         if (lastOwnerOf.Count > 0)
         {
             return SignInEndpoints.Problem(

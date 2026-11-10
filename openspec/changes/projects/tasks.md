@@ -70,6 +70,16 @@
 - [x] 11.2 On the web: on `projects-changed`, the dashboard drops a left Project's cards and filter choice, or refetches the cards for a joined one. An open change page of a left Project shows "not found". Verify the new "Membership changes take effect live" scenarios with view tests.
 - [x] 11.3 Run `make gates` and `make e2e`, then stop for Emmz to check in two browsers: Sam removed while watching the dashboard and a change page, and Sam invited while watching.
 
+## 12. Review fixes: wording and a helper
+
+- [x] 12.1 Fix the doc comment on `MemberEndpoints.RemoveAsync`: streams end at once (§11), not on the next keep-alive.
+- [x] 12.2 README, "Who sees what": membership changes take effect on open pages at once, and an archived change's page follows on its next load.
+- [x] 12.3 Build `CardProject` from a `Project` in one place (`CardProject.Of`), used by `ChangeCards.ToCard` and `ChangePages.LinkedTo`. (`HistoryChoicesAsync` builds it from a SQL projection, not an entity, so it stays as it is.)
+- [x] 12.4 Removal from the server takes its locks in the Project endpoints' order: first the Projects the member belongs to, then the members, then a fresh read of their memberships. If that read finds a Project it didn't lock, the removal answers 409 and asks to try again. It does the last-owner check under those locks. Verify with lock-holding tests: a removal and an invite on the same Project don't deadlock, and a membership that arrives mid-removal is refused, not deleted.
+- [x] 12.5 An invite locks the member's row (`FOR NO KEY UPDATE`), and so does creating a Project (for the creator, refusing a removed one), before it reads whether they're active, so a removal that commits first is seen and the invite makes them active again (as specified), never adding a removed member. Verify with a test that holds the member's row while the removal commits.
+- [x] 12.6 Tidy-ups from the review: one query for a member's Projects with their role (the Projects page and `list_projects`); `RecordedReport` carries the retired copy's scope; the web types the role-change response as `ProjectDetails` and renders it, with no extra GET.
+- [x] 12.7 Run `make gates` (and `make e2e` if the image, sign-in or CLI changed).
+
 ## Workflow follow-up
 
 - Run the whole-change review and offer `/code-review` before archiving.

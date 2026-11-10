@@ -164,7 +164,7 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
 
     // projects D4: the Project a retired personal copy's work went to, shown in place of its archive folder.
     private static CardProject? LinkedTo(Change change) =>
-        change.RetiredToProject is { } project ? new CardProject(project.Id, project.Code, project.Name) : null;
+        change.RetiredToProject is { } project ? CardProject.Of(project) : null;
 
     /// <summary>
     /// The filter choices among the archived changes the viewer can see, so a hidden change leaks no value. Values that differ only in case are one choice, shown in one of

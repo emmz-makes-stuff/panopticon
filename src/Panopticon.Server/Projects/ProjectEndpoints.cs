@@ -54,11 +54,7 @@ public static class ProjectEndpoints
     /// <summary>The caller's Projects, by code (spec projects, "Projects list").</summary>
     internal static async Task<IResult> ListAsync(ClaimsPrincipal user, PanopticonDb db, CancellationToken cancellationToken)
     {
-        var memberId = user.GetRequiredMemberId();
-        var projects = await db.ProjectMembers.AsNoTracking()
-            .Where(m => m.MemberId == memberId)
-            .Join(db.Projects, m => m.ProjectId, p => p.Id, (m, p) => new { p.Id, p.Name, p.Code, m.Role })
-            .OrderBy(p => p.Code)
+        var projects = await MemberProjects.Of(db, user.GetRequiredMemberId())
             .Select(p => new ProjectView(p.Id, p.Name, p.Code, p.Role))
             .ToListAsync(cancellationToken);
         return TypedResults.Ok(projects);
@@ -87,6 +83,19 @@ public static class ProjectEndpoints
 
         var memberId = user.GetRequiredMemberId();
         var now = time.GetUtcNow();
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Review fix 12.5: like an invite, it locks the member's row, so a removal from the server that commits first is
+        // seen, and a removed member never ends up owning a Project.
+        var active = await db.Members
+            .FromSql($"SELECT * FROM members WHERE id = {memberId} FOR NO KEY UPDATE")
+            .AsNoTracking()
+            .AnyAsync(m => m.RemovedAt == null, cancellationToken);
+        if (!active)
+        {
+            return SignInEndpoints.Problem(HttpStatusCode.Forbidden, "You've been removed from the server.");
+        }
+
         var project = new Project
         {
             Id = Guid.NewGuid(),
@@ -107,6 +116,7 @@ public static class ProjectEndpoints
             return SignInEndpoints.Problem(HttpStatusCode.Conflict, $"The code {code} is taken. Choose another.");
         }
 
+        await transaction.CommitAsync(cancellationToken);
         broadcaster.PublishMembershipChanged(memberId, project.Id, isMember: true);
         return TypedResults.Created(ProjectPath(project.Id), new ProjectView(project.Id, project.Name, project.Code, ProjectRoles.Owner));
     }
@@ -422,7 +432,13 @@ public static class MemberInvites
     {
         ArgumentNullException.ThrowIfNull(db);
         var key = MemberEmail.Key(email);
-        var member = await db.Members.SingleOrDefaultAsync(m => m.EmailKey == key, cancellationToken);
+
+        // Locked (review fix 12.5): a removal from the server holding this row is waited for, then seen, so the invite makes
+        // them active again rather than adding a removed member to the Project. FOR NO KEY UPDATE, as the removal takes it,
+        // so the foreign keys' KEY SHARE checks (a report, another invite) never wait on it.
+        var member = await db.Members
+            .FromSql($"SELECT * FROM members WHERE email_key = {key} FOR NO KEY UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
         if (member is { IsActive: true })
         {
             return member;
@@ -447,5 +463,22 @@ public static class MemberInvites
         db.Members.Add(member);
         await db.SaveChangesAsync(cancellationToken);
         return member;
+    }
+}
+
+/// <summary>A member's Project with their role in it.</summary>
+public sealed record MemberProject(Guid Id, string Name, string Code, string Role);
+
+/// <summary>A member's Projects, by code: the one query behind the Projects page and <c>list_projects</c> (review fix 12.6).</summary>
+public static class MemberProjects
+{
+    public static IQueryable<MemberProject> Of(PanopticonDb db, Guid memberId)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.ProjectMembers.AsNoTracking()
+            .Where(m => m.MemberId == memberId)
+            .Join(db.Projects, m => m.ProjectId, p => p.Id, (m, p) => new { p.Id, p.Name, p.Code, p.CodeKey, m.Role })
+            .OrderBy(p => p.CodeKey)
+            .Select(p => new MemberProject(p.Id, p.Name, p.Code, p.Role));
     }
 }

@@ -51,10 +51,9 @@ public enum ArchiveOutcome
 }
 
 /// <summary>The outcome of recording a report: the change and its newly computed progress.</summary>
-/// <param name="RetiredChangeId">
-/// The reporter's personal change this report retired, because its repo is now linked to a Project that already had
-/// the change (projects D4): it left the dashboard, so its owner's view needs an archived event. Its scope is the
-/// reporter's own.
+/// <param name="Retired">
+/// The personal change this report retired, because its repo is now linked to a Project that already had the change
+/// (projects D4): it left the dashboard, so its owner's view needs an archived event, with its scope.
 /// </param>
 /// <param name="Scope">The change's scope after this report, which its live events carry (projects D3).</param>
 public sealed record RecordedReport(
@@ -63,7 +62,10 @@ public sealed record RecordedReport(
     DateTimeOffset ReceivedAt,
     ChangeScope Scope,
     ArchiveOutcome Archive = ArchiveOutcome.None,
-    Guid? RetiredChangeId = null);
+    RetiredCopy? Retired = null);
+
+/// <summary>A personal change retired by linking (projects D4), and the scope its archived event goes to.</summary>
+public sealed record RetiredCopy(Guid ChangeId, ChangeScope Scope);
 
 /// <summary>
 /// A report into a Project that doesn't exist or that the reporter isn't a member of (spec progress-reporting,
@@ -345,7 +347,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
     /// with no folder, so it leaves the dashboard for its owner's history ("Linking when the Project already has the
     /// change"). A double create loses on the scoped identity index, and RecordAsync's retry runs this again.
     /// </summary>
-    private async Task<(Change Change, Guid? Retired)> FindOrAddChangeAsync(
+    private async Task<(Change Change, RetiredCopy? Retired)> FindOrAddChangeAsync(
         Repo repo,
         string name,
         ProgressSnapshot snapshot,
@@ -372,7 +374,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
 
             personal.ArchivedAt = receivedAt;
             personal.RetiredToProjectId = scope.ProjectId;
-            return (change, personal.Id);
+            return (change, new RetiredCopy(personal.Id, new ChangeScope(null, personal.OwnerMemberId)));
         }
 
         if (personal is not null)

@@ -328,15 +328,16 @@ export function projectView(env: Env): View {
 
             error.clear();
             env.api
-              .send<ProjectMember>(
+              .send<ProjectDetails>(
                 "PATCH",
                 `${path}/members/${encodeURIComponent(member.memberId)}`,
                 { role },
               )
               .then(
-                async () => {
+                (changed) => {
+                  // The answer is the Project's page as it is now, so it renders with no second fetch (review fix 12.6).
+                  render(changed);
                   status.textContent = `${member.displayName} is now ${aRole(role)}.`;
-                  await load();
                 },
                 (failure: unknown) => {
                   select.value = member.role;

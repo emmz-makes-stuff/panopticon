@@ -87,7 +87,10 @@ the same change, yours is retired to your history as "Linked to PAN". More is in
 **Who sees what.** You see a change when it's in a Project you belong to, in any role, or when it's your own personal
 work. A change from a repo with no `.panopticon.json` is personal, and only its reporter sees it. That holds on the
 dashboard and its live updates, change pages and documents, the history and the metrics. A change you can't see
-answers as though it didn't exist. The Members page lists the people who share a Project with you. (In Development,
+answers as though it didn't exist. Membership changes take effect on open pages at once. When you leave a Project or
+are removed from it, its cards leave your dashboard, and an open page for one of its active changes says it wasn't
+found. An archived change's page catches up on its next load. When you join a Project, its cards appear. The Members
+page lists the people who share a Project with you. (In Development,
 a report made with the bootstrap token has no member, so a change it makes in no Project is visible to everyone.)
 
 **Removing someone from the server** is for the initial members (`Panopticon:InitialMembers`) only. It ends their

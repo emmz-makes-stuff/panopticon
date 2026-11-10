@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Reporting;
 using Panopticon.Server.Tests.Infrastructure;
 
@@ -115,7 +116,7 @@ public class ReportScopeTests(PostgresFixture postgres, S3Fixture s3)
         var linked = await harness.RecordAsync(emmz, pan);
 
         Assert.Equal(first.ChangeId, linked.ChangeId);
-        Assert.Null(linked.RetiredChangeId);
+        Assert.Null(linked.Retired);
         Assert.Equal((pan, (Guid?)null), await harness.ScopeAsync(linked.ChangeId));
         await using var db = harness.NewDb();
         Assert.Equal(1, await db.Changes.CountAsync(Ct));
@@ -138,7 +139,7 @@ public class ReportScopeTests(PostgresFixture postgres, S3Fixture s3)
         var linked = await harness.RecordAsync(emmz, pan);
 
         Assert.NotEqual(kits.ChangeId, linked.ChangeId);
-        Assert.Null(linked.RetiredChangeId);
+        Assert.Null(linked.Retired);
         Assert.Equal(((Guid?)null, (Guid?)kit), await harness.ScopeAsync(kits.ChangeId));
         Assert.Null((await harness.ChangeAsync(kits.ChangeId)).ArchivedAt);
     }
@@ -175,7 +176,8 @@ public class ReportScopeTests(PostgresFixture postgres, S3Fixture s3)
         var linked = await harness.RecordAsync(emmz, pan);
 
         Assert.Equal(kits.ChangeId, linked.ChangeId);
-        Assert.Equal(personal.ChangeId, linked.RetiredChangeId);
+        Assert.Equal(personal.ChangeId, linked.Retired?.ChangeId);
+        Assert.Equal(new ChangeScope(null, emmz), linked.Retired?.Scope);
         var retired = await harness.ChangeAsync(personal.ChangeId);
         Assert.Equal((linked.ReceivedAt, (string?)null), (retired.ArchivedAt, retired.ArchiveFolder));
         Assert.Equal(((Guid?)null, (Guid?)emmz), (retired.ProjectId, retired.OwnerMemberId));
@@ -183,7 +185,7 @@ public class ReportScopeTests(PostgresFixture postgres, S3Fixture s3)
 
         // Her next linked report finds only the Project's change: nothing more to retire.
         var again = await harness.RecordAsync(emmz, pan);
-        Assert.Equal((kits.ChangeId, (Guid?)null), (again.ChangeId, again.RetiredChangeId));
+        Assert.Equal((kits.ChangeId, (Guid?)null), (again.ChangeId, again.Retired?.ChangeId));
     }
 
     private sealed class Harness

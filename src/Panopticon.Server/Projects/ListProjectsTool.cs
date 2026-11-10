@@ -25,11 +25,8 @@ public sealed class ListProjectsTool
         // A member's token lists their own Projects; the Development bootstrap token, with no member, lists every
         // Project as a viewer, since it may report into any of them (D4).
         var projects = context.User?.GetMemberId() is { } memberId
-            ? await db.Projects.AsNoTracking()
-                .SelectMany(p => p.Members.Where(m => m.MemberId == memberId), (p, m) => new { p, m.Role })
-                .OrderBy(x => x.p.CodeKey)
-                .Select(x => new ProjectSummary(x.p.Id.ToString(), x.p.Name, x.p.Code, x.Role))
-                .ToListAsync(cancellationToken)
+            ? (await MemberProjects.Of(db, memberId).ToListAsync(cancellationToken))
+                .ConvertAll(p => new ProjectSummary(p.Id.ToString(), p.Name, p.Code, p.Role))
             : await db.Projects.AsNoTracking()
                 .OrderBy(p => p.CodeKey)
                 .Select(p => new ProjectSummary(p.Id.ToString(), p.Name, p.Code, ProjectRoles.Viewer))
