@@ -55,7 +55,10 @@ export function changeView(env: Env): View {
 
     const head = el("header", "change-head");
     // One for the page's life: a live refresh re-renders the header around it, and an open panel stays open.
-    const tags = tagPicker(env, changeId);
+    // The card each tag change returns replaces the page's, so choosing another document doesn't put old chips back.
+    const tags = tagPicker(env, changeId, (card) => {
+      latest = { ...latest, card };
+    });
     const nav = el("nav", "doc-nav");
     nav.setAttribute("aria-label", "Documents");
     const notice = el("p", "doc-notice");

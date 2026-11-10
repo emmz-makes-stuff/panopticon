@@ -62,6 +62,20 @@ public sealed class TagsCommandTests : IDisposable
         Assert.Equal("No personal tags.", Run().Out.Trim());
     }
 
+    // Review fix 11.5: a hand-edited config with a null entry is refused with a message, not a crash.
+    [Fact]
+    public void A_null_entry_in_a_hand_edited_config_does_not_crash_remove()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, """{ "serverUrl": "https://p.example.com/", "token": "pnp_saved", "tags": [null, "dev"] }""");
+
+        var refused = Run("remove", "bad tag");
+        Assert.Equal(1, refused.Exit);
+        Assert.Contains("bad tag", refused.Err, StringComparison.Ordinal);
+
+        Assert.Equal(0, Run("remove", "dev").Exit);
+    }
+
     [Theory]
     [InlineData("add", "has space")]
     [InlineData("add", "key:")]

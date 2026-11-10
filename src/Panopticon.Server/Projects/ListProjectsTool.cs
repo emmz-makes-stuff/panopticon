@@ -36,9 +36,9 @@ public sealed class ListProjectsTool
         var ids = projects.ConvertAll(p => Guid.Parse(p.Id));
         var tags = (await db.ProjectTags.AsNoTracking()
                 .Where(t => ids.Contains(t.ProjectId))
-                .OrderBy(t => t.KeyKey).ThenBy(t => t.ValueKey)
-                .Select(t => new { t.ProjectId, t.Key, t.Value })
+                .Select(t => new { t.ProjectId, t.Key, t.Value, t.KeyKey, t.ValueKey })
                 .ToListAsync(cancellationToken))
+            .InTagOrder(t => t.KeyKey, t => t.ValueKey)
             .ToLookup(t => t.ProjectId, t => new Tag(t.Key, t.Value).Text);
         projects = projects.ConvertAll(p => p with { Tags = [.. tags[Guid.Parse(p.Id)]] });
 

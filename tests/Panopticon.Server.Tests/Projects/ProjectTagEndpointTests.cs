@@ -308,6 +308,29 @@ public class ProjectTagEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(["area", "Area: Billing", "area: onboarding", "bug"], (await DetailsAsync(viewer, project)).Tags.Select(t => t.Text));
     }
 
+    // Review fix 11.4: ordinal, as the cards sort, not the database's collation (which ignores '-', '.' and '_').
+    [Fact]
+    public async Task Tags_are_in_ordinal_order_in_the_list_and_the_event_as_on_the_cards()
+    {
+        var (factory, owner, editor, viewer, project) = await SetUpAsync();
+        await using var _ = factory;
+        using var __ = owner;
+        using var ___ = editor;
+        using var ____ = viewer;
+        string[] ordinal = ["a-b", "a.b", "a1", "a_b", "ab"];
+        foreach (var text in new[] { "ab", "a_b", "a1", "a.b" })
+        {
+            await AddedAsync(editor, project, text);
+        }
+
+        using var subscription = factory.Services.GetRequiredService<ChangeBroadcaster>().Subscribe();
+        await AddedAsync(editor, project, "a-b");
+        var published = Assert.IsType<ChangeEvent.TagsChanged>(await subscription.Reader.ReadAsync(Ct));
+
+        Assert.Equal(ordinal, (await DetailsAsync(viewer, project)).Tags.Select(t => t.Text));
+        Assert.Equal(ordinal, published.Tags.Select(t => t.Key));
+    }
+
     [Fact]
     public async Task Another_Projects_tag_cannot_be_renamed_or_deleted_through_this_one()
     {

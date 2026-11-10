@@ -398,3 +398,46 @@ describe("parseProjectTagsChange", () => {
     }
   });
 });
+
+// Spec live-dashboard, "An editor tags a change" (tags D6): a tag edit republishes the card with the same report time.
+describe("connectLive, a change tagged", () => {
+  const PAN = { id: "pan-id", code: "PAN", name: "Panopticon" };
+  const BUG = { id: "t1", key: "bug", value: null };
+  const tagsOf = (element: Element | undefined) =>
+    [...(element?.querySelectorAll(".tag-chip") ?? [])].map((chip) => chip.textContent);
+  const panCard = (projectTags: ChangeCard["projectTags"]) =>
+    card({ changeId: "c1", change: "team-auth", project: PAN, projectTags });
+
+  it("shows a tag put on a change at once, with no motion, and ignores the same card again", async () => {
+    const { app, cards } = await start([panCard([])]);
+    FakeEventSource.latest().open();
+    await settle();
+
+    send(panCard([BUG]));
+    expect(tagsOf(cards()[0])).toEqual(["PAN/bug"]);
+    expect(cards()[0]?.classList.contains("updated")).toBe(false);
+    expect(cards()[0]?.querySelector(".cell.lighting")).toBeNull();
+
+    expect(app.upsert(panCard([BUG]))).toBe(false);
+  });
+
+  it("A filtered dashboard drops the card when the chosen tag is taken off it", async () => {
+    const { app, cards } = await start([panCard([BUG])]);
+    FakeEventSource.latest().open();
+    await settle();
+    app.setFilters({ filters: { tags: [{ kind: "tag", id: BUG.id }] }, dropped: [] });
+    expect(cards()).toHaveLength(1);
+
+    send(panCard([]));
+
+    expect(cards()).toHaveLength(0);
+  });
+
+  it("a refresh takes the server's tags for a card it holds at the same report time", async () => {
+    const { app, cards } = await start([panCard([])]);
+
+    app.render([panCard([BUG])]);
+
+    expect(tagsOf(cards()[0])).toEqual(["PAN/bug"]);
+  });
+});

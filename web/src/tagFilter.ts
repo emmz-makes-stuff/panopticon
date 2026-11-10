@@ -247,9 +247,18 @@ function groupsOf(choices: readonly TagChoice[]): Group[] {
 
 const sameKey = (a: TagChoice, b: TagChoice) => a.key.toLowerCase() === b.key.toLowerCase();
 
-/** A key offered alone: no value, and its group has values for that key (a personal bare tag stands for both). */
+/**
+ * A key offered alone, told by the choice's kind: a Project's `k:` choice, or a personal `p:<key>` whose group has values
+ * for that key (a personal bare tag and the key alone are one filter). A Project's bare tag (`t:`) is never one.
+ */
 function isKeyOnly(choice: TagChoice, group: readonly TagChoice[]): boolean {
-  return choice.value === null && group.some((c) => c.value !== null && sameKey(c, choice));
+  const tag = parseTagFilter(choice.filter);
+  return (
+    tag?.kind === "key" ||
+    (tag?.kind === "personal" &&
+      tag.value === null &&
+      group.some((c) => c.value !== null && sameKey(c, choice)))
+  );
 }
 
 /** A value under a key offered alone, so it's indented beneath it. */

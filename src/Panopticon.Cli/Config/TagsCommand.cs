@@ -107,7 +107,7 @@ internal sealed class TagsCommand(CliConfigFile config, TextWriter stdout, TextW
             // A malformed text can still remove a hand-edited entry that matches it exactly, so a bad file can be fixed.
             var index = TagText.TryParse(text, out var tag, out var error)
                 ? tags.FindIndex(t => Same(t, tag))
-                : tags.FindIndex(t => string.Equals(t.Trim(), text.Trim(), StringComparison.OrdinalIgnoreCase));
+                : tags.FindIndex(t => string.Equals(t?.Trim(), text.Trim(), StringComparison.OrdinalIgnoreCase));
             if (index < 0)
             {
                 throw new TagEditException(error ?? $"\"{tag!.Text}\" isn't one of your personal tags.");

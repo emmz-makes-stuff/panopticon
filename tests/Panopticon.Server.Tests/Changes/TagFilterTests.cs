@@ -196,4 +196,19 @@ public class TagFilterTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(["secret = p:secret", $"PAN/bug = t:{bug}", $"PAN/language = k:{world.Pan}:language", $"PAN/language: csharp = t:{csharp}"], await ChoicesAsync(world.Sam));
         Assert.Equal([$"PAN/bug = t:{bug}", $"PAN/language = k:{world.Pan}:language", $"PAN/language: csharp = t:{csharp}"], await ChoicesAsync(world.Kit));
     }
+
+    // Review fix 11.4: the key alone is spelled the same on every read, whatever order the rows come back in.
+    [Fact]
+    public async Task A_keys_choice_alone_is_spelled_as_the_valued_tag_whose_key_sorts_last()
+    {
+        await using var world = await TagWorld.CreateAsync(postgres, s3, Ct);
+        var upper = await world.AddPanTagAsync("Area: x", Ct);
+        var lower = await world.AddPanTagAsync("area: y", Ct);
+        await ArchivedAsync(world, "one", [], upper, lower);
+
+        for (var read = 0; read < 3; read++)
+        {
+            Assert.Contains($"PAN/area = k:{world.Pan}:area", await ChoicesAsync(world.Emmz));
+        }
+    }
 }

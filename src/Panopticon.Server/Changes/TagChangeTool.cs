@@ -59,19 +59,18 @@ public sealed class TagChangeTool
         }
 
         // A member's token tags as that member; the Development bootstrap token, with no member, may tag any change (D4).
+        // The same role lookup ChangeTagging.ApplyAsync checks again inside its transaction: this one gives the agent a
+        // precise message, and that one catches a role changed in between.
         var memberId = context.User?.GetMemberId();
-        var found = await db.Projects.AsNoTracking()
+        var code = await db.Projects.AsNoTracking()
             .Where(p => p.Id == projectId)
-            .Select(p => new
-            {
-                p.Code,
-                Role = memberId == null ? ProjectRoles.Owner : db.ProjectMembers
-                    .Where(m => m.ProjectId == p.Id && m.MemberId == memberId)
-                    .Select(m => m.Role)
-                    .SingleOrDefault(),
-            })
+            .Select(p => p.Code)
             .SingleOrDefaultAsync(cancellationToken);
-        if (found?.Role is null)
+        var role = code is null ? null
+            : memberId is { } member ? await ProjectEndpoints.RoleAsync(db, projectId, member, cancellationToken)
+            : ProjectRoles.Owner;
+        var found = role is null ? null : new { Code = code!, Role = role };
+        if (found is null)
         {
             throw new McpException($"You aren't a member of a Project with id {projectId}. list_projects lists yours.");
         }
@@ -85,10 +84,11 @@ public sealed class TagChangeTool
         var target = await FindChangeAsync(db, projectId, repo, change, cancellationToken)
             ?? throw new McpException($"There's no change \"{change.Trim()}\" in {found.Code} for {repo.Host}/{repo.Owner}/{repo.Name}.");
 
-        var tags = await db.ProjectTags.AsNoTracking()
-            .Where(t => t.ProjectId == projectId)
-            .OrderBy(t => t.KeyKey).ThenBy(t => t.ValueKey)
-            .ToListAsync(cancellationToken);
+        var tags = (await db.ProjectTags.AsNoTracking()
+                .Where(t => t.ProjectId == projectId)
+                .ToListAsync(cancellationToken))
+            .InTagOrder(t => t.KeyKey, t => t.ValueKey)
+            .ToList();
         var ids = tags.ToDictionary(t => new Tag(t.Key, t.Value), t => t.Id);
         if (adding.Concat(removing).FirstOrDefault(t => !ids.ContainsKey(t)) is { } unknown)
         {
@@ -132,25 +132,11 @@ public sealed class TagChangeTool
         };
     }
 
-    /// <summary>Each text as a tag, duplicates collapsed; a malformed one is the agent's error.</summary>
-    private static List<Tag> Parse(IReadOnlyList<string>? texts)
-    {
-        var tags = new List<Tag>();
-        foreach (var text in texts ?? [])
-        {
-            if (!TagText.TryParse(text, out var tag, out var error))
-            {
-                throw new McpException(error);
-            }
-
-            if (!tags.Contains(tag))
-            {
-                tags.Add(tag);
-            }
-        }
-
-        return tags;
-    }
+    /// <summary>Each text as a tag, duplicates collapsed (TagText.TryParseAll); a malformed one is the agent's error.</summary>
+    private static IReadOnlyList<Tag> Parse(IReadOnlyList<string>? texts) =>
+        TagText.TryParseAll(texts ?? [], TagText.MaxProjectTags, out var tags, out var error)
+            ? tags
+            : throw new McpException(error);
 
     /// <summary>The Project's active change of that repo and name, or else its most recently archived one (D4).</summary>
     private static Task<Change?> FindChangeAsync(PanopticonDb db, Guid projectId, RepoRef repo, string name, CancellationToken cancellationToken)

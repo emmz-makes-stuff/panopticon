@@ -45,10 +45,11 @@ public static class ProjectTagEndpoints
         ArgumentNullException.ThrowIfNull(db);
         var rows = await db.ProjectTags.AsNoTracking()
             .Where(t => t.ProjectId == projectId)
-            .OrderBy(t => t.KeyKey).ThenBy(t => t.ValueKey)
-            .Select(t => new { t.Id, t.Key, t.Value, Count = db.ChangeProjectTags.Count(c => c.TagId == t.Id) })
+            .Select(t => new { t.Id, t.Key, t.Value, t.KeyKey, t.ValueKey, Count = db.ChangeProjectTags.Count(c => c.TagId == t.Id) })
             .ToListAsync(cancellationToken);
-        return [.. rows.Select(t => new ProjectTagView(t.Id, t.Key, t.Value, new Tag(t.Key, t.Value).Text, t.Count))];
+        return [.. rows
+            .InTagOrder(t => t.KeyKey, t => t.ValueKey)
+            .Select(t => new ProjectTagView(t.Id, t.Key, t.Value, new Tag(t.Key, t.Value).Text, t.Count))];
     }
 
     internal static async Task<IResult> AddAsync(
@@ -205,12 +206,12 @@ public static class ProjectTagEndpoints
     /// <summary>Tells the Project's open pages its tags as they are now (tags D6).</summary>
     private static async Task PublishAsync(PanopticonDb db, ChangeBroadcaster broadcaster, Guid projectId, CancellationToken cancellationToken)
     {
-        var tags = await db.ProjectTags.AsNoTracking()
+        var rows = await db.ProjectTags.AsNoTracking()
             .Where(t => t.ProjectId == projectId)
-            .OrderBy(t => t.KeyKey).ThenBy(t => t.ValueKey)
-            .Select(t => new ProjectTagRef(t.Id, t.Key, t.Value))
             .ToListAsync(cancellationToken);
-        broadcaster.PublishProjectTags(projectId, tags);
+        broadcaster.PublishProjectTags(projectId, [.. rows
+            .InTagOrder(t => t.KeyKey, t => t.ValueKey)
+            .Select(t => new ProjectTagRef(t.Id, t.Key, t.Value))]);
     }
 
     private static Task<ProjectTag?> ExistingAsync(PanopticonDb db, Guid projectId, Tag tag, Guid? except, CancellationToken cancellationToken) =>

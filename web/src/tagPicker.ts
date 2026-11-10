@@ -1,6 +1,7 @@
 import { ApiError } from "./api";
 import { alertLine, button, el } from "./dom";
 import type { Env } from "./shell";
+import { ordinal } from "./filters";
 import { retagCard, type ProjectTagsChange } from "./live";
 import { tagChips, tagText } from "./tagChips";
 import { parseTag, sameTag } from "./tagSyntax";
@@ -13,9 +14,14 @@ const failureText = (failure: unknown) =>
 /**
  * The change page's tags (tags D4, D9; web/DESIGN.md "Tags"): the chips, and for the Project's owners and editors an
  * "Edit tags" panel that toggles the Project's tags on the change and can add a new one. One element for the page's
- * life, so the header can be re-rendered by a live refresh without closing an open panel.
+ * life, so the header can be re-rendered by a live refresh without closing an open panel. `onCard` gets the card each
+ * tag change returns, so the page's own copy stays current (a header re-render then shows the same tags).
  */
-export function tagPicker(env: Env, changeId: string) {
+export function tagPicker(
+  env: Env,
+  changeId: string,
+  onCard: (card: ChangeCard) => void = () => undefined,
+) {
   const element = el("div", "change-tags");
   const chipsSlot = el("div", "change-tags-chips");
   const status = el("p", "form-status tag-picker-status");
@@ -197,11 +203,13 @@ export function tagPicker(env: Env, changeId: string) {
   }
 
   async function send(body: { add?: string[]; remove?: string[] }): Promise<ChangeCard> {
-    return env.api.send<ChangeCard>(
+    const next = await env.api.send<ChangeCard>(
       "POST",
       `/api/changes/${encodeURIComponent(changeId)}/tags`,
       body,
     );
+    onCard(next);
+    return next;
   }
 
   async function setTag(tag: ProjectTag, on: boolean, box: HTMLInputElement): Promise<void> {
@@ -236,7 +244,7 @@ export function tagPicker(env: Env, changeId: string) {
       return;
     }
 
-    project = { ...project, tags: [...project.tags, added].sort(byText) };
+    project = { ...project, tags: [...project.tags, added].sort(byTagOrder) };
     const text = tagText(added, project.code);
     search.value = "";
     try {
@@ -277,6 +285,10 @@ export function tagPicker(env: Env, changeId: string) {
   return { element, update, projectTagsChanged };
 }
 
-function byText(a: ProjectTag, b: ProjectTag): number {
-  return a.text.toLowerCase().localeCompare(b.text.toLowerCase());
+/** The server's order for a Project's tags (ProjectTagOrder): by key, then value (a bare key first), ordinally. */
+function byTagOrder(a: ProjectTag, b: ProjectTag): number {
+  return (
+    ordinal(a.key.toLowerCase(), b.key.toLowerCase()) ||
+    ordinal((a.value ?? "").toLowerCase(), (b.value ?? "").toLowerCase())
+  );
 }

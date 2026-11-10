@@ -311,3 +311,39 @@ describe("change page tags, live, after a toggle", () => {
     ]);
   });
 });
+
+describe("change page tags, choosing another document", () => {
+  it("keeps a tag just put on, on an archived change with no live stream", async () => {
+    const archived: ChangePage = {
+      card: panCard(),
+      archivedAt: "2026-11-09T10:00:00Z",
+      archiveFolder: "2026-11-09-team-auth",
+      documents: [
+        { path: "proposal.md", kind: "proposal", title: "Proposal", sizeBytes: 10 },
+        { path: "design.md", kind: "design", title: "Design", sizeBytes: 10 },
+      ],
+    };
+    const html = (path: string) => ({ status: 200, body: { path, html: `<h1>${path}</h1>` } });
+    const server = serverFor("editor")
+      .on("GET", "/api/changes/c1", { status: 200, body: archived })
+      .on("GET", "/api/changes/c1/documents/proposal.md", html("proposal.md"))
+      .on("GET", "/api/changes/c1/documents/design.md", html("design.md"))
+      .on("POST", "/api/changes/c1/tags", {
+        status: 200,
+        body: panCard([AREA, BUG].map(({ id, key, value }) => ({ id, key, value }))),
+      });
+    const { root } = await open(server);
+    await openPanel(root);
+    check(root, "area: onboarding");
+    await until(() => chipTexts(root).length === 3);
+
+    [...root.querySelectorAll<HTMLAnchorElement>(".doc-nav a")]
+      .find((a) => a.textContent === "Design")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+    await until(
+      () => root.querySelector<HTMLElement>("article.doc")?.dataset["path"] === "design.md",
+    );
+
+    expect(chipTexts(root)).toEqual(["PAN/area: onboarding", "PAN/bug", "dev (only you see this)"]);
+  });
+});

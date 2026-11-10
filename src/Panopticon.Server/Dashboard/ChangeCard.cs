@@ -137,7 +137,7 @@ public sealed class ChangeCards(PanopticonDb db)
         {
             ProjectTags = [.. change.ProjectTags
                 .Select(t => t.Tag)
-                .OrderBy(t => t.KeyKey, StringComparer.Ordinal).ThenBy(t => t.ValueKey, StringComparer.Ordinal)
+                .InTagOrder(t => t.KeyKey, t => t.ValueKey)
                 .Select(t => new ProjectTagRef(t.Id, t.Key, t.Value))],
             PersonalTags = viewerMemberId is { } memberId ? PersonalTagsOf(change, memberId) : [],
         };
@@ -162,6 +162,6 @@ public sealed class ChangeCards(PanopticonDb db)
             .OrderByDescending(a => a.LastReportedAt)
             .SelectMany(a => a.Tags)
             .DistinctBy(t => (t.KeyKey, t.ValueKey))
-            .OrderBy(t => t.KeyKey, StringComparer.Ordinal).ThenBy(t => t.ValueKey, StringComparer.Ordinal)
+            .InTagOrder(t => t.KeyKey, t => t.ValueKey)
             .Select(t => new PersonalTagRef(t.Key, t.Value))];
 }

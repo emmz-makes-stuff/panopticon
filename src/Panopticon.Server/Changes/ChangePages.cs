@@ -290,8 +290,10 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
                 .DistinctBy(t => t.Id)
                 .Select(t => (t.KeyKey, Rank: t.Value is null ? 1 : 2, t.ValueKey, Choice: new TagChoice(
                     new TagFilter.ProjectTag(t.Id).ToString(), project, t.Key, t.Value)))
+                // The key alone is spelled as the valued tag whose key sorts last ordinally: the same on every read.
                 .Concat(group
                     .Where(t => t.Value is not null)
+                    .OrderByDescending(t => t.Key, StringComparer.Ordinal)
                     .DistinctBy(t => t.KeyKey)
                     .Select(t => (t.KeyKey, Rank: 0, ValueKey: string.Empty, Choice: new TagChoice(
                         new TagFilter.ProjectKey(group.Key, t.KeyKey).ToString(), project, t.Key, null))))

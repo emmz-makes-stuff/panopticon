@@ -54,6 +54,17 @@
 - [x] 10.2 Extend the `make e2e` container flow: an editor adds a Project tag and tags a change, a report carries a personal tag, and the card shows both. Verify with `make e2e` → `E2E_EXIT:0`.
 - [x] 10.3 Human verification (stop and ask Emmz): the chips, picker, Project page Tags section and Tags filter as built against `web/DESIGN.md`. Live tag edits between two browsers signed in as different members, with personal tags not crossing. And a real Claude Code calling `list_projects` and `tag_change` through `panopticon mcp`. Verify with Emmz's PASS for each, recorded in a devlog note.
 
+## 11. Review fixes: live tagging, filter choices and order
+
+- [x] 11.1 The dashboard applies a card whose `lastReportedAt` is unchanged but whose tags differ (a tag edit's `change-updated`) in place, with no lighting or "updated" mark; `render` prefers the server's card on a tie (D6). Verify "An editor tags a change" (live-dashboard) with `live` tests, including a filtered dashboard dropping the card when its tag is removed.
+- [x] 11.2 The Tags filter treats a choice as "key alone" by its kind (a `k:` choice, or a personal key with values), so a Project's bare tag isn't shown or chipped as "any value" (D7). Verify with a `tagFilter` test of a Project with `area` and `area: onboarding`.
+- [x] 11.3 The change page keeps the picker's newer card, so choosing another document doesn't revert the chips (D9). Verify with a Vitest test on an archived change.
+- [x] 11.4 The server orders a Project's tags ordinally in memory everywhere (the tags list, `project-tags-changed`, `list_projects`, `tag_change`'s message), and the history's key-alone choice has a stable spelling (D6, D7). Verify with server tests using `a_b` and `ab`, and `Area`/`area`.
+- [x] 11.5 `panopticon tags remove` tolerates null entries in a hand-edited config. Verify with a `TagsCommand` test.
+- [x] 11.6 Clean-ups: `TagChangeTool` uses `TagText.TryParseAll` (with the cap) and one role check; `ChangeEvent.Updated` holds a `LiveCard`; the picker sorts a new tag as the server does; one ordinal comparer in `filters.ts`. Verify with the existing tests green.
+- [x] 11.7 Tests for the self-review gaps: a renamed tag's filter chip shows the new name; a deleted tag leaves the filter's choices; an editor's Project page has no invite or member controls.
+- [x] 11.8 Human verification (stop and ask Emmz): with two browsers, tagging a change shows on the other member's dashboard live. Verify with Emmz's PASS, recorded in a devlog note.
+
 ## Workflow follow-up
 
 - Self-review the whole change, offer `code-review`, and then `/opsx:archive` (CLAUDE.md, "Finishing a change").

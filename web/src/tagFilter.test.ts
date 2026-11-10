@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { PROJECT_TAGS_CHANGED } from "./live";
 import { card, FakeEventSource, q, settle } from "./testing";
 import { signedIn, startTestShell } from "./testShell";
 import type { ChangeCard } from "./types";
@@ -228,6 +229,58 @@ describe("the dashboard's Tags filter", () => {
     const tooMany = await start(`/?${many}`);
     expect(q(tooMany.root, ".filter-note").textContent).toBe("Kept the first 20 tags.");
     expect(chosenChips(tooMany.root)).toHaveLength(20);
+  });
+
+  it("A Project's bare tag beside its valued ones is the tag itself, not the key alone", async () => {
+    const AREA = { id: "0190f5a2-0000-7000-8000-0000000000b4", key: "area", value: null };
+    const ONBOARDING = {
+      id: "0190f5a2-0000-7000-8000-0000000000b5",
+      key: "area",
+      value: "onboarding",
+    };
+    const { root } = await start("/", [
+      card({ changeId: "a", change: "team-auth", project: PAN, projectTags: [AREA, ONBOARDING] }),
+    ]);
+    tagButton(root).click();
+
+    expect(groups(root)).toEqual([["PAN", "☐ areaany value", "☐ area", "  ☐ area: onboarding"]]);
+
+    const [keyAlone, bare] = [
+      ...root.querySelectorAll<HTMLInputElement>(".tag-filter-option input"),
+    ];
+    keyAlone?.click();
+    await settle();
+    bare?.click();
+    await settle();
+    expect(chosenChips(root).sort()).toEqual(["PAN/area", "PAN/area: any"]);
+  });
+
+  it("Filter link survives: a renamed tag's chip shows its new name", async () => {
+    const { root } = await start(`/?tag=${enc(`t:${BUG.id}`)}`);
+    expect(chosenChips(root)).toEqual(["PAN/bug"]);
+
+    FakeEventSource.latest().emit(
+      PROJECT_TAGS_CHANGED,
+      JSON.stringify({ projectId: PAN.id, tags: [{ ...BUG, key: "defect" }, RUST] }),
+    );
+    await settle();
+
+    expect(chosenChips(root)).toEqual(["PAN/defect"]);
+    expect(names(root)).toEqual(["team-auth", "site"]);
+  });
+
+  it("Gone from changes: a deleted tag leaves the filter's choices", async () => {
+    const { root } = await start();
+    tagButton(root).click();
+    expect(groups(root)[1]).toEqual(["PAN", "☐ bug", "☐ languageany value", "  ☐ language: rust"]);
+
+    FakeEventSource.latest().emit(
+      PROJECT_TAGS_CHANGED,
+      JSON.stringify({ projectId: PAN.id, tags: [RUST] }),
+    );
+    await settle();
+
+    expect(groups(root)[1]).toEqual(["PAN", "☐ languageany value", "  ☐ language: rust"]);
   });
 
   it("No tags anywhere: the control is there, and opens to say so", async () => {

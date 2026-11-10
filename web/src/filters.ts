@@ -239,11 +239,14 @@ export function tagFilterValue(tag: TagFilter): string {
   }
 }
 
+/** Ordinal order, as the server compares tag keys and values (`StringComparer.Ordinal`). */
+export const ordinal = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 /** Tags in canonical order: by `tag` value, ordinally, so the same tags always give the same address. */
 export function sortTags(tags: readonly TagFilter[]): TagFilter[] {
   return [...tags]
     .map((tag) => ({ tag, value: tagFilterValue(tag) }))
-    .sort((a, b) => (a.value < b.value ? -1 : a.value > b.value ? 1 : 0))
+    .sort((a, b) => ordinal(a.value, b.value))
     .map(({ tag }) => tag);
 }
 
@@ -525,9 +528,6 @@ export function filterChoices(cards: readonly ChangeCard[]): FilterChoices {
   };
 }
 
-/** Ordinal order, as the server sorts tag keys and values (`StringComparer.Ordinal`). */
-const ordinal = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
 interface RankedChoice {
   keyKey: string;
   /** The key alone first, then a bare tag, then the valued ones. */
@@ -605,8 +605,10 @@ function tagChoices(newestFirst: readonly ChangeCard[]): TagChoice[] {
         });
       }
 
+      // The key alone is spelled as the valued tag whose key sorts last ordinally, as on the server.
       const keyFilter = tagFilterValue({ kind: "key", projectId, key: keyKey });
-      if (tag.value !== null && !group.choices.has(keyFilter)) {
+      const keyAlone = group.choices.get(keyFilter);
+      if (tag.value !== null && (!keyAlone || ordinal(keyAlone.choice.key, tag.key) < 0)) {
         group.choices.set(keyFilter, {
           keyKey,
           rank: 0,

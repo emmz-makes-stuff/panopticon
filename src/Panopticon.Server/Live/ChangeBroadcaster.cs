@@ -16,17 +16,17 @@ public abstract record ChangeEvent
     }
 
     /// <summary>
-    /// A report or a tag edit moved an active change on; sent as <c>change-updated</c> with the card. <see cref="Card"/>
-    /// has no personal tags; <see cref="PersonalTags"/> has each member's, and each subscriber gets only their own
-    /// (tags D6). The map is never serialised.
+    /// A report or a tag edit moved an active change on; sent as <c>change-updated</c> with the card. <see cref="Live"/>
+    /// holds the card with no personal tags and each member's beside it, so each subscriber gets only their own (tags
+    /// D6). The map is never serialised.
     /// </summary>
-    public sealed record Updated(
-        ChangeCard Card,
-        ChangeScope Scope,
-        IReadOnlyDictionary<Guid, IReadOnlyList<PersonalTagRef>> PersonalTags) : ChangeEvent
+    public sealed record Updated(LiveCard Live, ChangeScope Scope) : ChangeEvent
     {
+        /// <summary>The card, with no personal tags on it.</summary>
+        public ChangeCard Card => Live.Card;
+
         /// <summary>The card for one subscriber: with their own personal tags, and nobody else's.</summary>
-        public ChangeCard CardFor(Guid memberId) => new LiveCard(Card, PersonalTags).For(memberId);
+        public ChangeCard CardFor(Guid memberId) => Live.For(memberId);
     }
 
     /// <summary>The change was archived and leaves the live view; sent as <c>change-archived</c>.</summary>
@@ -109,7 +109,7 @@ public sealed class ChangeBroadcaster
             throw new ArgumentException("A published card carries no personal tags: pass them by member instead (tags D6).", nameof(card));
         }
 
-        Publish(new ChangeEvent.Updated(card, scope, personalTags ?? new Dictionary<Guid, IReadOnlyList<PersonalTagRef>>()));
+        Publish(new ChangeEvent.Updated(new LiveCard(card, personalTags ?? new Dictionary<Guid, IReadOnlyList<PersonalTagRef>>()), scope));
     }
 
     public void PublishArchived(Guid changeId, ChangeScope scope)

@@ -246,6 +246,17 @@ describe("/projects/{id}", () => {
     expect(root.querySelector(".leave-button")?.textContent).toBe("Leave this Project");
   });
 
+  // Spec projects, "An editor manages tags": the Tags controls, but not the owner's ones for people or the name.
+  it("as an editor: the tag controls, with no rename, invite, role change or remove", async () => {
+    const { root } = await openPage(withDetails(details("editor")));
+
+    expect(memberRows(root).map((row) => row.remove)).toEqual([false, false]);
+    expect(root.querySelector(".rename-form")).toBeNull();
+    expect(root.querySelector(".invite-form")).toBeNull();
+    expect(root.querySelector(".role-field")).toBeNull();
+    expect(root.querySelector(".tag-add-form")).not.toBeNull();
+  });
+
   it("as an owner: a role choice for everyone, and Remove for everyone but you", async () => {
     const { root } = await openPage(withDetails(details("owner")));
 
