@@ -136,13 +136,19 @@ _Source: Emmz, 2026-11-09._
 
 #### Open questions (not yet asked)
 
-- **Tags in reports:** where do project tags get attached: in the local settings like personal ones, or on the
-  dashboard? A report would carry both personal and project tags. Does each report carry its tags, or the change?
+- **Tags in reports:** answered (Emmz, 2026-11-10). Project tags are put on a change on the dashboard, by the
+  Project's owners and editors, choosing from the tags the Project defines (or adding a new one from the picker).
+  Their agents can set them too, with a `tag_change` MCP tool, but only from the existing tags: reports don't carry
+  project tags, and an agent can't create one. Personal tags
+  come in with reports from the CLI config, and they belong to the change, for the person who sent them: a change has
+  the union of the personal tags that person has reported on it, and only that person sees them.
 - **The code:** answered, and built. It's unique on the server, regardless of case, and can't change.
 - **Owners:** answered, and built. A Project can have several owners, and it always keeps one, so the last owner
   can't leave. Any member of the deployment can create a Project.
 - **Viewers and the MCP server:** answered, and built. Viewers report into the Project.
-- **Filters:** do tags join the existing filter bar (dashboard, history and metrics) as one more dimension?
+- **Filters:** answered (Emmz, 2026-11-10). Yes, as one multi-select Tags filter on the dashboard, history and
+  metrics. It lists the personal and project tags you can see. A `key: value` tag matches either on its key alone or
+  on its key and value. The filter goes in the URL like the others.
 
 ## Hard constraints
 
