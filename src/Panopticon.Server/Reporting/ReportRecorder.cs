@@ -31,6 +31,9 @@ public sealed record ReportInput(
 
     /// <summary>The archive folder's name when this is the change's archived report (D7).</summary>
     public string? Archive { get; init; }
+
+    /// <summary>The Project the report names, from the repo's <c>.panopticon.json</c> (projects D4); null for none.</summary>
+    public Guid? ProjectId { get; init; }
 }
 
 /// <summary>What a report did to the change's archive state (change-documents-and-history D7).</summary>
@@ -47,11 +50,45 @@ public enum ArchiveOutcome
 }
 
 /// <summary>The outcome of recording a report: the change and its newly computed progress.</summary>
+/// <param name="RetiredChangeId">
+/// The reporter's personal change this report retired, because its repo is now linked to a Project that already had
+/// the change (projects D4): it left the dashboard, so its owner's view needs an archived event.
+/// </param>
 public sealed record RecordedReport(
     Guid ChangeId,
     ProgressSnapshot Snapshot,
     DateTimeOffset ReceivedAt,
-    ArchiveOutcome Archive = ArchiveOutcome.None);
+    ArchiveOutcome Archive = ArchiveOutcome.None,
+    Guid? RetiredChangeId = null);
+
+/// <summary>A change's scope (projects D1): a Project, a member's personal work, or neither (a bootstrap report).</summary>
+public sealed record ChangeScope(Guid? ProjectId, Guid? OwnerMemberId);
+
+/// <summary>
+/// A report into a Project that doesn't exist or that the reporter isn't a member of (spec progress-reporting,
+/// "Reporting into a Project"). Nothing is recorded.
+/// </summary>
+public sealed class ReportRefusedException : Exception
+{
+    public ReportRefusedException()
+        : base("The report was refused.")
+    {
+    }
+
+    public ReportRefusedException(string message)
+        : base(message)
+    {
+    }
+
+    public ReportRefusedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    /// <summary>The message for a Project id that wasn't found, isn't the reporter's, or isn't an id at all.</summary>
+    public static string NotYourProject(string project) =>
+        $"Project {project} wasn't found, or you aren't a member of it. Call list_projects for the Projects you can report into, and put one's id in .panopticon.json.";
+}
 
 /// <summary>
 /// Records a report: stores its documents, upserts repo / change / agent, updates the change's progress snapshot,
@@ -120,18 +157,24 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         DateTimeOffset receivedAt,
         CancellationToken cancellationToken)
     {
+        // projects D4: the scope is settled inside the transaction, so a removal that commits first refuses the report.
+        var scope = await ResolveScopeAsync(report, cancellationToken);
         var repo = await FindOrAddRepoAsync(report.Repo, cancellationToken);
 
         // D7.1: a change already archived under this folder is final. A second archived report (the watcher and the
         // agent both sending it) changes nothing, not even a new event, and returns the final progress.
         if (report.Archive is { } folder
-            && await db.Changes.AsNoTracking().SingleOrDefaultAsync(c => c.RepoId == repo.Id && c.ArchiveFolder == folder, cancellationToken)
+            && await db.Changes.AsNoTracking()
+                    .SingleOrDefaultAsync(
+                        c => c.RepoId == repo.Id && c.ArchiveFolder == folder
+                            && c.ProjectId == scope.ProjectId && c.OwnerMemberId == scope.OwnerMemberId,
+                        cancellationToken)
                 is { } archived)
         {
             return new RecordedReport(archived.Id, archived.Snapshot, receivedAt, ArchiveOutcome.AlreadyArchived);
         }
 
-        var change = await FindOrAddChangeAsync(repo, report.ChangeName, snapshot, cancellationToken);
+        var (change, retired) = await FindOrAddChangeAsync(repo, report.ChangeName, snapshot, scope, report.Agent.MemberId, receivedAt, cancellationToken);
         var agent = await FindOrAddAgentAsync(report.Agent, cancellationToken);
 
         // Only a newer report moves the change on: a slower, older report that commits last must not roll the
@@ -196,7 +239,29 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             change.Id,
             snapshot,
             receivedAt,
-            report.Archive is null ? ArchiveOutcome.None : ArchiveOutcome.Archived);
+            report.Archive is null ? ArchiveOutcome.None : ArchiveOutcome.Archived,
+            retired);
+    }
+
+    /// <summary>
+    /// The scope a report lands in (projects D4): the named Project, when it exists and the reporter belongs to it in
+    /// any role (a bootstrap report, with no member, needs only that it exists); otherwise the reporter's personal
+    /// scope. Throws <see cref="ReportRefusedException"/> for a Project that isn't theirs.
+    /// </summary>
+    private async Task<ChangeScope> ResolveScopeAsync(ReportInput report, CancellationToken cancellationToken)
+    {
+        var memberId = report.Agent.MemberId;
+        if (report.ProjectId is not { } projectId)
+        {
+            return new ChangeScope(null, memberId);
+        }
+
+        var allowed = memberId is { } member
+            ? await db.ProjectMembers.AnyAsync(m => m.ProjectId == projectId && m.MemberId == member, cancellationToken)
+            : await db.Projects.AnyAsync(p => p.Id == projectId, cancellationToken);
+        return allowed
+            ? new ChangeScope(projectId, null)
+            : throw new ReportRefusedException(ReportRefusedException.NotYourProject(projectId.ToString()));
     }
 
     private sealed record StoredDocument(string Path, string Sha256, int SizeBytes);
@@ -265,22 +330,53 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
         return repo;
     }
 
-    private async Task<Change> FindOrAddChangeAsync(
+    /// <summary>
+    /// The active change this report updates, and the reporter's personal change it retired, if any (projects D4).
+    /// <list type="number">
+    /// <item>The scope's own active change.</item>
+    /// <item>For a report naming a Project, failing that: the reporter's own active personal change of that identity,
+    /// moved into the Project, with everything that hangs off it (spec change-visibility, Linking moves personal
+    /// work).</item>
+    /// <item>Otherwise a new change in the scope.</item>
+    /// </list>
+    /// When the Project already had the change and the reporter also has a personal one, that personal one is archived
+    /// with no folder, so it leaves the dashboard for its owner's history ("Linking when the Project already has the
+    /// change"). A double create loses on the scoped identity index, and RecordAsync's retry runs this again.
+    /// </summary>
+    private async Task<(Change Change, Guid? Retired)> FindOrAddChangeAsync(
         Repo repo,
         string name,
         ProgressSnapshot snapshot,
+        ChangeScope scope,
+        Guid? reporterId,
+        DateTimeOffset receivedAt,
         CancellationToken cancellationToken)
     {
         // FOR UPDATE: concurrent reports on one change take turns, so the only-if-newer check in UpsertAsync
         // compares against the committed state rather than a stale read. Only active changes take part in identity
         // (D5): a name reused after an archive gets a fresh row.
         var nameKey = IdentityKey.Of(name);
-        var change = await db.Changes
-            .FromSql($"SELECT * FROM changes WHERE repo_id = {repo.Id} AND name_key = {nameKey} AND archived_at IS NULL FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken);
+        var change = await LockActiveAsync(repo.Id, nameKey, scope, cancellationToken);
+        var personal = scope.ProjectId is not null && reporterId is { } reporter
+            ? await LockActiveAsync(repo.Id, nameKey, new ChangeScope(null, reporter), cancellationToken)
+            : null;
+
         if (change is not null)
         {
-            return change;
+            if (personal is null)
+            {
+                return (change, null);
+            }
+
+            personal.ArchivedAt = receivedAt;
+            return (change, personal.Id);
+        }
+
+        if (personal is not null)
+        {
+            personal.ProjectId = scope.ProjectId;
+            personal.OwnerMemberId = null;
+            return (personal, null);
         }
 
         change = new Change
@@ -290,10 +386,23 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             Name = name,
             NameKey = nameKey,
             Snapshot = snapshot,
+            ProjectId = scope.ProjectId,
+            OwnerMemberId = scope.OwnerMemberId,
         };
         db.Changes.Add(change);
-        return change;
+        return (change, null);
     }
+
+    private Task<Change?> LockActiveAsync(Guid repoId, string nameKey, ChangeScope scope, CancellationToken cancellationToken) =>
+        db.Changes
+            .FromSql($"""
+                SELECT * FROM changes
+                WHERE repo_id = {repoId} AND name_key = {nameKey} AND archived_at IS NULL
+                    AND project_id IS NOT DISTINCT FROM {scope.ProjectId}
+                    AND owner_member_id IS NOT DISTINCT FROM {scope.OwnerMemberId}
+                FOR UPDATE
+                """)
+            .SingleOrDefaultAsync(cancellationToken);
 
     private async Task<Agent> FindOrAddAgentAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {

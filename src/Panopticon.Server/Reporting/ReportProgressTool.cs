@@ -32,10 +32,11 @@ public sealed class ReportProgressTool
         [Description("Optional. The section number the agent is working on.")] int? section = null,
         [Description("Optional. The change folder's Markdown and YAML files: each a path relative to the folder, with '/' separators, and its content. Include tasks.md.")] IReadOnlyList<ChangeDocument>? documents = null,
         [Description("Optional. The archive folder's name, e.g. 2026-11-08-team-auth, when the change has been archived.")] string? archive = null,
+        [Description("Optional. The id of the Project this work is linked to, from the repo's .panopticon.json. Without it, the work is the reporter's own.")] string? project = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var input = Validate(repo, change, agent, tasksMarkdown, section, documents, archive);
+        var input = Validate(repo, change, agent, tasksMarkdown, section, documents, archive, project);
 
         // The member comes from the bearer token (design D16): the SDK carries the request's authenticated user into
         // the tool as RequestContext.User. A bootstrap-token report has no member.
@@ -49,6 +50,16 @@ public sealed class ReportProgressTool
         catch (TasksDocumentTooLargeException ex)
         {
             throw new McpException(ex.Message, ex);
+        }
+        catch (ReportRefusedException ex)
+        {
+            throw new McpException(ex.Message, ex);
+        }
+
+        // projects D4: a personal change retired by linking its repo leaves its owner's dashboard.
+        if (recorded.RetiredChangeId is { } retired)
+        {
+            broadcaster.PublishArchived(retired);
         }
 
         // D7: an archived report removes the card; a repeat of it (AlreadyArchived) changed nothing, so says nothing.
@@ -91,7 +102,8 @@ public sealed class ReportProgressTool
         string? tasksMarkdown,
         int? section,
         IReadOnlyList<ChangeDocument?>? documents = null,
-        string? archive = null)
+        string? archive = null,
+        string? project = null)
     {
         var missing = new List<string>();
         Require(repo?.Host, "repo.host", missing);
@@ -117,6 +129,15 @@ public sealed class ReportProgressTool
             DocumentChecks.CheckArchive(archive, changeName);
         }
 
+        // projects D4: a malformed id is refused the same way as one that isn't the reporter's.
+        Guid? projectId = null;
+        if (project is not null)
+        {
+            projectId = Guid.TryParse(project.Trim(), out var parsed)
+                ? parsed
+                : throw new McpException(ReportRefusedException.NotYourProject(project.Trim()));
+        }
+
         return new ReportInput(
             new RepoIdentity(repo!.Host.Trim(), repo.Owner.Trim(), repo.Name.Trim()),
             changeName,
@@ -126,6 +147,7 @@ public sealed class ReportProgressTool
         {
             Documents = checkedDocuments,
             Archive = archive,
+            ProjectId = projectId,
         };
     }
 

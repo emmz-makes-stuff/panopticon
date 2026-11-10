@@ -140,7 +140,8 @@ public static class ServerSetup
 
         services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
-            .WithTools<ReportProgressTool>();
+            .WithTools<ReportProgressTool>()
+            .WithTools<ListProjectsTool>();
 
         return builder;
     }

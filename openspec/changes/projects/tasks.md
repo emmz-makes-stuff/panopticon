@@ -12,9 +12,9 @@
 
 ## 3. Server: reporting into Projects
 
-- [ ] 3.1 Add the optional `project` to `ReportProgressArguments` and `ReportInput`. `ReportRecorder` resolves the scope inside the report's transaction, and refuses an unknown, malformed or not-a-member Project with an error naming the id and `list_projects` (D4). Verify "Reporting into a Project", "Report from a CLI without Projects" and the new "Change identity" scenarios ("Two scopes, two changes", "Two people, no Project") with recorder and MCP endpoint tests.
-- [ ] 3.2 Move personal work into a Project on its first linked report: the D4 lookup order, moving the reporter's own active personal change, or archiving it when the Project already has that change. Verify "Linking moves personal work" and "Linking when the Project already has the change" with recorder tests: one change afterwards, with all its events, time to archive counted from the first report, a teammate's personal change untouched, an archived change not moved, and the live events sent.
-- [ ] 3.3 Add the server's `list_projects` MCP tool, with its contracts in `Panopticon.Contracts` (D6). Verify with MCP endpoint tests for a member's Projects and roles (and nothing else) and for a bootstrap reporter getting every Project.
+- [x] 3.1 Add the optional `project` to `ReportProgressArguments` and `ReportInput`. `ReportRecorder` resolves the scope inside the report's transaction, and refuses an unknown, malformed or not-a-member Project with an error naming the id and `list_projects` (D4). Verify "Reporting into a Project", "Report from a CLI without Projects" and the new "Change identity" scenarios ("Two scopes, two changes", "Two people, no Project") with recorder and MCP endpoint tests.
+- [x] 3.2 Move personal work into a Project on its first linked report: the D4 lookup order, moving the reporter's own active personal change, or archiving it when the Project already has that change. Verify "Linking moves personal work" and "Linking when the Project already has the change" with recorder tests: one change afterwards, with all its events, time to archive counted from the first report, a teammate's personal change untouched, an archived change not moved, and the live events sent.
+- [x] 3.3 Add the server's `list_projects` MCP tool, with its contracts in `Panopticon.Contracts` (D6). Verify with MCP endpoint tests for a member's Projects and roles (and nothing else) and for a bootstrap reporter getting every Project.
 
 ## 4. Server: visibility everywhere
 
