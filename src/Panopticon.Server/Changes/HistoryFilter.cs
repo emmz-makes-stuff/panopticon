@@ -13,10 +13,21 @@ public sealed record OwnerKey(string Host, string Owner);
 /// <summary>
 /// The history's filters (filters-and-idle-cards D3, D4; spec: change-filters), one value each, all optional. A change
 /// matches when it matches every one given: repo and owner on the repo's keys, and member, machine and client when any
-/// of its agents has that value.
+/// of its agents has that value. <see cref="Project"/> matches the change's Project, and <see cref="Personal"/> the
+/// personal changes; with the viewer's visibility applied too, those are the viewer's own (projects D9).
 /// </summary>
-public sealed record HistoryFilter(RepoKey? Repo, OwnerKey? Owner, Guid? Member, string? Machine, string? Client)
+public sealed record HistoryFilter(
+    RepoKey? Repo,
+    OwnerKey? Owner,
+    Guid? Member,
+    string? Machine,
+    string? Client,
+    Guid? Project = null,
+    bool Personal = false)
 {
+    /// <summary>The <c>project</c> value that means the personal changes.</summary>
+    public const string PersonalValue = "personal";
+
     /// <summary>
     /// The filter from the query's values; a blank value means no filter. On a malformed value, <paramref name="error"/>
     /// names the parameter and the filter is null.
@@ -27,6 +38,7 @@ public sealed record HistoryFilter(RepoKey? Repo, OwnerKey? Owner, Guid? Member,
         string? member,
         string? machine,
         string? client,
+        string? project,
         [NotNullWhen(true)] out HistoryFilter? filter,
         [NotNullWhen(false)] out string? error)
     {
@@ -72,12 +84,42 @@ public sealed record HistoryFilter(RepoKey? Repo, OwnerKey? Owner, Guid? Member,
             memberId = parsed;
         }
 
-        filter = new HistoryFilter(repoKey, ownerKey, memberId, KeyOrNull(machine), KeyOrNull(client));
+        // projects D9: a Project id, or "personal".
+        Guid? projectId = null;
+        var personal = false;
+        if (!string.IsNullOrWhiteSpace(project))
+        {
+            if (string.Equals(project.Trim(), PersonalValue, StringComparison.OrdinalIgnoreCase))
+            {
+                personal = true;
+            }
+            else if (Guid.TryParse(project.Trim(), out var parsed))
+            {
+                projectId = parsed;
+            }
+            else
+            {
+                error = $"project must be a Project id or {PersonalValue}.";
+                return false;
+            }
+        }
+
+        filter = new HistoryFilter(repoKey, ownerKey, memberId, KeyOrNull(machine), KeyOrNull(client), projectId, personal);
         return true;
     }
 
     public IQueryable<Change> Apply(IQueryable<Change> changes)
     {
+        if (Project is { } project)
+        {
+            changes = changes.Where(c => c.ProjectId == project);
+        }
+
+        if (Personal)
+        {
+            changes = changes.Where(c => c.OwnerMemberId != null);
+        }
+
         if (Repo is { } repo)
         {
             changes = changes.Where(c => c.Repo.HostKey == repo.Host && c.Repo.OwnerKey == repo.Owner && c.Repo.NameKey == repo.Name);

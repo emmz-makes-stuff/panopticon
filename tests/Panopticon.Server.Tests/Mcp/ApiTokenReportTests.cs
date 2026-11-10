@@ -9,6 +9,7 @@ using Panopticon.Contracts;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Live;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
 
 namespace Panopticon.Server.Tests.Mcp;
@@ -220,7 +221,7 @@ public class ApiTokenReportTests(PostgresFixture postgres, S3Fixture s3)
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         var events = new[] { await subscription.Reader.ReadAsync(timeout.Token), await subscription.Reader.ReadAsync(timeout.Token) };
-        Assert.Contains(new ChangeEvent.Archived(personal), events);
+        Assert.Contains(new ChangeEvent.Archived(personal, new ChangeScope(null, await factory.MemberIdAsync(cancellationToken: Ct))), events);
         Assert.Contains(events, e => e is ChangeEvent.Updated u && u.Card.ChangeId == inPan);
     }
 
@@ -275,10 +276,18 @@ public class ApiTokenReportTests(PostgresFixture postgres, S3Fixture s3)
     {
         await using var factory = await FactoryAsync();
         using var browser = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
-        var sam = (await (await browser.PostApiAsync(MemberEndpoints.MembersPath, new { email = Sam, displayName = "Sam" }, Ct)).Content.ReadFromJsonAsync<MemberView>(Ct))!;
-        await ReportAsync(factory, await factory.CreateApiTokenAsync(Sam, cancellationToken: Ct));
+        var pan = await browser.CreateProjectAsync("PAN", Ct);
+        await browser.InviteToProjectAsync(pan, Sam, "viewer", Ct);
+        using (var samsBrowser = await factory.CreateSignedInClientAsync(Sam, Ct))
+        {
+            (await samsBrowser.SendApiAsync(HttpMethod.Patch, MemberEndpoints.MePath, new { displayName = "Sam" }, Ct)).Dispose();
+        }
 
-        (await browser.SendApiAsync(HttpMethod.Delete, $"{MemberEndpoints.MembersPath}/{sam.Id}", null, Ct)).Dispose();
+        // Sam reports into the Project they share, so the change is Emmz's to see too.
+        await ReportAsync(factory, await factory.CreateApiTokenAsync(Sam, cancellationToken: Ct), Report() with { Project = pan.ToString() });
+
+        var samId = await factory.MemberIdAsync(Sam, Ct);
+        (await browser.SendApiAsync(HttpMethod.Delete, $"{MemberEndpoints.MembersPath}/{samId}", null, Ct)).Dispose();
 
         Assert.Equal([("claude-code", "vm-1", (string?)"Sam")], Agents(await SingleCardAsync(browser)));
     }

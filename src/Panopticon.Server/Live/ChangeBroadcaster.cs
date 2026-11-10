@@ -1,9 +1,13 @@
 using System.Threading.Channels;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Live;
 
-/// <summary>What the live stream carries (change-documents-and-history D10): an updated card, or an archived change.</summary>
+/// <summary>
+/// What the live stream carries (change-documents-and-history D10): an updated card, or an archived change. Each carries
+/// its change's scope, so a subscription sends it only to a viewer who can see it (projects D3).
+/// </summary>
 public abstract record ChangeEvent
 {
     private ChangeEvent()
@@ -11,10 +15,10 @@ public abstract record ChangeEvent
     }
 
     /// <summary>A report moved an active change on; sent as <c>change-updated</c> with the card.</summary>
-    public sealed record Updated(ChangeCard Card) : ChangeEvent;
+    public sealed record Updated(ChangeCard Card, ChangeScope Scope) : ChangeEvent;
 
     /// <summary>The change was archived and leaves the live view; sent as <c>change-archived</c>.</summary>
-    public sealed record Archived(Guid ChangeId) : ChangeEvent;
+    public sealed record Archived(Guid ChangeId, ChangeScope Scope) : ChangeEvent;
 }
 
 /// <summary>
@@ -60,13 +64,18 @@ public sealed class ChangeBroadcaster
         return new Subscription(this, channel);
     }
 
-    public void Publish(ChangeCard card)
+    public void Publish(ChangeCard card, ChangeScope scope)
     {
         ArgumentNullException.ThrowIfNull(card);
-        Publish(new ChangeEvent.Updated(card));
+        ArgumentNullException.ThrowIfNull(scope);
+        Publish(new ChangeEvent.Updated(card, scope));
     }
 
-    public void PublishArchived(Guid changeId) => Publish(new ChangeEvent.Archived(changeId));
+    public void PublishArchived(Guid changeId, ChangeScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        Publish(new ChangeEvent.Archived(changeId, scope));
+    }
 
     private void Publish(ChangeEvent change)
     {

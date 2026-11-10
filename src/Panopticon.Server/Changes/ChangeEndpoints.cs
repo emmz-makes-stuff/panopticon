@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Panopticon.Server.Auth;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Changes;
 
@@ -22,14 +23,14 @@ public static class ChangeEndpoints
     {
         endpoints.MapGet(
             "/api/changes/{id:guid}",
-            async Task<Results<Ok<ChangePage>, NotFound>> (Guid id, ChangePages pages, CancellationToken cancellationToken) =>
-                await pages.GetAsync(id, cancellationToken) is { } page ? TypedResults.Ok(page) : TypedResults.NotFound())
+            async Task<Results<Ok<ChangePage>, NotFound>> (Guid id, Viewer viewer, ChangePages pages, CancellationToken cancellationToken) =>
+                await pages.GetAsync(id, viewer, cancellationToken) is { } page ? TypedResults.Ok(page) : TypedResults.NotFound())
             .RequireAuthorization(AuthPolicies.Member);
 
         endpoints.MapGet(
             "/api/changes/{id:guid}/documents/{**path}",
-            async Task<Results<Ok<RenderedDocument>, NotFound>> (Guid id, string path, ChangePages pages, CancellationToken cancellationToken) =>
-                await pages.RenderAsync(id, path, cancellationToken) is { } document ? TypedResults.Ok(document) : TypedResults.NotFound())
+            async Task<Results<Ok<RenderedDocument>, NotFound>> (Guid id, string path, Viewer viewer, ChangePages pages, CancellationToken cancellationToken) =>
+                await pages.RenderAsync(id, path, viewer, cancellationToken) is { } document ? TypedResults.Ok(document) : TypedResults.NotFound())
             .RequireAuthorization(AuthPolicies.Member);
 
         endpoints.MapGet(
@@ -42,6 +43,8 @@ public static class ChangeEndpoints
                 string? member,
                 string? machine,
                 string? client,
+                string? project,
+                Viewer viewer,
                 ChangePages pages,
                 CancellationToken cancellationToken) =>
             {
@@ -51,18 +54,19 @@ public static class ChangeEndpoints
                     return TypedResults.BadRequest($"limit must be between 1 and {ChangePages.HistoryPageSize}.");
                 }
 
-                if (!HistoryFilter.TryParse(repo, owner, member, machine, client, out var filter, out var error))
+                if (!HistoryFilter.TryParse(repo, owner, member, machine, client, project, out var filter, out var error))
                 {
                     return TypedResults.BadRequest(error);
                 }
 
-                return TypedResults.Ok(await pages.HistoryAsync(filter, before, size, cancellationToken));
+                return TypedResults.Ok(await pages.HistoryAsync(filter, before, size, viewer, cancellationToken));
             })
             .RequireAuthorization(AuthPolicies.Member);
 
         endpoints.MapGet(
             HistoryFiltersPath,
-            async (ChangePages pages, CancellationToken cancellationToken) => TypedResults.Ok(await pages.HistoryChoicesAsync(cancellationToken)))
+            async (Viewer viewer, ChangePages pages, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await pages.HistoryChoicesAsync(viewer, cancellationToken)))
             .RequireAuthorization(AuthPolicies.Member);
 
         return endpoints;

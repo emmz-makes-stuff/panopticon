@@ -1,5 +1,6 @@
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Live;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Tests.Live;
 
@@ -21,7 +22,7 @@ public class ChangeBroadcasterTests
         using var first = broadcaster.Subscribe();
         using var second = broadcaster.Subscribe();
 
-        broadcaster.Publish(Card(1));
+        broadcaster.Publish(Card(1), ChangeScope.Bootstrap);
 
         Assert.True(first.Reader.TryRead(out var a));
         Assert.True(second.Reader.TryRead(out var b));
@@ -37,9 +38,9 @@ public class ChangeBroadcasterTests
         var card = Card(1);
         var other = Card(2);
 
-        broadcaster.PublishArchived(card.ChangeId);
-        broadcaster.Publish(card);
-        broadcaster.Publish(other);
+        broadcaster.PublishArchived(card.ChangeId, ChangeScope.Bootstrap);
+        broadcaster.Publish(card, ChangeScope.Bootstrap);
+        broadcaster.Publish(other, ChangeScope.Bootstrap);
 
         Assert.True(subscriber.Reader.TryRead(out var first));
         Assert.Equal(card.ChangeId, Assert.IsType<ChangeEvent.Archived>(first).ChangeId);
@@ -56,7 +57,7 @@ public class ChangeBroadcasterTests
 
         for (var i = 0; i < ChangeBroadcaster.SubscriberCapacity + 5; i++)
         {
-            broadcaster.Publish(Card(i));
+            broadcaster.Publish(Card(i), ChangeScope.Bootstrap);
         }
 
         Assert.True(slow.Reader.TryRead(out var oldestKept));
@@ -71,11 +72,11 @@ public class ChangeBroadcasterTests
         using var second = broadcaster.Subscribe();
         var changeId = Guid.NewGuid();
 
-        broadcaster.PublishArchived(changeId);
+        broadcaster.PublishArchived(changeId, ChangeScope.Bootstrap);
 
         Assert.True(first.Reader.TryRead(out var a));
         Assert.True(second.Reader.TryRead(out var b));
-        Assert.Equal(new ChangeEvent.Archived(changeId), a);
+        Assert.Equal(new ChangeEvent.Archived(changeId, ChangeScope.Bootstrap), a);
         Assert.Equal(a, b);
     }
 
@@ -86,7 +87,7 @@ public class ChangeBroadcasterTests
         var subscription = broadcaster.Subscribe();
 
         subscription.Dispose();
-        broadcaster.Publish(Card(1));
+        broadcaster.Publish(Card(1), ChangeScope.Bootstrap);
 
         Assert.Equal(0, broadcaster.SubscriberCount);
         Assert.True(subscription.Reader.Completion.IsCompleted);

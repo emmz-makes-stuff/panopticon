@@ -18,9 +18,9 @@
 
 ## 4. Server: visibility everywhere
 
-- [ ] 4.1 Add `Viewer` and `VisibleTo` (D2), and require a `Viewer` in `ChangeCards`, `ChangePages` (page, documents, history and history choices) and `MetricsReader`, so hidden changes answer 404 and choices don't leak. Verify "Who sees a change", "Hidden changes don't exist" and "Development bootstrap reports" with endpoint tests, plus the outsider sweep test over every change-reading endpoint.
-- [ ] 4.2 Scope the live stream (D3): events carry their change's scope, each subscription filters by its viewer, and the keep-alive re-check reloads the viewer's Projects. Verify "Live updates are scoped" with `StreamAsync` tests: another Project's report isn't sent, and a viewer removed mid-stream stops getting updates after one keep-alive.
-- [ ] 4.3 Add the Project to `ChangeCard`, history entries and `ChangePage` (`project: { id, code, name } | null`, `personal`). Add the `project` filter (a Project id or `personal`) to `HistoryFilter` and the history and metrics endpoints, and `projects` to `HistoryChoices` (D9). Verify "Filter by Project" and "Project filter choices" for the history and metrics with endpoint tests, and that a Project the viewer isn't in matches nothing.
+- [x] 4.1 Add `Viewer` and `VisibleTo` (D2), and require a `Viewer` in `ChangeCards`, `ChangePages` (page, documents, history and history choices) and `MetricsReader`, so hidden changes answer 404 and choices don't leak. Verify "Who sees a change", "Hidden changes don't exist" and "Development bootstrap reports" with endpoint tests, plus the outsider sweep test over every change-reading endpoint.
+- [x] 4.2 Scope the live stream (D3): events carry their change's scope, each subscription filters by its viewer, and the keep-alive re-check reloads the viewer's Projects. Verify "Live updates are scoped" with `StreamAsync` tests: another Project's report isn't sent, and a viewer removed mid-stream stops getting updates after one keep-alive.
+- [x] 4.3 Add the Project to `ChangeCard`, history entries and `ChangePage` (`project: { id, code, name } | null`, `personal`). Add the `project` filter (a Project id or `personal`) to `HistoryFilter` and the history and metrics endpoints, and `projects` to `HistoryChoices` (D9). Verify "Filter by Project" and "Project filter choices" for the history and metrics with endpoint tests, and that a Project the viewer isn't in matches nothing.
 
 ## 5. Server: members rescoped
 

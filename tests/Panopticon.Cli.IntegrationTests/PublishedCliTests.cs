@@ -9,6 +9,7 @@ using ModelContextProtocol.Protocol;
 using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Cli.Tests.Infrastructure;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
 
 namespace Panopticon.Cli.IntegrationTests;
@@ -72,7 +73,7 @@ public class PublishedCliTests(PostgresFixture postgres, S3Fixture s3)
         Assert.StartsWith("Overall 3/4", text, StringComparison.Ordinal);
 
         await using var db = server.NewDb();
-        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         var agent = Assert.Single(card.Agents);
         Assert.Equal(("e2e-agent", Environment.MachineName), (agent.Client, agent.Machine));

@@ -8,6 +8,7 @@ using Panopticon.Server.Auth;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Live;
 using Panopticon.Server.Progress;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Reporting;
 
@@ -59,17 +60,17 @@ public sealed class ReportProgressTool
         // projects D4: a personal change retired by linking its repo leaves its owner's dashboard.
         if (recorded.RetiredChangeId is { } retired)
         {
-            broadcaster.PublishArchived(retired);
+            broadcaster.PublishArchived(retired, new ChangeScope(null, input.Agent.MemberId));
         }
 
         // D7: an archived report removes the card; a repeat of it (AlreadyArchived) changed nothing, so says nothing.
         switch (recorded.Archive)
         {
             case ArchiveOutcome.Archived:
-                broadcaster.PublishArchived(recorded.ChangeId);
+                broadcaster.PublishArchived(recorded.ChangeId, recorded.Scope);
                 break;
             case ArchiveOutcome.None when await cards.GetAsync(recorded.ChangeId, cancellationToken) is { } card:
-                broadcaster.Publish(card);
+                broadcaster.Publish(card, recorded.Scope);
                 break;
         }
 

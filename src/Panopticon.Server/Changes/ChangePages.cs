@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Changes;
 
@@ -23,14 +24,16 @@ public sealed record DocumentEntry(string Path, string Kind, string Title, int S
 /// <summary>A rendered document: HTML made safe by <see cref="DocumentRenderer"/>.</summary>
 public sealed record RenderedDocument(string Path, string Html);
 
-/// <summary>One archived change in the history (spec: change-history, History list).</summary>
+/// <summary>One archived change in the history (spec: change-history, History list), with its Project as its card has it.</summary>
 public sealed record HistoryEntry(
     Guid ChangeId,
     CardRepo Repo,
     string Change,
     DateTimeOffset ArchivedAt,
     string ArchiveFolder,
-    IReadOnlyList<CardAgent> Agents);
+    IReadOnlyList<CardAgent> Agents,
+    CardProject? Project,
+    bool Personal);
 
 /// <summary>A page of the history, newest archive first; <see cref="NextBefore"/> is the next page's cursor.</summary>
 public sealed record HistoryPage(IReadOnlyList<HistoryEntry> Changes, DateTimeOffset? NextBefore);
@@ -45,21 +48,25 @@ public sealed record MemberChoice(Guid Id, string DisplayName);
 /// The history's filter choices (filters-and-idle-cards D5; spec: change-filters, Filter choices): the distinct values
 /// among archived changes, each sorted case-insensitively.
 /// </summary>
+/// <param name="Projects">The viewer's Projects with an archived change, by code (projects D9).</param>
+/// <param name="Personal">Whether the viewer has an archived personal change, so "Personal" is offered.</param>
 public sealed record HistoryChoices(
     IReadOnlyList<CardRepo> Repos,
     IReadOnlyList<OwnerChoice> Owners,
     IReadOnlyList<MemberChoice> Members,
     IReadOnlyList<string> Machines,
-    IReadOnlyList<string> Clients);
+    IReadOnlyList<string> Clients,
+    IReadOnlyList<CardProject> Projects,
+    bool Personal);
 
 /// <summary>Reads change pages, documents and the history for the read API.</summary>
 public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDocumentStore store, DocumentRenderer renderer)
 {
     public const int HistoryPageSize = 50;
 
-    public async Task<ChangePage?> GetAsync(Guid changeId, CancellationToken cancellationToken)
+    public async Task<ChangePage?> GetAsync(Guid changeId, Viewer viewer, CancellationToken cancellationToken)
     {
-        var change = await cards.Query().SingleOrDefaultAsync(c => c.Id == changeId, cancellationToken);
+        var change = await cards.Query().VisibleTo(viewer).SingleOrDefaultAsync(c => c.Id == changeId, cancellationToken);
         if (change is null)
         {
             return null;
@@ -78,10 +85,15 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             Order(documents.Select(d => Describe(d.Path, d.SizeBytes))));
     }
 
-    /// <summary>The document rendered, or null when the change has no document at that path.</summary>
+    /// <summary>The document rendered, or null when the change has no document at that path or the viewer can't see it.</summary>
     /// <exception cref="InvalidOperationException">The document is listed but its content is missing from storage.</exception>
-    public async Task<RenderedDocument?> RenderAsync(Guid changeId, string path, CancellationToken cancellationToken)
+    public async Task<RenderedDocument?> RenderAsync(Guid changeId, string path, Viewer viewer, CancellationToken cancellationToken)
     {
+        if (!await db.Changes.AsNoTracking().VisibleTo(viewer).AnyAsync(c => c.Id == changeId, cancellationToken))
+        {
+            return null;
+        }
+
         var document = await db.ChangeDocuments
             .AsNoTracking()
             .SingleOrDefaultAsync(d => d.ChangeId == changeId && d.Path == path, cancellationToken);
@@ -99,9 +111,14 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
     /// Archived changes matching <paramref name="filter"/>, archived strictly before <paramref name="before"/> (all when
     /// null), newest first. The cursor works the same within a filter (filters-and-idle-cards D3).
     /// </summary>
-    public async Task<HistoryPage> HistoryAsync(HistoryFilter filter, DateTimeOffset? before, int limit, CancellationToken cancellationToken)
+    public async Task<HistoryPage> HistoryAsync(
+        HistoryFilter filter,
+        DateTimeOffset? before,
+        int limit,
+        Viewer viewer,
+        CancellationToken cancellationToken)
     {
-        var query = filter.Apply(cards.Query().Where(c => c.ArchivedAt != null));
+        var query = filter.Apply(cards.Query().VisibleTo(viewer).Where(c => c.ArchivedAt != null));
         if (before is { } given)
         {
             // Npgsql writes only UTC offsets to timestamptz, and a cursor with any other offset is the same instant.
@@ -137,18 +154,18 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             [.. changes.Select(c =>
             {
                 var card = ChangeCards.ToCard(c);
-                return new HistoryEntry(c.Id, card.Repo, card.Change, c.ArchivedAt!.Value, c.ArchiveFolder!, card.Agents);
+                return new HistoryEntry(c.Id, card.Repo, card.Change, c.ArchivedAt!.Value, c.ArchiveFolder!, card.Agents, card.Project, card.Personal);
             })],
             next);
     }
 
     /// <summary>
-    /// The filter choices among archived changes only. Values that differ only in case are one choice, shown in one of
+    /// The filter choices among the archived changes the viewer can see, so a hidden change leaks no value. Values that differ only in case are one choice, shown in one of
     /// the casings reported. An agent with no member adds no person.
     /// </summary>
-    public async Task<HistoryChoices> HistoryChoicesAsync(CancellationToken cancellationToken)
+    public async Task<HistoryChoices> HistoryChoicesAsync(Viewer viewer, CancellationToken cancellationToken)
     {
-        var archived = db.Changes.AsNoTracking().Where(c => c.ArchivedAt != null);
+        var archived = db.Changes.AsNoTracking().VisibleTo(viewer).Where(c => c.ArchivedAt != null);
         var repos = await archived
             .Select(c => new { c.Repo.Host, c.Repo.Owner, c.Repo.Name, c.Repo.HostKey, c.Repo.OwnerKey })
             .Distinct()
@@ -167,6 +184,14 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        // Only Projects the viewer belongs to can appear: VisibleTo hides the rest.
+        var projects = await archived
+            .Where(c => c.Project != null)
+            .Select(c => new { c.Project!.Id, c.Project.Code, c.Project.Name })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var personal = await archived.AnyAsync(c => c.OwnerMemberId == viewer.MemberId, cancellationToken);
+
         var byLabel = StringComparer.OrdinalIgnoreCase;
         return new HistoryChoices(
             [.. repos
@@ -182,7 +207,9 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
                 .Select(a => new MemberChoice(a.MemberId!.Value, a.DisplayName!))
                 .OrderBy(m => m.DisplayName, byLabel).ThenBy(m => m.Id)],
             [.. agents.DistinctBy(a => a.MachineNameKey, StringComparer.Ordinal).Select(a => a.MachineName).Order(byLabel)],
-            [.. agents.DistinctBy(a => a.ClientNameKey, StringComparer.Ordinal).Select(a => a.ClientName).Order(byLabel)]);
+            [.. agents.DistinctBy(a => a.ClientNameKey, StringComparer.Ordinal).Select(a => a.ClientName).Order(byLabel)],
+            [.. projects.Select(p => new CardProject(p.Id, p.Code, p.Name)).OrderBy(p => p.Code, byLabel)],
+            personal);
     }
 
     /// <summary>Proposal, design, tasks, specs by capability, devlog notes newest first, then anything else by path.</summary>

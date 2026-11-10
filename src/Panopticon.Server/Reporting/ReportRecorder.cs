@@ -4,6 +4,7 @@ using Npgsql;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Progress;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Reporting;
 
@@ -52,17 +53,17 @@ public enum ArchiveOutcome
 /// <summary>The outcome of recording a report: the change and its newly computed progress.</summary>
 /// <param name="RetiredChangeId">
 /// The reporter's personal change this report retired, because its repo is now linked to a Project that already had
-/// the change (projects D4): it left the dashboard, so its owner's view needs an archived event.
+/// the change (projects D4): it left the dashboard, so its owner's view needs an archived event. Its scope is the
+/// reporter's own.
 /// </param>
+/// <param name="Scope">The change's scope after this report, which its live events carry (projects D3).</param>
 public sealed record RecordedReport(
     Guid ChangeId,
     ProgressSnapshot Snapshot,
     DateTimeOffset ReceivedAt,
+    ChangeScope Scope,
     ArchiveOutcome Archive = ArchiveOutcome.None,
     Guid? RetiredChangeId = null);
-
-/// <summary>A change's scope (projects D1): a Project, a member's personal work, or neither (a bootstrap report).</summary>
-public sealed record ChangeScope(Guid? ProjectId, Guid? OwnerMemberId);
 
 /// <summary>
 /// A report into a Project that doesn't exist or that the reporter isn't a member of (spec progress-reporting,
@@ -171,7 +172,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
                         cancellationToken)
                 is { } archived)
         {
-            return new RecordedReport(archived.Id, archived.Snapshot, receivedAt, ArchiveOutcome.AlreadyArchived);
+            return new RecordedReport(archived.Id, archived.Snapshot, receivedAt, scope, ArchiveOutcome.AlreadyArchived);
         }
 
         var (change, retired) = await FindOrAddChangeAsync(repo, report.ChangeName, snapshot, scope, report.Agent.MemberId, receivedAt, cancellationToken);
@@ -239,6 +240,7 @@ public sealed class ReportRecorder(PanopticonDb db, IDocumentStore documents, Ti
             change.Id,
             snapshot,
             receivedAt,
+            scope,
             report.Archive is null ? ArchiveOutcome.None : ArchiveOutcome.Archived,
             retired);
     }

@@ -5,7 +5,9 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Panopticon.Server.Auth;
+using Panopticon.Server.Data;
 using Panopticon.Server.Live;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Dashboard;
 
@@ -45,20 +47,30 @@ public static class DashboardEndpoints
         endpoints.MapGet(SettingsPath, (IOptions<ActivityOptions> activity) => TypedResults.Ok(DashboardSettings.From(activity.Value)))
             .RequireAuthorization(AuthPolicies.Member);
 
-        endpoints.MapGet(ChangesPath, async (ChangeCards cards, CancellationToken cancellationToken) =>
-            TypedResults.Ok(await cards.ListAsync(cancellationToken)))
+        endpoints.MapGet(ChangesPath, async (Viewer viewer, ChangeCards cards, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await cards.ListAsync(viewer, cancellationToken)))
             .RequireAuthorization(AuthPolicies.Member);
 
         endpoints.MapGet(
             EventsPath,
-            (HttpResponse response, ClaimsPrincipal user, SessionStore sessions, ChangeBroadcaster broadcaster, CancellationToken cancellationToken) =>
+            (
+                HttpResponse response,
+                ClaimsPrincipal user,
+                Viewer viewer,
+                SessionStore sessions,
+                PanopticonDb db,
+                ChangeBroadcaster broadcaster,
+                CancellationToken cancellationToken) =>
             {
                 var sessionId = user.GetSessionId()!.Value;
                 return TypedResults.ServerSentEvents(StreamAsync(
                     broadcaster,
+                    viewer,
                     token => SendHeadersAsync(response, token),
                     keepAlive,
-                    token => sessions.IsLiveAsync(sessionId, token),
+                    async token => await sessions.IsLiveAsync(sessionId, token)
+                        ? await Viewer.LoadAsync(db, viewer.MemberId, token)
+                        : null,
                     cancellationToken));
             })
             .RequireAuthorization(AuthPolicies.Member);
@@ -74,18 +86,21 @@ public static class DashboardEndpoints
     }
 
     /// <summary>
-    /// Change updates for one connection; the subscription ends with the request. Once subscribed, <paramref name="subscribed"/>
-    /// runs (the endpoint starts the response there), so a browser's <c>EventSource</c> opens at once instead of on the first
-    /// event, and the refresh it does on open can't miss an update. Whenever nothing has been sent for
-    /// <paramref name="keepAlive"/>, a <see cref="PingEvent"/> (with null data) goes instead. About as often,
-    /// <paramref name="stillAllowed"/> re-checks the viewer (team-auth D11): once it says no (signed out, removed), the
-    /// stream ends, and the browser's reconnect gets a 401.
+    /// Change updates for one connection, only those <paramref name="viewer"/> can see (projects D3); the subscription
+    /// ends with the request. Once subscribed, <paramref name="subscribed"/> runs (the endpoint starts the response
+    /// there), so a browser's <c>EventSource</c> opens at once instead of on the first event, and the refresh it does on
+    /// open can't miss an update. Whenever nothing has been sent for <paramref name="keepAlive"/>, a
+    /// <see cref="PingEvent"/> (with null data) goes instead. About as often, <paramref name="recheck"/> re-checks the
+    /// viewer (team-auth D11) and returns them as they are now, with their Projects reloaded, so joining or leaving one
+    /// takes effect within a keep-alive. Once it returns null (signed out, removed), the stream ends, and the browser's
+    /// reconnect gets a 401.
     /// </summary>
     internal static async IAsyncEnumerable<SseItem<object?>> StreamAsync(
         ChangeBroadcaster broadcaster,
+        Viewer viewer,
         Func<CancellationToken, Task>? subscribed,
         TimeSpan keepAlive,
-        Func<CancellationToken, Task<bool>>? stillAllowed,
+        Func<CancellationToken, Task<Viewer?>>? recheck,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var subscription = broadcaster.Subscribe();
@@ -96,6 +111,7 @@ public static class DashboardEndpoints
 
         var reader = subscription.Reader;
         var lastCheck = Stopwatch.GetTimestamp();
+        var lastSent = lastCheck;
         var waiting = reader.WaitToReadAsync(cancellationToken).AsTask();
         while (true)
         {
@@ -107,12 +123,17 @@ public static class DashboardEndpoints
                 if (await Task.WhenAny(waiting, quiet) == quiet)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (stillAllowed is not null && !await stillAllowed(cancellationToken))
+                    if (recheck is not null)
                     {
-                        yield break;
+                        if (await recheck(cancellationToken) is not { } current)
+                        {
+                            yield break;
+                        }
+
+                        viewer = current;
                     }
 
-                    lastCheck = Stopwatch.GetTimestamp();
+                    lastCheck = lastSent = Stopwatch.GetTimestamp();
                     yield return new SseItem<object?>(null, PingEvent);
                     continue;
                 }
@@ -126,27 +147,42 @@ public static class DashboardEndpoints
             }
 
             // A busy stream never goes quiet, so it re-checks on the same schedule before sending.
-            if (stillAllowed is not null && Stopwatch.GetElapsedTime(lastCheck) >= keepAlive)
+            if (recheck is not null && Stopwatch.GetElapsedTime(lastCheck) >= keepAlive)
             {
-                if (!await stillAllowed(cancellationToken))
+                if (await recheck(cancellationToken) is not { } current)
                 {
                     yield break;
                 }
 
+                viewer = current;
                 lastCheck = Stopwatch.GetTimestamp();
             }
 
             while (reader.TryRead(out var change))
             {
-                yield return change switch
+                // projects D3: only the changes this viewer can see.
+                var (scope, item) = change switch
                 {
-                    ChangeEvent.Updated(var card) => new SseItem<object?>(card, ChangeUpdatedEvent)
+                    ChangeEvent.Updated(var card, var cardScope) => (cardScope, new SseItem<object?>(card, ChangeUpdatedEvent)
                     {
                         EventId = card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
-                    },
-                    ChangeEvent.Archived(var changeId) => new SseItem<object?>(new ArchivedChange(changeId), ChangeArchivedEvent),
+                    }),
+                    ChangeEvent.Archived(var changeId, var archivedScope) =>
+                        (archivedScope, new SseItem<object?>(new ArchivedChange(changeId), ChangeArchivedEvent)),
                     _ => throw new UnreachableException(),
                 };
+                if (viewer.CanSee(scope))
+                {
+                    lastSent = Stopwatch.GetTimestamp();
+                    yield return item;
+                }
+            }
+
+            // Busy with other scopes' changes, the stream would send this viewer nothing and never go quiet: ping.
+            if (Stopwatch.GetElapsedTime(lastSent) >= keepAlive)
+            {
+                lastSent = Stopwatch.GetTimestamp();
+                yield return new SseItem<object?>(null, PingEvent);
             }
 
             waiting = reader.WaitToReadAsync(cancellationToken).AsTask();

@@ -4,6 +4,7 @@ using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Cli.Tests.Infrastructure;
 using Panopticon.Contracts;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
 
 [assembly: AssemblyFixture(typeof(PostgresFixture))]
@@ -198,7 +199,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(new SectionSummary(2, "Core", new ProgressCount(1, 2)), progress.CurrentSection);
 
         await using var db = server.NewDb();
-        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         Assert.Equal("walking-skeleton", card.Change);
         var agent = Assert.Single(card.Agents);
@@ -217,7 +218,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         Assert.True(result.IsError is not true, BridgeHarness.Text(result));
         await using var db = server.NewDb();
-        var card = Assert.Single(await new ChangeCards(db).ListAsync(Ct));
+        var card = Assert.Single(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
         Assert.Equal(new CardRepo("github.com", "emmz", "panopticon"), card.Repo);
         Assert.DoesNotContain("secret", bridge.Log, StringComparison.Ordinal);
         Assert.DoesNotContain("secret", BridgeHarness.Text(result), StringComparison.Ordinal);
@@ -268,7 +269,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.DoesNotContain("not-the-right-token", bridge.Log, StringComparison.Ordinal);
 
         await using var db = server.NewDb();
-        Assert.Empty(await new ChangeCards(db).ListAsync(Ct));
+        Assert.Empty(await new ChangeCards(db).ListAsync(await Viewer.LoadAsync(db, await server.MemberIdAsync(cancellationToken: Ct), Ct), Ct));
     }
 
     [Fact]
