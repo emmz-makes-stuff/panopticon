@@ -55,6 +55,11 @@ export interface App {
   upsert(card: ChangeCard): boolean;
   /** Takes a change's card away: it was archived, and lives in the history now. Returns whether it was shown. */
   remove(changeId: string): boolean;
+  /**
+   * The viewer left a Project, or was removed (spec change-visibility, "Membership changes take effect live"): its cards
+   * go, and a filter on it is cleared, so its choice goes from the bar too.
+   */
+  leaveProject(projectId: string): void;
   /** Loads every card from the server and renders them. Throws if the load fails, leaving the cards as they were. */
   refresh(): Promise<void>;
   /** Shows whether the live connection is up. */
@@ -245,6 +250,24 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
       }
 
       return true;
+    },
+
+    leaveProject(projectId) {
+      const left = projectId.toLowerCase();
+      for (const [changeId, entry] of shown) {
+        if (entry.card.project?.id.toLowerCase() === left) {
+          shown.delete(changeId);
+        }
+      }
+
+      cardsChanged();
+      if (filters.filters.project === left) {
+        const rest = { ...filters.filters };
+        delete rest.project;
+        changeFilters(rest);
+      } else if (loaded) {
+        layout();
+      }
     },
 
     async refresh() {

@@ -66,9 +66,9 @@
 
 ## 11. Review fixes: membership changes take effect live
 
-- [ ] 11.1 On the server: after a Project membership change commits (invite, role change, removal or leaving, and server-wide removal), update the scope of that member's open subscriptions at once, and send them a `projects-changed` event naming the Project and whether they're now in it. Verify with `StreamAsync` and endpoint tests: removed mid-stream, no later update of that Project arrives and the event is sent; invited mid-stream, the event arrives and the Project's updates follow.
-- [ ] 11.2 On the web: on `projects-changed`, the dashboard drops a left Project's cards and filter choice, or refetches the cards for a joined one. An open change page of a left Project shows "not found". Verify the new "Membership changes take effect live" scenarios with view tests.
-- [ ] 11.3 Run `make gates` and `make e2e`, then stop for Emmz to check in two browsers: Sam removed while watching the dashboard and a change page, and Sam invited while watching.
+- [x] 11.1 On the server: after a Project membership change commits (invite, role change, removal or leaving, and server-wide removal), update the scope of that member's open subscriptions at once, and send them a `projects-changed` event naming the Project and whether they're now in it. Verify with `StreamAsync` and endpoint tests: removed mid-stream, no later update of that Project arrives and the event is sent; invited mid-stream, the event arrives and the Project's updates follow.
+- [x] 11.2 On the web: on `projects-changed`, the dashboard drops a left Project's cards and filter choice, or refetches the cards for a joined one. An open change page of a left Project shows "not found". Verify the new "Membership changes take effect live" scenarios with view tests.
+- [x] 11.3 Run `make gates` and `make e2e`, then stop for Emmz to check in two browsers: Sam removed while watching the dashboard and a change page, and Sam invited while watching.
 
 ## Workflow follow-up
 

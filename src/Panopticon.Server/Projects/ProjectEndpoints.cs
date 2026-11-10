@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Data;
+using Panopticon.Server.Live;
 
 namespace Panopticon.Server.Projects;
 
@@ -68,6 +69,7 @@ public static class ProjectEndpoints
         CreateProjectRequest request,
         ClaimsPrincipal user,
         PanopticonDb db,
+        ChangeBroadcaster broadcaster,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -105,6 +107,7 @@ public static class ProjectEndpoints
             return SignInEndpoints.Problem(HttpStatusCode.Conflict, $"The code {code} is taken. Choose another.");
         }
 
+        broadcaster.PublishMembershipChanged(memberId, project.Id, isMember: true);
         return TypedResults.Created(ProjectPath(project.Id), new ProjectView(project.Id, project.Name, project.Code, ProjectRoles.Owner));
     }
 
@@ -152,6 +155,7 @@ public static class ProjectEndpoints
         InviteToProjectRequest request,
         ClaimsPrincipal user,
         PanopticonDb db,
+        ChangeBroadcaster broadcaster,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -203,6 +207,7 @@ public static class ProjectEndpoints
         db.ProjectMembers.Add(membership);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        broadcaster.PublishMembershipChanged(member.Id, id, isMember: true);
         return TypedResults.Created(
             $"{MembersPath(id)}/{member.Id}",
             new ProjectMemberView(member.Id, member.Email, member.DisplayName, membership.Role, now));
@@ -215,6 +220,7 @@ public static class ProjectEndpoints
         ChangeRoleRequest request,
         ClaimsPrincipal user,
         PanopticonDb db,
+        ChangeBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -244,18 +250,20 @@ public static class ProjectEndpoints
         membership.Role = request.Role!;
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        broadcaster.PublishMembershipChanged(memberId, id, isMember: true);
         return TypedResults.Ok(await DetailsAsync(db, id, user.GetRequiredMemberId(), cancellationToken));
     }
 
     /// <summary>
     /// An owner removes a member, or a member leaves (spec projects, "Changing roles and removing"). The last owner
-    /// can't go. Their open streams stop showing the Project on the next keep-alive check (design D3).
+    /// can't go. Their open pages drop the Project at once (design D3, §11).
     /// </summary>
     internal static async Task<IResult> RemoveAsync(
         Guid id,
         Guid memberId,
         ClaimsPrincipal user,
         PanopticonDb db,
+        ChangeBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         var callerId = user.GetRequiredMemberId();
@@ -280,6 +288,7 @@ public static class ProjectEndpoints
         db.ProjectMembers.Remove(membership);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        broadcaster.PublishMembershipChanged(memberId, id, isMember: false);
         return TypedResults.NoContent();
     }
 

@@ -28,6 +28,10 @@ public sealed class Viewer
     /// <summary>The Projects the member belongs to. A list, not a set, so EF can translate <c>Contains</c> on it.</summary>
     public IReadOnlyList<Guid> ProjectIds { get; }
 
+    /// <summary>The same member, now in <paramref name="projectId"/> or not.</summary>
+    public Viewer WithProject(Guid projectId, bool isMember) =>
+        new(MemberId, isMember ? ProjectIds.Append(projectId).Distinct() : ProjectIds.Where(p => p != projectId));
+
     /// <summary>
     /// Whether a change in this scope is visible to the viewer: the in-memory twin of
     /// <see cref="Visibility.VisibleTo"/>, for the live stream (D3). The two must say the same.

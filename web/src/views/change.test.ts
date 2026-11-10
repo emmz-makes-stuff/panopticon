@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CHANGE_ARCHIVED, CHANGE_UPDATED } from "../live";
+import { CHANGE_ARCHIVED, CHANGE_UPDATED, PROJECTS_CHANGED } from "../live";
 import { savedReturn, signedIn, signedOut, startTestShell } from "../testShell";
 import { card, FakeEventSource, q, until } from "../testing";
 import type { ChangeMetrics, ChangePage, DocumentEntry, SectionMetric } from "../types";
@@ -453,5 +453,36 @@ describe("change page Project label", () => {
     await until(() => root.querySelector(".change-repo") !== null);
 
     expect(q(root, ".change-repo .project-code.personal").textContent).toBe("Personal");
+  });
+});
+
+// Spec change-visibility, "Membership changes take effect live" (Removed while on a change page; projects D3, §11).
+describe("change page membership changes", () => {
+  const PAN = { id: "Pan-Id", code: "PAN", name: "Panopticon" };
+  const panPage = () =>
+    changePage({ card: card({ changeId: "c1", change: "team-auth", project: PAN }) });
+
+  it("Removed while on a change page: the page says the change wasn't found, and stops following", async () => {
+    let removed = false;
+    const server = serverFor(panPage()).on("GET", "/api/changes/c1", () =>
+      removed ? { status: 404, body: { detail: "Not found." } } : { status: 200, body: panPage() },
+    );
+    const { root, heading } = await startTestShell("/changes/c1", server);
+    await until(() => shownPath(root) === "proposal.md");
+    const source = FakeEventSource.latest();
+    source.open();
+
+    // Leaving another Project, or being invited, leaves the page alone.
+    const before = server.to("GET", "/api/changes/c1").length;
+    source.emit(PROJECTS_CHANGED, JSON.stringify({ projectId: "acme-id", member: false }));
+    source.emit(PROJECTS_CHANGED, JSON.stringify({ projectId: PAN.id, member: true }));
+    expect(server.to("GET", "/api/changes/c1")).toHaveLength(before);
+
+    removed = true;
+    source.emit(PROJECTS_CHANGED, JSON.stringify({ projectId: "pan-id", member: false }));
+    await until(() => heading() === "Change not found");
+
+    expect(root.querySelector("article.doc")).toBeNull();
+    expect(source.closed).toBe(true);
   });
 });

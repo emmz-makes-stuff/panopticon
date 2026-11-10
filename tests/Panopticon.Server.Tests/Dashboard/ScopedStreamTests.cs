@@ -2,6 +2,7 @@ using System.Net.ServerSentEvents;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Contracts;
+using Panopticon.Server.Auth;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Live;
 using Panopticon.Server.Projects;
@@ -9,7 +10,7 @@ using Panopticon.Server.Tests.Infrastructure;
 
 namespace Panopticon.Server.Tests.Dashboard;
 
-// projects D3; spec change-visibility: "Live updates are scoped" (Another Project's report, Removed while watching).
+// projects D3; spec change-visibility: "Live updates are scoped" and "Membership changes take effect live".
 public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
 {
     private static readonly (Guid Kit, Guid Emmz, Guid Pan, Guid Acme) _ids = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
@@ -117,6 +118,172 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
         await ReportAsync(factory, kitToken, "kit-scratch", project: null);
 
         Assert.Equal("kit-scratch", await NextUpdatedChangeAsync(reader, timeout.Token));
+    }
+
+    // spec change-visibility, "Membership changes take effect live" (Removed while watching); projects D3, §11.
+    [Fact]
+    public async Task A_viewer_removed_from_a_Project_gets_projects_changed_and_no_later_update_of_it()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        await using var stream = DashboardEndpoints.StreamAsync(
+                broadcaster,
+                new Viewer(_ids.Kit, [_ids.Pan]),
+                subscribed: null,
+                TimeSpan.FromMinutes(10),
+                recheck: null,
+                Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+
+        broadcaster.PublishMembershipChanged(_ids.Emmz, _ids.Pan, isMember: false);
+        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, isMember: false);
+        broadcaster.Publish(Card("pan-after"), new ChangeScope(_ids.Pan, null));
+        var sentinel = Card("kit-scratch");
+        broadcaster.Publish(sentinel, new ChangeScope(null, _ids.Kit));
+
+        Assert.True(await moving);
+        Assert.Equal(DashboardEndpoints.ProjectsChangedEvent, stream.Current.EventType);
+        Assert.Equal(new ProjectsChanged(_ids.Pan, Member: false), stream.Current.Data);
+        Assert.Equal(sentinel, await NextDataAsync(stream));
+    }
+
+    // spec change-visibility, "Membership changes take effect live" (Invited while watching).
+    [Fact]
+    public async Task A_viewer_invited_to_a_Project_gets_projects_changed_then_its_updates()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        await using var stream = DashboardEndpoints.StreamAsync(
+                broadcaster,
+                new Viewer(_ids.Kit, []),
+                subscribed: null,
+                TimeSpan.FromMinutes(10),
+                recheck: null,
+                Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+
+        broadcaster.Publish(Card("pan-before"), new ChangeScope(_ids.Pan, null));
+        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, isMember: true);
+        var after = Card("pan-after");
+        broadcaster.Publish(after, new ChangeScope(_ids.Pan, null));
+
+        Assert.True(await moving);
+        Assert.Equal(new ProjectsChanged(_ids.Pan, Member: true), stream.Current.Data);
+        Assert.Equal(after, await NextDataAsync(stream));
+    }
+
+    [Fact]
+    public async Task Removing_a_member_from_the_server_ends_only_their_streams()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        await using var kits = DashboardEndpoints.StreamAsync(
+                broadcaster, new Viewer(_ids.Kit, [_ids.Pan]), subscribed: null, TimeSpan.FromMinutes(10), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        await using var emmzs = DashboardEndpoints.StreamAsync(
+                broadcaster, new Viewer(_ids.Emmz, [_ids.Pan]), subscribed: null, TimeSpan.FromMinutes(10), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        var kitMoving = kits.MoveNextAsync();
+        var emmzMoving = emmzs.MoveNextAsync();
+
+        broadcaster.PublishMemberRemoved(_ids.Kit);
+        var pan = Card("pan-work");
+        broadcaster.Publish(pan, new ChangeScope(_ids.Pan, null));
+
+        Assert.False(await kitMoving);
+        Assert.True(await emmzMoving);
+        Assert.Equal(pan, emmzs.Current.Data);
+    }
+
+    // The backstop: a re-check that finds the Projects changed sends the events a full queue might have dropped.
+    [Fact]
+    public async Task A_re_check_that_finds_the_Projects_changed_sends_projects_changed_for_each()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var current = new Viewer(_ids.Kit, [_ids.Pan]);
+        await using var stream = DashboardEndpoints.StreamAsync(
+                broadcaster,
+                current,
+                subscribed: null,
+                TimeSpan.FromMilliseconds(50),
+                recheck: _ => Task.FromResult<Viewer?>(current),
+                Ct)
+            .GetAsyncEnumerator(Ct);
+        current = new Viewer(_ids.Kit, [_ids.Acme]);
+
+        var received = new List<object?>();
+        while (received.Count < 2 && await stream.MoveNextAsync())
+        {
+            if (stream.Current.EventType == DashboardEndpoints.ProjectsChangedEvent)
+            {
+                received.Add(stream.Current.Data);
+            }
+        }
+
+        Assert.Equal([new ProjectsChanged(_ids.Acme, Member: true), new ProjectsChanged(_ids.Pan, Member: false)], received);
+    }
+
+    // The same through the endpoints, with a keep-alive too long to help: each membership write tells the stream.
+    [Fact]
+    public async Task Membership_changes_reach_an_open_stream_at_once()
+    {
+        const string kitEmail = "kit@example.com";
+        await using var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(Ct), await s3.CreateBucketAsync(Ct))
+        {
+            Settings = new Dictionary<string, string> { [DashboardEndpoints.KeepAliveConfigKey] = "00:10:00" },
+        };
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        var pan = await emmz.CreateProjectAsync("PAN", Ct);
+
+        // Kit needs a Project to be able to sign in at all.
+        await emmz.InviteToProjectAsync(await emmz.CreateProjectAsync("OTH", Ct), kitEmail, "viewer", Ct);
+        using var kit = await factory.CreateSignedInClientAsync(kitEmail, Ct);
+        var kitId = await factory.MemberIdAsync(kitEmail, Ct);
+        var kitToken = await factory.CreateApiTokenAsync(kitEmail, cancellationToken: Ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        using var response = await kit.GetAsync(DashboardEndpoints.EventsPath, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(timeout.Token));
+
+        // Invited while watching: the event, then the Project's updates.
+        await emmz.InviteToProjectAsync(pan, kitEmail, "viewer", Ct);
+        Assert.Equal((pan, true), await NextProjectsChangedAsync(reader, timeout.Token));
+        await ReportAsync(factory, null, "pan-joined", pan);
+        Assert.Equal("pan-joined", await NextUpdatedChangeAsync(reader, timeout.Token));
+
+        // A role change: still a member.
+        (await emmz.SendApiAsync(HttpMethod.Patch, $"{ProjectEndpoints.MembersPath(pan)}/{kitId}", new ChangeRoleRequest("editor"), Ct))
+            .Dispose();
+        Assert.Equal((pan, true), await NextProjectsChangedAsync(reader, timeout.Token));
+
+        // Creating a Project: the creator is in it.
+        var kits = await kit.CreateProjectAsync("KIT", Ct);
+        Assert.Equal((kits, true), await NextProjectsChangedAsync(reader, timeout.Token));
+
+        // Removed while watching: the event, and no later update of the Project.
+        (await emmz.SendApiAsync(HttpMethod.Delete, $"{ProjectEndpoints.MembersPath(pan)}/{kitId}", null, Ct)).Dispose();
+        Assert.Equal((pan, false), await NextProjectsChangedAsync(reader, timeout.Token));
+        await ReportAsync(factory, null, "pan-after", pan);
+        await ReportAsync(factory, kitToken, "kit-scratch", project: null);
+        Assert.Equal("kit-scratch", await NextUpdatedChangeAsync(reader, timeout.Token));
+
+        // Removed from the server: the stream ends. Kit owns KIT alone, so Emmz is made a co-owner first (that event is
+        // Emmz's, not Kit's).
+        await kit.InviteToProjectAsync(kits, PanopticonFactory.MemberEmail, "owner", Ct);
+        using (var removed = await emmz.SendApiAsync(HttpMethod.Delete, $"{MemberEndpoints.MembersPath}/{kitId}", null, Ct))
+        {
+            Assert.Equal(System.Net.HttpStatusCode.NoContent, removed.StatusCode);
+        }
+
+        while (await reader.ReadLineAsync(timeout.Token) is { } line)
+        {
+            Assert.DoesNotContain(DashboardEndpoints.ProjectsChangedEvent, line, StringComparison.Ordinal);
+        }
+    }
+
+    private static async Task<(Guid ProjectId, bool Member)> NextProjectsChangedAsync(StreamReader reader, CancellationToken cancellationToken)
+    {
+        var data = JsonDocument.Parse(await NextEventAsync(reader, DashboardEndpoints.ProjectsChangedEvent, cancellationToken)).RootElement;
+        return (data.GetProperty("projectId").GetGuid(), data.GetProperty("member").GetBoolean());
     }
 
     private static async Task NextPingAsync(IAsyncEnumerator<SseItem<object?>> stream)

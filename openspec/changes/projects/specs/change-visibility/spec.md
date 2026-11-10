@@ -91,7 +91,8 @@ Project SHALL stop receiving its updates. Membership changes are covered by "Mem
 ### Requirement: Membership changes take effect live
 When someone is removed from a Project, or leaves it, their open pages SHALL drop it at once, with no reload:
 - **The dashboard:** its cards and its filter choice go.
-- **A change page of that Project:** it shows that the change wasn't found.
+- **A change page of that Project:** it shows that the change wasn't found. An archived change's page is frozen, so it
+  shows this on its next load.
 
 When someone joins a Project, their open dashboard SHALL show its active changes at once, and its live updates from
 then on. History and metrics SHALL follow on their next load.

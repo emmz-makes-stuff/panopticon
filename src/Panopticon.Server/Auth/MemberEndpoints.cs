@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Panopticon.Server.Data;
+using Panopticon.Server.Live;
 
 namespace Panopticon.Server.Auth;
 
@@ -49,6 +50,7 @@ public static class MemberEndpoints
         PanopticonDb db,
         InitialMemberList initialMembers,
         TimeProvider time,
+        ChangeBroadcaster broadcaster,
         CancellationToken cancellationToken)
     {
         var remover = user.GetRequiredMemberId();
@@ -118,6 +120,9 @@ public static class MemberEndpoints
             .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAt, now), cancellationToken);
         await db.ProjectMembers.Where(m => m.MemberId == id).ExecuteDeleteAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        // projects D3, §11: their open streams end now, not at the next keep-alive.
+        broadcaster.PublishMemberRemoved(id);
         return TypedResults.NoContent();
     }
 

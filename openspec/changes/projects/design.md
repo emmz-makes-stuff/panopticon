@@ -89,7 +89,18 @@
     server ends the sessions, and with them the streams, as before.
   - **On the web:** a left Project's cards and filter choice are dropped. A joined one makes the dashboard refetch
     `/api/changes`. A change page whose Project was left shows not found.
-  - **Not live:** history and metrics follow on their next load.
+  - **Not live:** history and metrics follow on their next load. An archived change's page has no stream (it's frozen),
+    so it notices nothing until reloaded. Emmz accepted that on 2026-11-10, and the spec says so.
+  - **Emmz's calls while building 11.1 (2026-11-10):**
+    - **Removal from the server** publishes `MemberRemoved(memberId)`, which ends that member's streams at once. Their
+      reconnect gets a 401, and the dashboard shows sign-in.
+    - **Creating a Project** also notifies the creator (`isMember: true`), so reports into a Project just linked reach
+      their open dashboard at once.
+    - **A role change** sends `{ member: true }`, and the dashboard refetches.
+    - **The backstop:** when a keep-alive re-check finds the Project set changed (a full queue can drop the event), it
+      sends `projects-changed` for each difference.
+  - **Ordering:** the membership event goes through the same queue as the cards, so a removed member's stream filters
+    every later card with the new scope. On joining, a card that raced ahead of the event is caught by the refetch.
 - **Alternative rejected: a channel per Project.** It would mean moving subscribers between channels when
   membership changes, which is more code than filtering 64-deep queues.
 
