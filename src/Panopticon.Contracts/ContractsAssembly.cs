@@ -8,4 +8,7 @@ public static class ContractsAssembly
 
     /// <summary>The MCP tool listing the reporter's Projects, on the server endpoint and the CLI bridge (projects D6).</summary>
     public const string ListProjectsToolName = "list_projects";
+
+    /// <summary>The MCP tool putting a Project's tags on a change, on the server endpoint and the CLI bridge (tags D4).</summary>
+    public const string TagChangeToolName = "tag_change";
 }

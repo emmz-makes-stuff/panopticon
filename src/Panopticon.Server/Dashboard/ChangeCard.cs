@@ -16,7 +16,11 @@ public sealed record ChangeCard(
     CardProgress Overall,
     DateTimeOffset LastReportedAt,
     CardProject? Project = null,
-    bool Personal = false);
+    bool Personal = false)
+{
+    /// <summary>Its Project's tags put on it, by key then value (tags D6). The same for every viewer of the change.</summary>
+    public IReadOnlyList<ProjectTagRef> ProjectTags { get; init; } = [];
+}
 
 /// <summary>A change's Project on its card, history row and page: chosen by id, shown by its code (projects D9).</summary>
 public sealed record CardProject(Guid Id, string Code, string Name)
@@ -65,11 +69,19 @@ public sealed class ChangeCards(PanopticonDb db)
         return change is null ? null : ToCard(change);
     }
 
+    /// <summary>A change's card, active or archived, and whether it's archived (for tagging, which works on both).</summary>
+    public async Task<(ChangeCard Card, bool Archived)> GetIncludingArchivedAsync(Guid changeId, CancellationToken cancellationToken)
+    {
+        var change = await Query().SingleAsync(c => c.Id == changeId, cancellationToken);
+        return (ToCard(change), change.ArchivedAt is not null);
+    }
+
     internal IQueryable<Change> Query() => db.Changes
         .AsNoTracking()
         .AsSplitQuery()
         .Include(c => c.Repo)
         .Include(c => c.Project)
+        .Include(c => c.ProjectTags).ThenInclude(t => t.Tag)
         .Include(c => c.Agents).ThenInclude(a => a.Agent).ThenInclude(a => a.Member);
 
     internal static ChangeCard ToCard(Change change)
@@ -93,6 +105,12 @@ public sealed class ChangeCards(PanopticonDb db)
             new CardProgress(snapshot.OverallDone, snapshot.OverallTotal),
             change.LastReportedAt,
             change.Project is { } project ? CardProject.Of(project) : null,
-            change.OwnerMemberId is not null);
+            change.OwnerMemberId is not null)
+        {
+            ProjectTags = [.. change.ProjectTags
+                .Select(t => t.Tag)
+                .OrderBy(t => t.KeyKey, StringComparer.Ordinal).ThenBy(t => t.ValueKey, StringComparer.Ordinal)
+                .Select(t => new ProjectTagRef(t.Id, t.Key, t.Value))],
+        };
     }
 }

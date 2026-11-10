@@ -74,7 +74,7 @@ public static class TagText
 
         error = KeyProblem(key) is { } keyProblem
             ? $"\"{trimmed}\": {keyProblem}"
-            : value is not null && ValueProblem(key, value) is { } valueProblem
+            : value is not null && ValueProblem(value) is { } valueProblem
                 ? $"\"{trimmed}\": {valueProblem}"
                 : null;
         if (error is not null)
@@ -138,11 +138,11 @@ public static class TagText
         return key.All(IsKeyChar) ? null : "a key can only have letters, digits, '-', '_' and '.'.";
     }
 
-    private static string? ValueProblem(string key, string value)
+    private static string? ValueProblem(string value)
     {
         if (value.Length == 0)
         {
-            return $"\"{key}:\" has no value after the ':'. Leave the ':' out for a tag with no value.";
+            return "there's no value after the ':'. Leave the ':' out for a tag with no value.";
         }
 
         if (value.Length > MaxPartLength)

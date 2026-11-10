@@ -12,8 +12,8 @@
 
 ## 3. Server: tagging changes
 
-- [ ] 3.1 Add `POST /api/changes/{id}/tags` (D4): the owner/editor check, tags from the change's own Project only, no project tags on personal changes, archived changes allowed, idempotent add/remove, the caller's card returned, and the card republished. Verify "Tagging a change on the dashboard" with endpoint tests: an editor, a viewer (403), an outsider (404), another Project's tag id (400), and an archived change.
-- [ ] 3.2 Add `tags` to `list_projects`, and the server's `tag_change` MCP tool with its contracts (D4): text tags, finding the change (active first, then the latest archived), all checks done before any write, and errors naming the problem (listing the tags for an unknown one). Verify "Tagging a change over MCP", "Agents only use existing tags" and "An agent sees the tags" with MCP endpoint tests, including a viewer's agent, an unknown tag (nothing changed, the tags listed) and a bootstrap reporter.
+- [x] 3.1 Add `POST /api/changes/{id}/tags` (D4): the owner/editor check, tags from the change's own Project only, no project tags on personal changes, archived changes allowed, idempotent add/remove, the caller's card returned, and the card republished. Verify "Tagging a change on the dashboard" with endpoint tests: an editor, a viewer (403), an outsider (404), another Project's tag id (400), and an archived change.
+- [x] 3.2 Add `tags` to `list_projects`, and the server's `tag_change` MCP tool with its contracts (D4): text tags, finding the change (active first, then the latest archived), all checks done before any write, and errors naming the problem (listing the tags for an unknown one). Verify "Tagging a change over MCP", "Agents only use existing tags" and "An agent sees the tags" with MCP endpoint tests, including a viewer's agent, an unknown tag (nothing changed, the tags listed) and a bootstrap reporter.
 
 ## 4. Server: personal tags in reports
 
