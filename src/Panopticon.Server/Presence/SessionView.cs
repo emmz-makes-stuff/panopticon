@@ -50,8 +50,33 @@ public sealed record PromptDetail(
     Guid Id,
     bool Held,
     DateTimeOffset AskedAt,
-    IReadOnlyList<PromptQuestion>? Questions = null,
+    IReadOnlyList<PromptQuestionView>? Questions = null,
     string? Preview = null);
+
+/// <summary>A question as the dashboard's form shows it (spec remote-answers, Question forms).</summary>
+public sealed record PromptQuestionView(string Question, string Header, IReadOnlyList<PromptOptionView> Options, bool MultiSelect)
+{
+    /// <summary>
+    /// The question with each option's preview rendered as documents are (spec remote-answers, Safe rendering): no raw
+    /// HTML and no unsafe links. The web app inserts <see cref="PromptOptionView.PreviewHtml"/> as it is, so this is
+    /// where it's made safe.
+    /// </summary>
+    public static PromptQuestionView For(PromptQuestion question)
+    {
+        ArgumentNullException.ThrowIfNull(question);
+        return new PromptQuestionView(
+            question.Question,
+            question.Header,
+            [.. question.Options.Select(o => new PromptOptionView(
+                o.Label,
+                o.Description,
+                o.Preview is { Length: > 0 } preview ? Documents.DocumentRenderer.RenderMarkdown(preview) : null))],
+            question.MultiSelect);
+    }
+}
+
+/// <summary>One option of a question, its preview already rendered to safe HTML.</summary>
+public sealed record PromptOptionView(string Label, string? Description = null, string? PreviewHtml = null);
 
 /// <summary>A prompt as the answer endpoint sees it before claiming it (D5, D6).</summary>
 /// <param name="Placement">The session's change; null when it has no card, so the prompt was never held.</param>

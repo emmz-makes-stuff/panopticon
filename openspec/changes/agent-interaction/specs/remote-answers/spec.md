@@ -95,7 +95,7 @@ offer Allow only once the preview has arrived.
 #### Scenario: Not away
 - **WHEN** Emmz isn't away and her session meets a permission prompt for `curl -H "Authorization: Bearer abc" …`
 - **THEN** the server receives only that it's a permission prompt for Bash, and her card shows "waiting on permission
-  for Bash · answer in the terminal"
+  for Bash, answer in the terminal"
 
 #### Scenario: Away
 - **WHEN** Emmz is away and her session meets the same prompt

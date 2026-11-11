@@ -5,6 +5,12 @@ import type { ChangeCard } from "./types";
 import { changeHref } from "./links";
 import { leadingProjectLabel } from "./projectLabel";
 import { CARD_TAG_LIMIT, tagChips } from "./tagChips";
+import {
+  lastActiveAt,
+  updateSessions,
+  updateSessionTimes,
+  type SessionViewer,
+} from "./sessionRows";
 
 /**
  * One change's card (spec live-dashboard, "Card content", "Two progress bars" and "Quiet cards"). All text goes in as
@@ -14,6 +20,7 @@ export function renderCard(
   card: ChangeCard,
   now: Date,
   quiet: QuietSettings = DEFAULT_QUIET,
+  viewer: SessionViewer = {},
 ): HTMLElement {
   const article = document.createElement("article");
   article.className = "card";
@@ -72,6 +79,8 @@ export function renderCard(
   // Under the change name: what it is, before how far along it is (web/DESIGN.md "Tags"). No tags, no row.
   const tags = tagChips(card, CARD_TAG_LIMIT);
   article.append(host, repoLine, change, ...(tags ? [tags] : []), sectionBar, overallBar, agents);
+  // Its sessions, under its agents (agent-interaction D10).
+  updateSessions(article, card, now, viewer);
   applyQuiet(article, card, now, quiet);
   return article;
 }
@@ -89,7 +98,9 @@ export function applyQuiet(
   now: Date,
   quiet: QuietSettings,
 ): QuietState {
-  const state = quietState(card.lastReportedAt, now, quiet);
+  // The last report or session event, whichever is later (spec live-dashboard, Quiet cards).
+  const active = lastActiveAt(card);
+  const state = quietState(active, now, quiet);
   article.classList.toggle("card--idle", state === "idle");
   article.classList.toggle("card--stale", state === "stale");
   article.dataset["quiet"] = state;
@@ -104,9 +115,14 @@ export function applyQuiet(
   }
 
   if (time) {
-    const ago = relativeTime(card.lastReportedAt, now);
-    time.textContent = state === "stale" ? `last seen ${ago}` : ago;
+    // "last seen" is the last activity; otherwise the time is the last report's.
+    time.textContent =
+      state === "stale"
+        ? `last seen ${relativeTime(active, now)}`
+        : relativeTime(card.lastReportedAt, now);
   }
+
+  updateSessionTimes(article, now);
 
   return state;
 }

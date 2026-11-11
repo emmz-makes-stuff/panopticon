@@ -1,5 +1,5 @@
 import type { App } from "./app";
-import type { ChangeCard, ProjectTagRef } from "./types";
+import type { AnswerEntry, AwayState, ChangeCard, ProjectTagRef, SessionView } from "./types";
 
 /** The SSE event the server sends for every changed card (server: Dashboard/DashboardEndpoints). */
 export const CHANGE_UPDATED = "change-updated";
@@ -31,6 +31,30 @@ export interface ProjectTagsChange {
   tags: ProjectTagRef[];
 }
 
+/** The SSE event the server sends when a session on a change has a new state (agent-interaction D4). */
+export const SESSION_UPDATED = "session-updated";
+
+/** The SSE event the server sends when a session leaves a change: it ended, expired or moved to another change. */
+export const SESSION_ENDED = "session-ended";
+
+/** A `session-updated` event's data. */
+export interface SessionUpdate {
+  changeId: string;
+  session: SessionView;
+}
+
+/** A `session-ended` event's data. */
+export interface SessionEnd {
+  changeId: string;
+  sessionId: string;
+}
+
+/** The SSE event the server sends to a member's own streams when their away switch changes (agent-interaction D8). */
+export const AWAY_CHANGED = "away-changed";
+
+/** The SSE event the server sends when an answer from the dashboard is recorded on a change (agent-interaction D8). */
+export const ANSWER_RECORDED = "answer-recorded";
+
 /** The parts of the browser's EventSource this module uses, so tests can supply a fake. */
 export interface EventSourceLike {
   readonly readyState: number;
@@ -52,6 +76,8 @@ export interface LiveOptions {
    * has ended. The stream then stops for good, with no reconnect. A check that fails counts as still signed in.
    */
   checkSignedIn?: (() => Promise<boolean>) | undefined;
+  /** The viewer's away switch changed, from this or another dashboard, or `panopticon away`. */
+  onAway?: ((state: AwayState) => void) | undefined;
 }
 
 /** EventSource.CLOSED: the browser won't retry by itself. */
@@ -121,10 +147,32 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
       });
     });
 
+    // Sessions move a card in place, never its order (spec live-dashboard, Sessions don't reorder cards).
+    current.addEventListener(SESSION_UPDATED, (event) => {
+      const update = parseSessionUpdate(event.data);
+      if (update) {
+        app.updateSession(update.changeId, update.session);
+      }
+    });
+
+    current.addEventListener(SESSION_ENDED, (event) => {
+      const end = parseSessionEnd(event.data);
+      if (end) {
+        app.endSession(end.changeId, end.sessionId);
+      }
+    });
+
     current.addEventListener(PROJECT_TAGS_CHANGED, (event) => {
       const change = parseProjectTagsChange(event.data);
       if (change) {
         app.retagProject(change);
+      }
+    });
+
+    current.addEventListener(AWAY_CHANGED, (event) => {
+      const state = parseAwayState(event.data);
+      if (state) {
+        options.onAway?.(state);
       }
     });
 
@@ -174,6 +222,75 @@ export function parseArchivedId(data: string): string | null {
   try {
     const value = JSON.parse(data) as { changeId?: unknown } | null;
     return typeof value?.changeId === "string" ? value.changeId : null;
+  } catch {
+    return null;
+  }
+}
+
+const SESSION_STATES: readonly string[] = [
+  "working",
+  "waiting-on-question",
+  "waiting-on-permission",
+  "waiting-on-user",
+];
+
+/** A `session-updated` event's data, or null when it isn't one. */
+export function parseSessionUpdate(data: string): SessionUpdate | null {
+  try {
+    const value = JSON.parse(data) as { changeId?: unknown; session?: unknown } | null;
+    const session = value?.session as Partial<SessionView> | null | undefined;
+    return typeof value?.changeId === "string" &&
+      typeof session?.id === "string" &&
+      typeof session.memberId === "string" &&
+      typeof session.memberName === "string" &&
+      typeof session.machine === "string" &&
+      typeof session.since === "string" &&
+      typeof session.lastEventAt === "string" &&
+      typeof session.state === "string" &&
+      SESSION_STATES.includes(session.state)
+      ? { changeId: value.changeId, session: session as SessionView }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A `session-ended` event's data, or null when it isn't one. */
+export function parseSessionEnd(data: string): SessionEnd | null {
+  try {
+    const value = JSON.parse(data) as Partial<SessionEnd> | null;
+    return typeof value?.changeId === "string" && typeof value.sessionId === "string"
+      ? { changeId: value.changeId, sessionId: value.sessionId }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** An `away-changed` event's data (or `/api/me/away`'s answer), or null when it isn't one. */
+export function parseAwayState(data: string): AwayState | null {
+  try {
+    const value = JSON.parse(data) as Partial<AwayState> | null;
+    return typeof value?.away === "boolean"
+      ? { away: value.away, since: typeof value.since === "string" ? value.since : null }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** An `answer-recorded` event's data, or null when it isn't one. */
+export function parseAnswerEntry(data: string): AnswerEntry | null {
+  try {
+    const value = JSON.parse(data) as Partial<AnswerEntry> | null;
+    return typeof value?.id === "string" &&
+      typeof value.changeId === "string" &&
+      typeof value.sessionMember === "string" &&
+      typeof value.answeredBy === "string" &&
+      typeof value.answeredAt === "string" &&
+      (value.kind === "question" || value.kind === "permission")
+      ? (value as AnswerEntry)
+      : null;
   } catch {
     return null;
   }

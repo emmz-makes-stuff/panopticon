@@ -1,5 +1,13 @@
 import { ApiError, createApi, type Api, type FetchLike, type SessionMember } from "./api";
 import { PRODUCT_NAME } from "./app";
+import { awaySwitch } from "./away";
+import {
+  browserNotifications,
+  createNotifier,
+  type NotificationHost,
+  type Notifier,
+} from "./notifications";
+import type { AwayState } from "./types";
 import type { EventSourceFactory } from "./live";
 import { el, routeLink } from "./dom";
 import { DEFAULT_QUIET, isQuietSettings, type QuietSettings } from "./quiet";
@@ -56,6 +64,10 @@ export interface Env {
   confirm: (message: string) => boolean;
   /** Puts text on the clipboard (a Project's link file). Rejects when the browser won't allow it. */
   copy: (text: string) => Promise<void>;
+  /** A view's live stream heard `away-changed`: the header's switch shows it. */
+  awayChanged(state: AwayState): void;
+  /** Opt-in notifications for held prompts (agent-interaction D10). The cards view tells it what's held. */
+  notifier: Notifier;
   /** The visitor's OS as the browser names it (e.g. "macOS", "Windows", "MacIntel", "Win32"), for the install hint. */
   platform: () => string;
 }
@@ -71,6 +83,7 @@ export interface ShellDeps {
   confirm?: ((message: string) => boolean) | undefined;
   copy?: ((text: string) => Promise<void>) | undefined;
   platform?: (() => string) | undefined;
+  notifications?: NotificationHost | undefined;
 }
 
 export interface Shell {
@@ -107,6 +120,71 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
   const account = document.createElement("nav");
   account.className = "account";
   account.setAttribute("aria-label", "Account");
+  // What went wrong with a header control, in text beside it.
+  const failure = el("span", "account-error");
+  failure.setAttribute("role", "alert");
+  const say = (text: string) => {
+    failure.textContent = text;
+  };
+  const away = awaySwitch(api, say);
+  const local = safeStorage(() => deps.local ?? window.localStorage);
+  const notifier = createNotifier(
+    deps.notifications ?? browserNotifications(),
+    local,
+    (changeId) => {
+      void focusCard(changeId);
+    },
+  );
+  const notifications = document.createElement("button");
+  notifications.type = "button";
+  notifications.className = "notifications-toggle";
+  // Its name stays "Notifications"; aria-pressed says whether they're on, and the text says it too.
+  notifications.setAttribute("aria-label", "Notifications");
+  const notificationsState = el("span", "notifications-toggle-state");
+  notificationsState.setAttribute("aria-hidden", "true");
+  notifications.append("Notifications ", notificationsState);
+  notifications.addEventListener("click", () => {
+    say("");
+    if (notifier.on()) {
+      notifier.disable();
+      showNotifications();
+      return;
+    }
+
+    void notifier.enable().then(
+      (result) => {
+        showNotifications();
+        if (result === "denied") {
+          say(
+            "This browser blocks notifications from this site. Allow them in its settings, then try again.",
+          );
+        }
+      },
+      () => say("Couldn't turn notifications on. Try again."),
+    );
+  });
+  function showNotifications(): void {
+    notifications.hidden = !notifier.supported();
+    notifications.setAttribute("aria-pressed", String(notifier.on()));
+    notificationsState.textContent = notifier.on() ? "on" : "off";
+    notifications.title = notifier.on()
+      ? "Notifications are on in this browser. Select to turn them off."
+      : "Select to be notified here when a prompt waits for you.";
+  }
+
+  // A notification's click: back to the dashboard, at that card.
+  async function focusCard(changeId: string): Promise<void> {
+    if (location.pathname !== "/") {
+      await router?.navigate("/");
+    }
+
+    const card = [...view.querySelectorAll<HTMLElement>("article.card")].find(
+      (article) => article.dataset["changeId"] === changeId,
+    );
+    card?.scrollIntoView({ block: "center" });
+    card?.querySelector<HTMLElement>(".card-link")?.focus();
+  }
+
   header.append(heading, statusSlot, account);
   const view = document.createElement("div");
   view.className = "view";
@@ -124,10 +202,9 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     name.textContent = member.displayName;
     const signOut = document.createElement("button");
     signOut.type = "button";
-    signOut.className = "link-button";
+    signOut.className = "link-button sign-out";
     signOut.textContent = "Sign out";
-    const failure = el("span", "account-error");
-    failure.setAttribute("role", "alert");
+    showNotifications();
     signOut.addEventListener("click", () => {
       failure.textContent = "";
       void api.send("POST", "/api/auth/sign-out").then(
@@ -148,11 +225,13 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     });
     account.replaceChildren(
       name,
+      away.element,
       routeLink("/projects", "Projects"),
       routeLink("/members", "Members"),
       routeLink("/history", "History"),
       routeLink("/metrics", "Metrics"),
       routeLink("/tokens", "Tokens"),
+      notifications,
       signOut,
       failure,
     );
@@ -207,6 +286,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     signedIn(next) {
       member = next;
       renderAccount();
+      void away.load();
       void router?.navigate(takeReturnPath(env.local, env.now(), location.origin) ?? "/", {
         replace: true,
       });
@@ -220,7 +300,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     statusSlot,
     quietSettings: loadQuietSettings,
     // Blocked storage (site data off) must not break sign-in: reads give null and writes are dropped.
-    local: safeStorage(() => deps.local ?? window.localStorage),
+    local,
     location,
     history,
     now: deps.now ?? (() => new Date()),
@@ -228,6 +308,8 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     confirm: deps.confirm ?? ((message) => window.confirm(message)),
     copy: deps.copy ?? ((text) => navigator.clipboard.writeText(text)),
     platform: deps.platform ?? browserPlatform,
+    awayChanged: (state) => away.set(state),
+    notifier,
   };
 
   const routes: Record<string, View> = {
@@ -268,6 +350,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
 
   if (member) {
     void loadQuietSettings();
+    void away.load();
   }
 
   renderAccount();

@@ -51,7 +51,7 @@ describe("startShell", () => {
       ["Metrics", "/metrics"],
       ["Tokens", "/tokens"],
     ]);
-    expect(account.querySelector("button")?.textContent).toBe("Sign out");
+    expect(account.querySelector(".sign-out")?.textContent).toBe("Sign out");
   });
 
   it("Session ends while watching: a stream error with a 401 session check stops updates and shows sign-in", async () => {
@@ -104,7 +104,7 @@ describe("startShell", () => {
     const server = signedIn().on("POST", "/api/auth/sign-out", { status: 204 });
     const { root, heading, local } = await startTestShell("/", server);
 
-    q<HTMLButtonElement>(root, ".account button").click();
+    q<HTMLButtonElement>(root, ".account .sign-out").click();
     await until(() => heading() === "Sign in");
 
     expect(server.to("POST", "/api/auth/sign-out")).toHaveLength(1);
@@ -119,7 +119,7 @@ describe("startShell", () => {
     const { root, heading } = await startTestShell("/", server);
     const before = heading();
 
-    q<HTMLButtonElement>(root, ".account button").click();
+    q<HTMLButtonElement>(root, ".account .sign-out").click();
     await until(() => root.querySelector(".account-error")?.textContent !== "");
 
     expect(q(root, ".account-error").textContent).toBe("Couldn't sign out. Try again.");

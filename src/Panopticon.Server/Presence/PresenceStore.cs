@@ -173,7 +173,11 @@ public sealed class PresenceStore(
                 now)
             {
                 Prompt = new SessionPrompt(request.Kind, request.Kind == PromptKind.Permission ? request.Tool : null),
-                PromptDetail = new PromptDetail(promptId, held, now, request.Kind == PromptKind.Question ? request.Questions : null),
+                PromptDetail = new PromptDetail(
+                    promptId,
+                    held,
+                    now,
+                    request.Kind == PromptKind.Question && request.Questions is { } questions ? [.. questions.Select(PromptQuestionView.For)] : null),
             };
             Put(key, new Entry(placement, view, existing?.Order ?? ++_sequence, promptId), existing);
             return new PromptCreated(promptId.ToString(), held);

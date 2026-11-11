@@ -34,10 +34,10 @@
 
 ## 6. Web: sessions, prompts and the away switch
 
-- [ ] 6.1 Add session rows to cards, with the activity or wait text and the elapsed time on the quiet clock, `LastActiveAt` driving the quiet state, and `session-updated` and `session-ended` handled in `live.ts` (D10). Verify "Sessions on a card", "Sessions don't reorder cards" and the modified "Quiet cards" and "Quiet state moves on by itself" scenarios with vitest tests.
-- [ ] 6.2 Add `promptForm.ts` and the "Needs you" and "Needs <member>" markers: single choice, multiple choice, yes/no, previews through the safe renderer, Other, Allow and Deny with a message, and inline errors for 403, 404 and 409. Verify "Needs you", the "Question forms" rendering, "Safe rendering" and the "Permission prompts" form scenarios with vitest tests, including the script-in-a-preview case.
-- [ ] 6.3 Add the away switch to the header (`aria-pressed`, a text label, `away-changed` live), the tab-title count, and opt-in browser notifications (D10). Add the answer list to the change page, live via `answer-recorded`. Verify "Away switch in the header", "Needs-you count in the tab title", "Browser notifications" and the change page list with vitest tests, including that permission is never asked for until the member opts in.
-- [ ] 6.4 Run the `frontend-design` pass on session rows, the prompt form and the away switch, then stop for Emmz's sign-off on the look and on live updates in a real browser. Verify: her answer, recorded in a devlog note.
+- [x] 6.1 Add session rows to cards, with the activity or wait text and the elapsed time on the quiet clock, `LastActiveAt` driving the quiet state, and `session-updated` and `session-ended` handled in `live.ts` (D10). Verify "Sessions on a card", "Sessions don't reorder cards" and the modified "Quiet cards" and "Quiet state moves on by itself" scenarios with vitest tests.
+- [x] 6.2 Add `promptForm.ts` and the "Needs you" and "Needs <member>" markers: single choice, multiple choice, yes/no, previews through the safe renderer, Other, Allow and Deny with a message, and inline errors for 403, 404 and 409. Verify "Needs you", the "Question forms" rendering, "Safe rendering" and the "Permission prompts" form scenarios with vitest tests, including the script-in-a-preview case.
+- [x] 6.3 Add the away switch to the header (`aria-pressed`, a text label, `away-changed` live), the tab-title count, and opt-in browser notifications (D10). Add the answer list to the change page, live via `answer-recorded`. Verify "Away switch in the header", "Needs-you count in the tab title", "Browser notifications" and the change page list with vitest tests, including that permission is never asked for until the member opts in.
+- [x] 6.4 Run the `frontend-design` pass on session rows, the prompt form and the away switch, then stop for Emmz's sign-off on the look and on live updates in a real browser. Verify: her answer, recorded in a devlog note.
 
 ## 7. Plugin (in `../panopticon-skills`)
 
@@ -53,3 +53,5 @@
 
 - Whole-change review, offer `/code-review`, then `/opsx:archive`.
 - Release the server, then the CLI, then the plugin (design Migration Plan).
+- A follow-up change (Emmz, 2026-11-11): make the dashboard a PWA, so held-prompt notifications reach her from any
+  page, or with the tab closed. Today they fire only while the cards page (`/`) is open.

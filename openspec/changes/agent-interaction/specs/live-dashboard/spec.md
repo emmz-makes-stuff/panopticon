@@ -3,17 +3,19 @@
 ## ADDED Requirements
 
 ### Requirement: Sessions on a card
-A card SHALL list its change's current sessions (see `agent-presence`). Each SHALL show its member and machine, and
-either its activity with how long ago it started, or what it is waiting on with how long it has waited, in text, not
-by colour or icon alone. Sessions SHALL update in place as their events arrive, without a reload.
+A card SHALL list its change's current sessions (see `agent-presence`). Each SHALL show either its activity with how
+long ago it started, or what it is waiting on with how long it has waited, in text, not by colour or icon alone. Its
+member and machine, and the full time, SHALL be in the elapsed time's tooltip, and in the text a screen reader
+reads. Sessions SHALL update in place as their events arrive, without a reload.
 
 #### Scenario: Running gates
 - **WHEN** Emmz's session on `tags` starts Bash with the description "Run make gates"
-- **THEN** within a few seconds the `tags` card shows "Emmz · mbp · Run make gates · just now"
+- **THEN** within a few seconds the `tags` card shows "Run make gates, just now", with "Emmz on mbp" and the time in
+  the tooltip of "just now"
 
 #### Scenario: Waiting since lunch
 - **WHEN** a session's turn ended 2 hours ago
-- **THEN** its card shows it "waiting for you · 2h"
+- **THEN** its card shows it "waiting for you, 2h"
 
 ### Requirement: Sessions don't reorder cards
 Session events SHALL NOT change the order of cards, which stays by last report (see One card per change).
@@ -49,11 +51,11 @@ there SHALL work as `panopticon away` does (see `remote-answers`, Away mode).
 
 ### Requirement: Needs-you count in the tab title
 While any card has a held prompt (see `remote-answers`, A prompt while away) that the viewer may answer, the page's
-title SHALL begin with the count of such prompts in brackets, e.g. "(2) Panopticon". It SHALL drop the count when there are none.
+title SHALL begin with the count of such prompts in brackets, e.g. "(2) PANOPTICON". It SHALL drop the count when there are none.
 
 #### Scenario: Two prompts
 - **WHEN** Emmz is away and two of her sessions each hold a question
-- **THEN** her dashboard's tab title is "(2) Panopticon"
+- **THEN** her dashboard's tab title is "(2) PANOPTICON"
 
 ### Requirement: Browser notifications
 The dashboard SHALL offer to turn on browser notifications, and SHALL ask the browser's permission only when the

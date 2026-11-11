@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CHANGE_ARCHIVED, CHANGE_UPDATED, PROJECTS_CHANGED } from "../live";
+import { ANSWER_RECORDED, CHANGE_ARCHIVED, CHANGE_UPDATED, PROJECTS_CHANGED } from "../live";
 import { savedReturn, signedIn, signedOut, startTestShell } from "../testShell";
 import { card, FakeEventSource, q, until } from "../testing";
-import type { ChangeMetrics, ChangePage, DocumentEntry, SectionMetric } from "../types";
+import type {
+  AnswerEntry,
+  ChangeMetrics,
+  ChangePage,
+  DocumentEntry,
+  SectionMetric,
+} from "../types";
 import { changeHref } from "../links";
 import { defaultDocument } from "./change";
 
@@ -517,5 +523,69 @@ describe("change page membership changes", () => {
 
     expect(root.querySelector("article.doc")).toBeNull();
     expect(source.closed).toBe(true);
+  });
+});
+
+describe("change page answers (spec remote-answers, Answers are attributed)", () => {
+  const entry = (overrides: Partial<AnswerEntry> = {}): AnswerEntry => ({
+    id: "a1",
+    changeId: "c1",
+    sessionMember: "Emmz",
+    answeredBy: "Bob",
+    answeredAt: "2026-11-08T11:55:00Z",
+    kind: "question",
+    questions: [{ question: "Which store?", answer: "Postgres" }],
+    ...overrides,
+  });
+  const answers = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLElement>(".answer")].map((a) => a.textContent);
+
+  it("Bob answers Emmz's question: who, whose session, when, and the answer", async () => {
+    const { root } = await startTestShell(
+      "/changes/c1",
+      serverFor(
+        changePage({
+          answers: [
+            entry(),
+            entry({
+              id: "a0",
+              kind: "permission",
+              questions: null,
+              tool: "Bash",
+              outcome: "deny",
+              answeredBy: "Emmz",
+              answeredAt: "2026-11-08T10:00:00Z",
+            }),
+          ],
+        }),
+      ),
+    );
+    await until(() => answers(root).length === 2);
+
+    expect(q(root, ".change-answers").hidden).toBe(false);
+    expect(answers(root)).toEqual([
+      "Bob answered a question for Emmz's session, 5m agoWhich store?Postgres",
+      "Emmz denied Bash for Emmz's session, 2h ago",
+    ]);
+  });
+
+  it("no answers, no section", async () => {
+    const { root } = await startTestShell("/changes/c1", serverFor());
+    await until(() => shownPath(root) === "proposal.md");
+
+    expect(q(root, ".change-answers").hidden).toBe(true);
+  });
+
+  it("adds answer-recorded live, for this change only, once", async () => {
+    const { root } = await startTestShell("/changes/c1", serverFor());
+    await until(() => FakeEventSource.instances.length === 1);
+    const stream = FakeEventSource.latest();
+    stream.open();
+
+    stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ id: "x", changeId: "other" })));
+    stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ questions: null })));
+    stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ questions: null })));
+
+    expect(answers(root)).toEqual(["Bob answered a question for Emmz's session, 5m ago"]);
   });
 });

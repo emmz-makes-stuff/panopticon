@@ -12,7 +12,15 @@ import {
 } from "./filters";
 import { retagCard, type ProjectTagsChange } from "./live";
 import { DEFAULT_QUIET, type QuietSettings } from "./quiet";
-import type { ChangeCard } from "./types";
+import {
+  heldPrompts,
+  keepPromptForms,
+  lastActiveAt,
+  updateSessions,
+  type HeldPrompt,
+  type SessionViewer,
+} from "./sessionRows";
+import type { ChangeCard, SessionView } from "./types";
 
 /** The product's name, exactly as written (web/DESIGN.md, "Name"). */
 export const PRODUCT_NAME = "PANOPTICON";
@@ -41,6 +49,13 @@ export interface AppDeps {
    * router hands them back through `setFilters`. Without it, the filters apply straight away.
    */
   onFiltersChange?: (filters: Filters) => void;
+  /** The signed-in member's id: a session of theirs says "waiting for you", anyone else's names its member. */
+  viewerId?: string | undefined;
+  /**
+   * The held prompts the viewer may answer, across every card shown (filtered out or not): called once the cards
+   * load, then whenever the list changes. The cards view puts the count in the tab title and raises notifications.
+   */
+  onHeld?: ((held: HeldPrompt[]) => void) | undefined;
 }
 
 export interface App {
@@ -84,6 +99,14 @@ export interface App {
   setFilters(filters: ParsedFilters): void;
   /** Uses the deployment's idle and stale thresholds from now on (they can arrive after the cards). */
   setQuiet(settings: QuietSettings): void;
+  /**
+   * A session on a shown change has a new state (`session-updated`): its row changes in place, and the card's last
+   * activity moves on, so an idle card wakes. The card keeps its place (spec live-dashboard, Sessions don't reorder
+   * cards). Returns whether the change is shown.
+   */
+  updateSession(changeId: string, session: SessionView): boolean;
+  /** A session left a shown change (`session-ended`): its row goes. Returns whether it was shown. */
+  endSession(changeId: string, sessionId: string): boolean;
 }
 
 interface Shown {
@@ -92,6 +115,10 @@ interface Shown {
 }
 
 const reportedAt = (card: ChangeCard) => Date.parse(card.lastReportedAt);
+
+/** Whether two copies of a card show the same sessions (presence moves without a report). */
+const sameSessions = (a: ChangeCard, b: ChangeCard) =>
+  JSON.stringify(a.sessions ?? []) === JSON.stringify(b.sessions ?? []);
 
 /** Whether two copies of a card carry the same tags, in the same order (the server's). */
 const sameTags = (a: ChangeCard, b: ChangeCard) =>
@@ -103,6 +130,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
   const now = deps.now ?? (() => new Date());
   let quiet = deps.quiet ?? DEFAULT_QUIET;
   const api = deps.api ?? createApi({ fetch: deps.fetch });
+  const viewer: SessionViewer = { id: deps.viewerId, api };
   const shown = new Map<string, Shown>();
 
   const header = document.createElement("header");
@@ -167,7 +195,19 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     barStale = true;
   }
 
+  let heldKey: string | undefined;
+  /** Tells `onHeld` about the held prompts, when they differ from the last it heard. */
+  function heldChanged(): void {
+    const held = heldPrompts([...shown.values()].map((entry) => entry.card));
+    const key = held.map((prompt) => prompt.promptId).join(",");
+    if (key !== heldKey) {
+      heldKey = key;
+      deps.onHeld?.(held);
+    }
+  }
+
   function layout(): void {
+    heldChanged();
     const at = now();
     const ordered = [...shown.values()].sort((a, b) => reportedAt(b.card) - reportedAt(a.card));
     const visible = ordered.filter(({ card, element }) =>
@@ -213,8 +253,9 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
 
   /** A card's tags changed, and nothing else did: not a report, so it keeps its place and "updated" mark, unlit. */
   function replaceQuietly(changeId: string, current: Shown, card: ChangeCard): void {
-    const element = renderCard(card, now(), quiet);
+    const element = renderCard(card, now(), quiet, viewer);
     element.classList.toggle("updated", current.element.classList.contains("updated"));
+    keepPromptForms(current.element, element);
     shown.set(changeId, { card, element });
   }
 
@@ -225,11 +266,27 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
         const current = shown.get(card.changeId);
         // Kept when it's newer than the list, or as new with the same tags; on a tie with other tags (a tag edit the
         // stream missed), the server's card wins.
-        const keep =
+        if (current && reportedAt(current.card) > reportedAt(card)) {
+          next.set(card.changeId, current);
+        } else if (
           current &&
-          (reportedAt(current.card) > reportedAt(card) ||
-            (reportedAt(current.card) === reportedAt(card) && sameTags(current.card, card)));
-        next.set(card.changeId, keep ? current : { card, element: renderCard(card, now(), quiet) });
+          reportedAt(current.card) === reportedAt(card) &&
+          sameTags(current.card, card)
+        ) {
+          // The same report: its element stays, and its sessions catch up with the server's (missed events).
+          if (!sameSessions(current.card, card)) {
+            updateSessions(current.element, card, now(), viewer);
+          }
+
+          next.set(card.changeId, { card, element: current.element });
+        } else {
+          const element = renderCard(card, now(), quiet, viewer);
+          if (current) {
+            keepPromptForms(current.element, element);
+          }
+
+          next.set(card.changeId, { card, element });
+        }
       }
 
       shown.clear();
@@ -248,7 +305,18 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
       // The same report: a duplicate, or a tag edit (tags D6), which republishes the card with its tags as they are now.
       if (current && reportedAt(card) === reportedAt(current.card)) {
         if (sameTags(card, current.card)) {
-          return false;
+          if (sameSessions(card, current.card)) {
+            return false;
+          }
+
+          // Only its sessions moved: patched in place, so nothing replays and a half-typed answer survives.
+          shown.set(card.changeId, { card, element: current.element });
+          updateSessions(current.element, card, now(), viewer);
+          if (loaded) {
+            layout();
+          }
+
+          return true;
         }
 
         replaceQuietly(card.changeId, current, card);
@@ -260,9 +328,10 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
         return true;
       }
 
-      const element = renderCard(card, now(), quiet);
+      const element = renderCard(card, now(), quiet, viewer);
       if (current) {
         lightNewCells(current.element, element);
+        keepPromptForms(current.element, element);
       }
 
       for (const entry of shown.values()) {
@@ -353,6 +422,56 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
       if (loaded) {
         layout();
       }
+    },
+
+    updateSession(changeId, session) {
+      const current = shown.get(changeId);
+      if (!current) {
+        return false;
+      }
+
+      const sessions = [...(current.card.sessions ?? [])];
+      const index = sessions.findIndex((s) => s.id === session.id);
+      if (index >= 0) {
+        sessions[index] = session;
+      } else {
+        sessions.push(session);
+      }
+
+      const active = lastActiveAt(current.card);
+      const card: ChangeCard = {
+        ...current.card,
+        sessions,
+        lastActiveAt:
+          Date.parse(session.lastEventAt) > Date.parse(active) ? session.lastEventAt : active,
+      };
+      shown.set(changeId, { card, element: current.element });
+      updateSessions(current.element, card, now(), viewer);
+      if (loaded) {
+        layout();
+      }
+
+      return true;
+    },
+
+    endSession(changeId, sessionId) {
+      const current = shown.get(changeId);
+      const sessions = current?.card.sessions ?? [];
+      if (!current || !sessions.some((s) => s.id === sessionId)) {
+        return false;
+      }
+
+      const card: ChangeCard = {
+        ...current.card,
+        sessions: sessions.filter((s) => s.id !== sessionId),
+      };
+      shown.set(changeId, { card, element: current.element });
+      updateSessions(current.element, card, now(), viewer);
+      if (loaded) {
+        layout();
+      }
+
+      return true;
     },
 
     setStatus(next) {

@@ -41,6 +41,7 @@ is cool rather than cream.
 | `--rule`      | `#DDE2EE` | `#2D3355` | card border, unlit cells                            |
 | `--lit`       | `#0F8B7D` | `#3FD1BE` | lit cells, the only progress colour (≥ 3:1 on card) |
 | `--spark`     | `#D6336C` | `#FF7AA2` | the live dot, and a just-updated card's edge        |
+| `--prompt`    | `#6E56CF` | `#A594F9` | the `❯` terminal mark on session rows, nothing else |
 
 - Unlit cells use `--rule` with an inset outline, and lit cells are solid `--lit`. The two differ in fill
   _and_ outline, and the counts are printed beside the bar, so state never relies on colour alone.
@@ -678,6 +679,53 @@ Open:
   group (`role="group"`, labelled by the group name), not a custom listbox, so the keyboard works as everywhere
   else: Tab, Space, Escape. The × buttons have their full labels.
 - **Focus:** the usual 2px `--ink` outline everywhere, and nothing is reachable only on hover.
+
+## Sessions and prompts
+
+Agent interaction (agent-interaction D10) adds who is working on a change right now, and the prompts that wait for
+someone. Lit cells stay the memorable thing. The one new loud mark is **"Needs you"**, because it's the only thing
+on the dashboard that blocks an agent until a person acts.
+
+```
+│ claude-code@vm-1 Emmz                   │
+│ ─────────────────────────────────────── │
+│ ❯ Run make gates 4m                     │
+│ ❯ waiting on a question 2m              │
+│ ┃ Needs you                             │
+│ ┃ Store Which store?                    │
+│ ┃ ( ) Postgres  the one we run          │
+│ ┃ ( ) Redis                             │
+│ ┃ Other [                    ]          │
+│ ┃ [Send answer]                         │
+└─────────────────────────────────────────┘
+```
+
+- **Session rows** sit under the agents, below a hairline `--rule`. They're text only. What the session is doing
+  is in `--ink` at body size (16px), after a `❯` in `--prompt` (the terminal mark; decoration, hidden from screen readers), then its time, small, in `--ink-muted`, with tabular figures. Who and where
+  ("Emmz on mbp") and the full timestamp are in the time's tooltip, and in hidden text for screen readers, which
+  read the whole row with commas (principle 5). (Emmz, 2026-11-11.) There's no state dot: it would compete with
+  the cells.
+- **"Needs you"** (the viewer may answer) is a well: `--paper` fill, a 3px `--spark` rule on the left, and the
+  marker in 600. It holds the prompt's form while it's held, or the question and "answer in the terminal" while
+  it isn't. The card also takes a `--spark` hairline border (`.card--needs-you`), so it can be found across the
+  grid. That's the same attention mark as an error, or a just-updated card's edge.
+- **"Needs Emmz: question"** (someone else's prompt) is one muted line with no well. There's nothing there for the
+  viewer to do.
+- **The prompt form** uses the pages' form vocabulary inside the card:
+    - The question header is 600, then the question in ink.
+    - Options are native radios or checkboxes with `accent-color: var(--ink)`, never teal. Each label is 600, with
+      its description muted under it.
+    - A preview is a hairline `--card` block, indented under its option.
+    - Send answer and Allow once are solid `--ink`. Deny and the Yes and No toggles are outlined, and a pressed
+      toggle turns solid ink.
+    - A permission prompt's input is the one monospace block: it's a command.
+    - Errors use the page error mark: 600, with a 3px `--spark` rule.
+- **Header toggles:** Away and Notifications share one form. Each is a hairline pill reading "Away off" or "Away on"
+  (the state is in the text, and `aria-pressed` says it too), and it turns solid `--ink` when on. They're not
+  spark (spark means live) and not teal (teal means progress). Notifications is hidden where the browser has none.
+- **Answers on the change page:** "Answers from the dashboard" (Gabarito 20px), then rows between hairline dividers.
+  Each reads "Bob answered a question for Emmz's session, 5m ago", with the questions under it: the question muted,
+  the answer 600. On phones, each question stacks above its answer.
 
 ## Accessibility floor
 

@@ -1,9 +1,17 @@
 import { ApiError } from "../api";
-import { mountApp } from "../app";
+import { mountApp, PRODUCT_NAME } from "../app";
 import { parseFilters, toQuery } from "../filters";
 import { connectLive } from "../live";
 import type { View } from "../router";
 import type { Env } from "../shell";
+
+/**
+ * The tab's title with `count` held prompts waiting on the viewer (spec live-dashboard, Needs-you count in the tab
+ * title): "(2) PANOPTICON", or just the name with none.
+ */
+export function titleWith(count: number, base = PRODUCT_NAME): string {
+  return count > 0 ? `(${count}) ${base}` : base;
+}
 
 /** How often each card's "last reported" time is re-read against the clock. */
 export const TIMES_REFRESH_MS = 30_000;
@@ -22,6 +30,12 @@ export function cardsView(env: Env): View {
       api: env.api,
       now: env.now,
       statusSlot: env.statusSlot,
+      viewerId: env.member()?.id,
+      // Worked out from the live state on every change (D10): the tab title's count, and any new notification.
+      onHeld: (held) => {
+        document.title = titleWith(held.length);
+        env.notifier.held(held);
+      },
       filters: parseFilters(params),
       onFiltersChange: (filters) => {
         const query = toQuery(filters);
@@ -37,6 +51,7 @@ export function cardsView(env: Env): View {
     });
     const stopLive = connectLive(app, {
       createEventSource: env.createEventSource,
+      onAway: (state) => env.awayChanged(state),
       checkSignedIn: () =>
         env.api.get("/api/session").then(
           () => true,
@@ -51,6 +66,7 @@ export function cardsView(env: Env): View {
         left = true;
         stopLive();
         clearInterval(timer);
+        document.title = titleWith(0);
         env.statusSlot.replaceChildren();
       },
       update: (next) => app.setFilters(parseFilters(next)),
