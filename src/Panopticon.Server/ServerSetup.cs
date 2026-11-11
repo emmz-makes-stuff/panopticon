@@ -11,6 +11,7 @@ using Panopticon.Server.Distribution;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Live;
 using Panopticon.Server.Metrics;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Progress;
 using Panopticon.Server.Projects;
 using Panopticon.Server.Reporting;
@@ -124,6 +125,8 @@ public static class ServerSetup
         services.AddScoped<MetricsReader>();
         services.AddSingleton<DocumentRenderer>();
         services.AddSingleton<ChangeBroadcaster>();
+        services.AddSingleton<PresenceStore>();
+        services.AddHostedService<PresenceSweep>();
 
         // Auth (team-auth D4): no default scheme, so nothing is looked up unless an endpoint's policy asks for it.
         // Dashboard and /api: the session cookie. /mcp: a bearer token.
@@ -182,6 +185,7 @@ public static class ServerSetup
         app.MapDashboard();
         app.MapChanges();
         app.MapChangeTags();
+        app.MapAgentSessions();
         app.MapMetrics();
         app.MapProjects();
 

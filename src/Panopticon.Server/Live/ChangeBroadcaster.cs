@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Live;
@@ -43,6 +44,12 @@ public abstract record ChangeEvent
 
     /// <summary>A Project's tags changed (tags D6); sent as <c>project-tags-changed</c> to the Project's members.</summary>
     public sealed record TagsChanged(Guid ProjectId, IReadOnlyList<ProjectTagRef> Tags) : ChangeEvent;
+
+    /// <summary>A session on the change has a new state (agent-interaction D4); sent as <c>session-updated</c>.</summary>
+    public sealed record SessionUpdated(Guid ChangeId, ChangeScope Scope, SessionView Session) : ChangeEvent;
+
+    /// <summary>A session left the change, by ending, expiring or moving on; sent as <c>session-ended</c>.</summary>
+    public sealed record SessionEnded(Guid ChangeId, ChangeScope Scope, Guid SessionId) : ChangeEvent;
 }
 
 /// <summary>
@@ -134,6 +141,20 @@ public sealed class ChangeBroadcaster
     {
         ArgumentNullException.ThrowIfNull(tags);
         Publish(new ChangeEvent.TagsChanged(projectId, tags));
+    }
+
+    /// <summary>Called by the <see cref="PresenceStore"/>, under its lock, so a session's events go out in order.</summary>
+    public void PublishSessionUpdated(Guid changeId, ChangeScope scope, SessionView session)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(session);
+        Publish(new ChangeEvent.SessionUpdated(changeId, scope, session));
+    }
+
+    public void PublishSessionEnded(Guid changeId, ChangeScope scope, Guid sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        Publish(new ChangeEvent.SessionEnded(changeId, scope, sessionId));
     }
 
     private void Publish(ChangeEvent change)

@@ -112,8 +112,9 @@ ignore. `Stop` SHALL set waiting on the user.
 ### Requirement: Presence is not history
 Session state SHALL be held by the server only while it is current. It SHALL NOT be recorded as a report event, and
 SHALL NOT take part in history, metrics or task progress. A session SHALL expire when no event has arrived for the
-stale threshold (see `live-dashboard`, Quiet thresholds are settings). A server restart MAY lose every session, and a
-session's next event SHALL bring it back.
+stale threshold (see `live-dashboard`, Quiet thresholds are settings), apart from a session holding a prompt (see
+A held prompt keeps its session). A server restart MAY lose every session, and a session's next event SHALL bring
+it back.
 
 #### Scenario: Forgotten session
 - **WHEN** a session's last event was 5 hours ago, with the default thresholds
@@ -122,6 +123,18 @@ session's next event SHALL bring it back.
 #### Scenario: Metrics unaffected
 - **WHEN** a change has had 400 session events and 6 reports
 - **THEN** its history and metrics are the same as with the 6 reports alone
+
+### Requirement: A held prompt keeps its session
+A session holding a prompt (see `remote-answers`, A prompt while away) SHALL NOT expire, however long the prompt waits.
+Once the prompt is answered or released, the stale threshold SHALL count from that moment.
+
+#### Scenario: Away overnight
+- **WHEN** Emmz is away and her session has held a question for 5 hours, with the default thresholds
+- **THEN** the session and its question are still on its card, and she can still answer it
+
+#### Scenario: Released, then quiet
+- **WHEN** a held prompt is released after 6 hours, and the session sends no event for 4 hours more
+- **THEN** the session is no longer shown on its card
 
 ### Requirement: Who sees a session
 A session SHALL be visible to exactly the members who can see its change, through the dashboard's reads and its live

@@ -39,9 +39,11 @@ public sealed class TagWorld : IAsyncDisposable
     /// <summary>An MCP client with Emmz's token.</summary>
     public McpClient Reporter { get; }
 
-    public static async Task<TagWorld> CreateAsync(PostgresFixture postgres, S3Fixture s3, CancellationToken cancellationToken)
+    public static async Task<TagWorld> CreateAsync(PostgresFixture postgres, S3Fixture s3, CancellationToken cancellationToken, TimeProvider? clock = null)
     {
-        var factory = await PanopticonFactory.CreateAsync(postgres, s3, cancellationToken);
+        ArgumentNullException.ThrowIfNull(postgres);
+        ArgumentNullException.ThrowIfNull(s3);
+        var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(cancellationToken), await s3.CreateBucketAsync(cancellationToken)) { Clock = clock };
         var emmz = await factory.CreateSignedInClientAsync(cancellationToken: cancellationToken);
         var pan = await emmz.CreateProjectAsync("PAN", cancellationToken);
         await emmz.InviteToProjectAsync(pan, SamEmail, ProjectRoles.Editor, cancellationToken);

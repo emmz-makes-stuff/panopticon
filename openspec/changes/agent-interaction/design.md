@@ -115,7 +115,10 @@ tool list of any MCP client that connects to the online endpoint, and each call 
 
 `PresenceStore` keys sessions by `(memberId, sessionId)`. Each holds its change id and scope, the machine, the
 state, the activity and its start time, the last event time, and any prompt. A background sweep drops sessions
-whose last event is older than the stale threshold (`ActivityOptions`). Each change publishes on the broadcaster:
+whose last event is older than the stale threshold (`ActivityOptions`), but never one holding a prompt: a held prompt
+can wait 8 hours (D6), longer than the default 4-hour threshold, and the paused session sends no events meanwhile. A
+released prompt's session expires as usual, counted from the release (decided with Emmz in §3). Each change publishes
+on the broadcaster:
 
 - `SessionUpdated(changeId, scope, session)` and `SessionEnded(changeId, scope, sessionId)`, sent as
   `session-updated` and `session-ended`.

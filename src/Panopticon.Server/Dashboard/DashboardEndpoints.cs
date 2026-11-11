@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Data;
 using Panopticon.Server.Live;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Dashboard;
@@ -25,6 +26,12 @@ public sealed record ProjectsChanged(Guid ProjectId, bool Member);
 /// deleted (tags D6). The page renames its cards' tags by id, and drops the ids that are gone.
 /// </summary>
 public sealed record ProjectTagsChanged(Guid ProjectId, IReadOnlyList<ProjectTagRef> Tags);
+
+/// <summary>The data of a <c>session-updated</c> event: the session as it is now, on its change.</summary>
+public sealed record SessionUpdatedData(Guid ChangeId, SessionView Session);
+
+/// <summary>The data of a <c>session-ended</c> event: the session leaves the change's card.</summary>
+public sealed record SessionEndedData(Guid ChangeId, Guid SessionId);
 
 /// <summary>The dashboard's read API and live stream (spec: live-dashboard), for signed-in members only (dashboard-sign-in).</summary>
 public static class DashboardEndpoints
@@ -47,6 +54,12 @@ public static class DashboardEndpoints
 
     /// <summary>A Project's tags changed (tags D6), sent to the Project's members. Data is <see cref="ProjectTagsChanged"/>.</summary>
     public const string ProjectTagsChangedEvent = "project-tags-changed";
+
+    /// <summary>A session on a change has a new state (agent-interaction D4). Data is <see cref="SessionUpdatedData"/>.</summary>
+    public const string SessionUpdatedEvent = "session-updated";
+
+    /// <summary>A session left a change (ended, expired or moved on). Data is <see cref="SessionEndedData"/>.</summary>
+    public const string SessionEndedEvent = "session-ended";
 
     /// <summary>Sent on an idle stream so proxies and browsers don't drop it; the dashboard doesn't listen for it.</summary>
     public const string PingEvent = "ping";
@@ -232,6 +245,10 @@ public static class DashboardEndpoints
                     ChangeEvent.TagsChanged(var projectId, var tags) => (
                         new ChangeScope(projectId, null),
                         new SseItem<object?>(new ProjectTagsChanged(projectId, tags), ProjectTagsChangedEvent)),
+                    ChangeEvent.SessionUpdated(var changeId, var sessionScope, var session) =>
+                        (sessionScope, new SseItem<object?>(new SessionUpdatedData(changeId, session), SessionUpdatedEvent)),
+                    ChangeEvent.SessionEnded(var changeId, var sessionScope, var sessionId) =>
+                        (sessionScope, new SseItem<object?>(new SessionEndedData(changeId, sessionId), SessionEndedEvent)),
                     _ => throw new UnreachableException(),
                 };
                 if (viewer.CanSee(scope))

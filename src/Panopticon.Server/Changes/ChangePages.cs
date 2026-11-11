@@ -97,7 +97,7 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             .ToListAsync(cancellationToken);
 
         return new ChangePage(
-            ChangeCards.ToCard(change, viewer.MemberId),
+            cards.WithSessions(ChangeCards.ToCard(change, viewer.MemberId)),
             change.ArchivedAt,
             change.ArchiveFolder,
             Order(documents.Select(d => Describe(d.Path, d.SizeBytes))));
