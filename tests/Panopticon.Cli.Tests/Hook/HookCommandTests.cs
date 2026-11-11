@@ -204,6 +204,9 @@ public sealed class HookCommandTests : IDisposable
 
         public Func<SeenRequest, (HttpStatusCode Status, string Body)?>? Respond { get; init; }
 
+        /// <summary>When it says so, the response's headers arrive, then the connection drops part way into the body.</summary>
+        public Func<SeenRequest, bool>? DropAfterHeaders { get; init; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var seen = new SeenRequest(
@@ -222,8 +225,29 @@ public sealed class HookCommandTests : IDisposable
                 await Task.Delay(Timeout.Infinite, cancellationToken);
             }
 
+            if (DropAfterHeaders?.Invoke(seen) == true)
+            {
+                var dropped = new StreamContent(new DroppingStream("""{ "state": """u8.ToArray()));
+                dropped.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+                dropped.Headers.ContentLength = 64;
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = dropped };
+            }
+
             var (answerStatus, answerBody) = Respond?.Invoke(seen) ?? (status, body);
             return new HttpResponseMessage(answerStatus) { Content = new StringContent(answerBody, System.Text.Encoding.UTF8, "application/json") };
         }
+    }
+
+    /// <summary>A body that gives its first bytes, then fails the way a socket reset does.</summary>
+    private sealed class DroppingStream(byte[] start) : MemoryStream(start)
+    {
+        public override int Read(byte[] buffer, int offset, int count) =>
+            Position < Length ? base.Read(buffer, offset, count) : throw new IOException("The connection was reset.");
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            Position < Length ? base.ReadAsync(buffer, cancellationToken) : throw new IOException("The connection was reset.");
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
     }
 }

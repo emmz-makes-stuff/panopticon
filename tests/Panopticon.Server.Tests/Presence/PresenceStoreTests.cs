@@ -175,4 +175,21 @@ public sealed class PresenceStoreTests : IDisposable
         Assert.Equal(reported, card.LastActiveAt);
         Assert.Equal(_clock.GetUtcNow(), (card with { Sessions = byChange[_tags.ChangeId] }).LastActiveAt);
     }
+
+    [Fact]
+    public async Task A_wait_on_a_pending_prompt_answers_pending_once_the_clock_passes_its_timeout()
+    {
+        var clock = ManualClock.WithTimers();
+        var options = new PromptOptions();
+        var store = new PresenceStore(new ChangeBroadcaster(), clock, Options.Create(new ActivityOptions()), Options.Create(options));
+        var request = new PromptRequest(new RepoRef("github.com", "emmz", "panopticon"), "team-auth", "vm-1", "s-1", PromptKind.Permission, Tool: "Bash");
+        var created = store.Ask(_emmz, "Emmz", _teamAuth, request, away: true);
+
+        var waiting = store.WaitAsync(_emmz, Guid.Parse(created.PromptId), TestContext.Current.CancellationToken);
+        clock.Advance(options.WaitTimeout - TimeSpan.FromSeconds(1));
+        Assert.False(waiting.IsCompleted);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(new PromptWaitResult(PromptWaitState.Pending), await waiting.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+    }
 }

@@ -564,8 +564,8 @@ describe("change page answers (spec remote-answers, Answers are attributed)", ()
 
     expect(q(root, ".change-answers").hidden).toBe(false);
     expect(answers(root)).toEqual([
-      "Bob answered a question for Emmz's session, 5m agoWhich store?Postgres",
-      "Emmz denied Bash for Emmz's session, 2h ago",
+      "Bob answered a question for Emmz, 5m agoWhich store?Postgres",
+      "Emmz denied Bash for Emmz, 2h ago",
     ]);
   });
 
@@ -586,6 +586,6 @@ describe("change page answers (spec remote-answers, Answers are attributed)", ()
     stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ questions: null })));
     stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ questions: null })));
 
-    expect(answers(root)).toEqual(["Bob answered a question for Emmz's session, 5m ago"]);
+    expect(answers(root)).toEqual(["Bob answered a question for Emmz, 5m ago"]);
   });
 });

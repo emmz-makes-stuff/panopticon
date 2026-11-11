@@ -33,15 +33,15 @@ export function answerList(now: () => Date): AnswerList {
   };
 }
 
-/** What one answer says: "Bob answered a question for Emmz's session, 5m ago". */
+/** What one answer says, as the spec words it: "Bob answered a question for Emmz", "Bob allowed Bash for Emmz". */
 export function answerSummary(entry: AnswerEntry): string {
-  const session = `${entry.sessionMember}'s session`;
+  const member = entry.sessionMember;
   if (entry.kind === "question") {
-    return `${entry.answeredBy} answered a question for ${session}`;
+    return `${entry.answeredBy} answered a question for ${member}`;
   }
 
   const verb = entry.outcome === "allow" ? "allowed" : "denied";
-  return `${entry.answeredBy} ${verb} ${entry.tool ?? "a tool"} for ${session}`;
+  return `${entry.answeredBy} ${verb} ${entry.tool ?? "a tool"} for ${member}`;
 }
 
 /** `entry` added to `entries` in its place, newest first, once only. */

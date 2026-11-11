@@ -230,6 +230,29 @@ public sealed class PromptHookCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task A_wait_whose_connection_drops_mid_body_is_retried_and_keeps_waiting()
+    {
+        var answer = """{ "answeredBy": "Emmz", "answers": { "Q": "A" } }""";
+        var dropped = 0;
+        var waits = new Queue<(HttpStatusCode, string)>([(HttpStatusCode.OK, Waited("answered", answer))]);
+        var server = new StubServer(HttpStatusCode.NoContent)
+        {
+            Respond = request => request switch
+            {
+                { Method.Method: "POST", Url: var url } when url.EndsWith("/api/agent/prompts", StringComparison.Ordinal) => (HttpStatusCode.OK, Created(held: true)),
+                { Method.Method: "GET" } when waits.TryDequeue(out var next) => next,
+                _ => null,
+            },
+            DropAfterHeaders = request => request.Method == HttpMethod.Get && Interlocked.Increment(ref dropped) == 1,
+        };
+
+        Assert.Equal(0, await RunAsync(server, AskEvent(Question("Q", "H", false, ("A", null)))));
+
+        Assert.Equal("A", JsonNode.Parse(_stdout.ToString())!["hookSpecificOutput"]!["updatedInput"]!["answers"]!["Q"]!.GetValue<string>());
+        Assert.Equal(2, server.Requests.Count(r => r.Method == HttpMethod.Get));
+    }
+
+    [Fact]
     public async Task A_question_over_the_limits_goes_to_the_terminal_and_the_card_shows_it_waiting()
     {
         var server = Server(held: true);

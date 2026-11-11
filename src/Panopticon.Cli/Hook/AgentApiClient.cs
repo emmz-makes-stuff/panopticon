@@ -85,6 +85,12 @@ internal sealed class AgentApiClient(HttpClient http, Uri baseUrl, string token)
         {
             throw new BridgeException($"The Panopticon server at {Server} returned a malformed {what}: {exception.Message}", exception);
         }
+        catch (Exception exception) when (exception is HttpRequestException or IOException)
+        {
+            // SendAsync buffers the body, so a dropped connection normally surfaces there; this keeps the promise that
+            // every failure is a BridgeException if the body is ever read as a stream.
+            throw new BridgeException($"The connection to the Panopticon server at {Server} dropped while reading the {what}: {exception.Message}", exception);
+        }
     }
 
     private async Task<HttpResponseMessage> SendAsync<TBody>(

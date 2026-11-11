@@ -724,7 +724,7 @@ on the dashboard that blocks an agent until a person acts.
   (the state is in the text, and `aria-pressed` says it too), and it turns solid `--ink` when on. They're not
   spark (spark means live) and not teal (teal means progress). Notifications is hidden where the browser has none.
 - **Answers on the change page:** "Answers from the dashboard" (Gabarito 20px), then rows between hairline dividers.
-  Each reads "Bob answered a question for Emmz's session, 5m ago", with the questions under it: the question muted,
+  Each reads "Bob answered a question for Emmz, 5m ago", with the questions under it: the question muted,
   the answer 600. On phones, each question stacks above its answer.
 
 ## Accessibility floor

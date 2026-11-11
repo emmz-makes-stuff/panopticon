@@ -67,7 +67,8 @@ export interface App {
   /**
    * Applies one live update: updates the card in place, or adds a new card at the top. Ignores an update that is
    * older than the card already shown, or the same report again. The same report with other tags is a tag edit (tags
-   * D6): the card's tags change in place, with no motion. Returns whether it was applied.
+   * D6): the card's tags change in place, with no motion. A card already shown keeps its own sessions, which the
+   * session events own; a card new here takes the update's. Returns whether it was applied.
    */
   upsert(card: ChangeCard): boolean;
   /** Takes a change's card away: it was archived, and lives in the history now. Returns whether it was shown. */
@@ -119,6 +120,17 @@ const reportedAt = (card: ChangeCard) => Date.parse(card.lastReportedAt);
 /** Whether two copies of a card show the same sessions (presence moves without a report). */
 const sameSessions = (a: ChangeCard, b: ChangeCard) =>
   JSON.stringify(a.sessions ?? []) === JSON.stringify(b.sessions ?? []);
+
+/** `card` with the sessions `shown` has, or none when it has none. */
+function withSessionsOf(card: ChangeCard, shown: ChangeCard): ChangeCard {
+  const next = { ...card };
+  delete next.sessions;
+  if (shown.sessions) {
+    next.sessions = shown.sessions;
+  }
+
+  return next;
+}
 
 /** Whether two copies of a card carry the same tags, in the same order (the server's). */
 const sameTags = (a: ChangeCard, b: ChangeCard) =>
@@ -296,27 +308,20 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
       layout();
     },
 
-    upsert(card) {
-      const current = shown.get(card.changeId);
-      if (current && reportedAt(card) < reportedAt(current.card)) {
+    upsert(reported) {
+      const current = shown.get(reported.changeId);
+      if (current && reportedAt(reported) < reportedAt(current.card)) {
         return false;
       }
+
+      // A shown card's sessions are the session events' (code review F1): a report carries a snapshot of them that can
+      // be older than a `session-ended` already applied, so it never puts one back. A card new here takes the report's.
+      const card = current ? withSessionsOf(reported, current.card) : reported;
 
       // The same report: a duplicate, or a tag edit (tags D6), which republishes the card with its tags as they are now.
       if (current && reportedAt(card) === reportedAt(current.card)) {
         if (sameTags(card, current.card)) {
-          if (sameSessions(card, current.card)) {
-            return false;
-          }
-
-          // Only its sessions moved: patched in place, so nothing replays and a half-typed answer survives.
-          shown.set(card.changeId, { card, element: current.element });
-          updateSessions(current.element, card, now(), viewer);
-          if (loaded) {
-            layout();
-          }
-
-          return true;
+          return false;
         }
 
         replaceQuietly(card.changeId, current, card);

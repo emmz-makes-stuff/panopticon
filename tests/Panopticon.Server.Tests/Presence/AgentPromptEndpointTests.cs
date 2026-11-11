@@ -316,13 +316,4 @@ public class AgentPromptEndpointTests(PostgresFixture postgres, S3Fixture s3)
         world.Store.Sweep();
         Assert.Null(await SessionOnCardAsync(world.Tags.Emmz));
     }
-
-    [Fact]
-    public async Task A_wait_on_a_pending_prompt_answers_pending_after_its_timeout()
-    {
-        await using var world = await WorldAsync(away: true, waitTimeout: "00:00:00.300");
-        var created = await AskAsync(world, Question(project: world.Tags.Pan));
-
-        Assert.Equal(new PromptWaitResult(PromptWaitState.Pending), (await WaitAsync(world, created.PromptId)).Result);
-    }
 }

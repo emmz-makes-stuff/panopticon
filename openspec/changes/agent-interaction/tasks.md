@@ -51,10 +51,10 @@
 
 ## 9. Review fixes: small fixes from the review
 
-- [ ] 9.1 Make the change page's answer list read as the spec words it ("Bob allowed Bash for Emmz", "Bob answered a question for Emmz"), dropping "'s session" in `answerSummary`, with its tests and `web/DESIGN.md` updated. Verify with vitest tests.
-- [ ] 9.2 Make `PresenceStore.WaitAsync` time out with the store's `TimeProvider` (the `WaitAsync(TimeSpan, TimeProvider, CancellationToken)` overload), and move its timeout test onto the fake clock. Verify: the test advances the fake clock rather than waiting in real time.
-- [ ] 9.3 Make `AgentApiClient` turn an `HttpRequestException` or `IOException` while reading a response body into a `BridgeException` (code review F6, F7), so the hook's wait loop retries a connection dropped mid-long-poll for up to `ServerLossLimit`. Verify with a CLI test whose fake server drops the connection after the headers, once, then answers.
-- [ ] 9.4 Stop a report's `change-updated` from putting back sessions the live events have already ended (code review F1). An updated card already shown keeps its own sessions, which session events own, and a card new to the dashboard takes the event's. Verify with a vitest test: `session-ended`, then a newer report still listing that session, leaves no row.
+- [x] 9.1 Make the change page's answer list read as the spec words it ("Bob allowed Bash for Emmz", "Bob answered a question for Emmz"), dropping "'s session" in `answerSummary`, with its tests and `web/DESIGN.md` updated. Verify with vitest tests.
+- [x] 9.2 Make `PresenceStore.WaitAsync` time out with the store's `TimeProvider` (the `WaitAsync(TimeSpan, TimeProvider, CancellationToken)` overload), and move its timeout test onto the fake clock. Verify: the test advances the fake clock rather than waiting in real time.
+- [x] 9.3 Make `AgentApiClient` turn an `HttpRequestException` or `IOException` while reading a response body into a `BridgeException` (code review F6, F7), so the hook's wait loop retries a connection dropped mid-long-poll for up to `ServerLossLimit`. Verify with a CLI test whose fake server drops the connection after the headers, once, then answers.
+- [x] 9.4 Stop a report's `change-updated` from putting back sessions the live events have already ended (code review F1). An updated card already shown keeps its own sessions, which session events own, and a card new to the dashboard takes the event's. Verify with a vitest test: `session-ended`, then a newer report still listing that session, leaves no row.
 
 ## 10. Review fixes: races in sessions, prompts and the live stream
 

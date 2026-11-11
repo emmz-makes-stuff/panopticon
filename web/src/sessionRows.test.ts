@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mountApp } from "./app";
 import {
+  CHANGE_UPDATED,
   connectLive,
   parseSessionEnd,
   parseSessionUpdate,
@@ -178,6 +179,31 @@ describe("session rows", () => {
 
     expect(rows("tags")).toEqual([]);
     expect(cardFor("tags").querySelector(".card-sessions")).toBeNull();
+  });
+
+  it("a newer report still listing an ended session doesn't bring its row back (code review F1)", async () => {
+    const { rows, end } = await start([
+      card({ changeId: "tags", lastReportedAt: ago(5), sessions: [session()] }),
+    ]);
+
+    end("tags", "s1");
+    FakeEventSource.latest().emit(
+      CHANGE_UPDATED,
+      JSON.stringify(card({ changeId: "tags", lastReportedAt: ago(0), sessions: [session()] })),
+    );
+
+    expect(rows("tags")).toEqual([]);
+  });
+
+  it("a report for a card new to the dashboard brings its sessions", async () => {
+    const { rows } = await start([]);
+
+    FakeEventSource.latest().emit(
+      CHANGE_UPDATED,
+      JSON.stringify(card({ changeId: "tags", sessions: [session()] })),
+    );
+
+    expect(rows("tags")).toEqual(["Emmz on mbp: Run make gates, just now"]);
   });
 
   it("moves the elapsed time on with the quiet clock", async () => {

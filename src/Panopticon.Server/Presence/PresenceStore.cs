@@ -232,7 +232,7 @@ public sealed class PresenceStore(
 
         try
         {
-            await settled.WaitAsync(prompts.Value.WaitTimeout, cancellationToken);
+            await settled.WaitAsync(prompts.Value.WaitTimeout, clock, cancellationToken);
         }
         catch (TimeoutException)
         {
