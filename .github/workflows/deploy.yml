@@ -1,0 +1,41 @@
+# Deploys the server to Railway when a version tag (v*) is pushed (ADR-0004).
+# Needs the RAILWAY_TOKEN repository secret: a project token for the panopticon project's production environment.
+name: Deploy to Railway
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install the Railway CLI and IaC package
+        run: |
+          npm install -g @railway/cli@5.71.0
+          npm --prefix .railway ci
+
+      # Bring the service's settings in line with .railway/railway.ts. Destructive changes need a person, so
+      # there's no --confirm-destructive: a plan that would delete something fails the deploy instead.
+      - name: Apply Railway configuration
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway config apply --yes
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service panopticon --ci --message "${GITHUB_REF_NAME}"

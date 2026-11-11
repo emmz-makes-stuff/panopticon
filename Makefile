@@ -93,6 +93,7 @@ deps:
 	openspec --version >/dev/null 2>&1 || { echo "MISSING openspec — npm i -g @fission-ai/openspec"; fail=1; }; \
 	gh --version >/dev/null 2>&1 || { echo "MISSING gh — brew install gh"; fail=1; }; \
 	gh auth status >/dev/null 2>&1 || { echo "NOT AUTHENTICATED gh — gh auth login"; fail=1; }; \
-	railway --version >/dev/null 2>&1 || { echo "MISSING railway — brew install railway"; fail=1; }; \
+	railway --version 2>/dev/null | grep -Eq 'railway (5\.(7[1-9]|[89][0-9]|[1-9][0-9]{2})|[6-9]|[1-9][0-9])\.' || { echo "MISSING/WRONG VERSION railway — need >=5.71 (IaC: railway config): brew install railway"; fail=1; }; \
 	railway whoami >/dev/null 2>&1 || { echo "NOT AUTHENTICATED railway — railway login"; fail=1; }; \
+	[ -f .railway/node_modules/railway/package.json ] || { echo "MISSING railway IaC package — npm --prefix .railway ci"; fail=1; }; \
 	echo "DEPS_EXIT:$$fail"; exit $$fail
