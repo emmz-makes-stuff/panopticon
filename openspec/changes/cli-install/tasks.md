@@ -99,6 +99,40 @@
   replaces the running `.exe`. Verify with Emmz's PASS, or a recorded decision to defer Windows checks, in a devlog
   note.
 
+## 8. Review fixes: `panopticon update` error paths
+
+From the whole-change review and `code-review` (devlog `20261111-1920-whole-change-review.md`), agreed with Emmz.
+7.2 and 7.3 stay open. They run after these sections, on the real release.
+
+- [ ] 8.1 `update` refuses to replace a binary whose name isn't `panopticon` (or `panopticon.exe` on Windows). This is
+  the same check the `.old` clean-up in `CliApp` uses, so `dotnet …/panopticon.dll update` can't overwrite the
+  `dotnet` host. Move the check into one helper that both use. Verify with a unit test: a binary path such as
+  `…/dotnet` exits non-zero, sends no request, and changes nothing.
+- [ ] 8.2 A timeout (`TaskCanceledException` that isn't the caller's cancellation) is reported as "couldn't reach",
+  as `login` does. A stalled body is also bounded, by a read timeout on the body stream. Ctrl+C cancels through a real
+  token, and the temp file is still deleted. Verify with unit tests: a hung manifest, a body that stalls, and a
+  cancelled run each exit non-zero with a message, leave no `.panopticon-update-*` file, and keep the binary.
+- [ ] 8.3 The download stops as soon as more bytes than the manifest's `size` have arrived, or when `Content-Length`
+  disagrees with it. A download that fails part-way is reported as a download failure, not as "Can't replace". The
+  download and the replace get separate catches. Verify with unit tests: an oversized body, a lying `Content-Length`,
+  and a body that throws `HttpIOException` part-way.
+- [ ] 8.4 Tidying. `--server` parsing moves into `ServerAddress`, shared by `login` and `update`, with each command
+  keeping its own usage text. `UpdateCommand.TryDelete` goes, in favour of `BinaryReplacer`'s helper. There is one
+  `FreePort` per test project, in `Infrastructure/`. `panopticon version` is listed in `--help` next to `--version`.
+  Verify with the existing `login`/`update` tests green, and a `--help` test.
+
+## 9. Review fixes: server and install scripts
+
+- [ ] 9.1 `CliCatalogue.Load` logs a build it can't read or hash (`IOException`, `UnauthorizedAccessException`) and
+  leaves it out. The server still starts, and with no readable build at all the catalogue is empty. Verify with a
+  catalogue test on an unreadable file (Unix mode 000, skipped on Windows).
+- [ ] 9.2 `/cli/<rid>/<file>` downloads send `Cache-Control: no-cache`, so a cache revalidates against the bytes the
+  manifest describes. Verify with an endpoint test on the header.
+- [ ] 9.3 `install.ps1` moves `panopticon.exe.old` back when moving the new `.exe` into place fails, matching
+  `BinaryReplacer` (design D6). Verify by reading it against `BinaryReplacer`. The script itself is run in 7.3.
+- [ ] 9.4 The Tokens page's no-builds note shows the server's Problem `detail` (`ApiError.message`). It falls back to
+  the current text only if that's empty. Verify with a `tokens.test.ts` case where the 404 has a different `detail`.
+
 ## Workflow follow-up
 
 - Whole-change review, then offer `code-review`, then offer `/opsx:archive`.
