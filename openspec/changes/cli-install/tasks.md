@@ -94,7 +94,7 @@
   version with matching SHA-256s. Then run `curl -fsSL https://panopticon.team/install.sh | sh` on a Linux VM and on
   her Mac, `panopticon --version`, and `panopticon update` ("already up to date"). Verify with Emmz's PASS, recorded
   in a devlog note.
-- [ ] 7.3 Human verification (stop and ask Emmz): on x64 Windows, run `irm https://panopticon.team/install.ps1 | iex`.
+- [x] 7.3 Human verification (stop and ask Emmz): on x64 Windows, run `irm https://panopticon.team/install.ps1 | iex`.
   In a new terminal, run `panopticon --version`. Then `panopticon update` against a server with another version
   replaces the running `.exe`. Verify with Emmz's PASS, or a recorded decision to defer Windows checks, in a devlog
   note.
