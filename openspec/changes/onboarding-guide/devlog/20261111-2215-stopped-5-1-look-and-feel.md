@@ -68,7 +68,19 @@ On PASS: tick 5.1, and record 5.2 as waiting for the next release (or run it aft
 review and offer `code-review`.
 On FAIL: record what to change as a fix section, or as edits in §2/§3 if it's small, agreed with Emmz.
 
+## Update: "the guide isn't on the Projects page"
+
+Emmz saw no guide on Projects. I checked in the browser:
+- the new build is loaded (the `.projects-setup` slot is there);
+- Hide isn't set;
+- `/api/tokens` returned 200 with one token, `Rendles-MacBook-Pro`, which last reported 19h ago (local dev data).
+
+So the rule worked as specified. Emmz chose to **keep the rule**: she'll revoke that local dev token on the Tokens
+page and reload Projects to see the guide, then finish the 5.1 checks.
+
+On the Tokens page, the guide rendered as designed in dark mode: the done cells, "Done", and the rail.
+
 ## Next
 
-- Wait for Emmz's 5.1 result.
+- Wait for Emmz's 5.1 result (after her revoke).
 - Notes for change-done: the flaky `ScopedStreamTests` (see the §2 note), and that 5.2 needs a release.
