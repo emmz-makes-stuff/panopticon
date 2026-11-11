@@ -127,7 +127,7 @@ public static class ProjectEndpoints
         }
 
         await transaction.CommitAsync(cancellationToken);
-        broadcaster.PublishMembershipChanged(memberId, project.Id, isMember: true);
+        broadcaster.PublishMembershipChanged(memberId, project.Id, ProjectRoles.Owner);
         return TypedResults.Created(ProjectPath(project.Id), new ProjectView(project.Id, project.Name, project.Code, ProjectRoles.Owner));
     }
 
@@ -227,7 +227,7 @@ public static class ProjectEndpoints
         db.ProjectMembers.Add(membership);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        broadcaster.PublishMembershipChanged(member.Id, id, isMember: true);
+        broadcaster.PublishMembershipChanged(member.Id, id, membership.Role);
         return TypedResults.Created(
             $"{MembersPath(id)}/{member.Id}",
             new ProjectMemberView(member.Id, member.Email, member.DisplayName, membership.Role, now));
@@ -270,7 +270,7 @@ public static class ProjectEndpoints
         membership.Role = request.Role!;
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        broadcaster.PublishMembershipChanged(memberId, id, isMember: true);
+        broadcaster.PublishMembershipChanged(memberId, id, membership.Role);
         return TypedResults.Ok(await DetailsAsync(db, id, user.GetRequiredMemberId(), cancellationToken));
     }
 
@@ -308,7 +308,7 @@ public static class ProjectEndpoints
         db.ProjectMembers.Remove(membership);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        broadcaster.PublishMembershipChanged(memberId, id, isMember: false);
+        broadcaster.PublishMembershipChanged(memberId, id, role: null);
         return TypedResults.NoContent();
     }
 

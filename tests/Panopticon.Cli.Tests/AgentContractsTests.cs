@@ -148,7 +148,7 @@ public class AgentContractsTests
         Assert.Null(PromptLimits.Problem(new PromptRequest(_repo, "c", "m", "s", PromptKind.Permission, Tool: "Bash")));
 
         var full = new PromptQuestion("Q", "H", [new("A", Preview: new string('x', PromptLimits.MaxPreviewBytes)), new("B"), new("C"), new("D")]);
-        Assert.Null(PromptLimits.Problem(QuestionPrompt(full, full, full, full)));
+        Assert.Null(PromptLimits.Problem(QuestionPrompt(full, full with { Question = "Q2" }, full with { Question = "Q3" }, full with { Question = "Q4" })));
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class AgentContractsTests
         // Twelve 8000-byte previews are each within their limit, but over 64 KB together.
         var preview = new string('x', 8000);
         var big = new PromptQuestion("Q", "H", [new("A", Preview: preview), new("B", Preview: preview), new("C", Preview: preview)]);
-        Assert.Equal("it is over 64 KB", PromptLimits.Problem(QuestionPrompt(big, big, big, big)));
+        Assert.Equal("it is over 64 KB", PromptLimits.Problem(QuestionPrompt(big, big with { Question = "Q2" }, big with { Question = "Q3" }, big with { Question = "Q4" })));
     }
 
     [Fact]
@@ -173,6 +173,10 @@ public class AgentContractsTests
         Assert.NotNull(PromptLimits.Problem(QuestionPrompt(_storeQuestion) with { Tool = "Bash" }));
         Assert.NotNull(PromptLimits.Problem(new PromptRequest(_repo, "c", "m", "s", PromptKind.Permission)));
         Assert.NotNull(PromptLimits.Problem(new PromptRequest(_repo, "c", "m", "s", PromptKind.Permission, [_storeQuestion], "Bash")));
+
+        // An answer names each question by its text.
+        Assert.Equal("a question has no text", PromptLimits.Problem(QuestionPrompt(_storeQuestion with { Question = " " })));
+        Assert.Equal("two questions have the same text", PromptLimits.Problem(QuestionPrompt(_storeQuestion, _storeQuestion)));
     }
 
     [Fact]

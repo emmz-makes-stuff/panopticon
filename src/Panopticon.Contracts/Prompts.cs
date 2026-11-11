@@ -123,6 +123,17 @@ public static class PromptLimits
                     return $"it has {questions.Count} questions, over {MaxQuestions}";
                 }
 
+                // An answer names each question by its text, so a blank or repeated one couldn't be answered.
+                if (questions.Any(q => string.IsNullOrWhiteSpace(q.Question)))
+                {
+                    return "a question has no text";
+                }
+
+                if (questions.Select(q => q.Question).Distinct(StringComparer.Ordinal).Count() != questions.Count)
+                {
+                    return "two questions have the same text";
+                }
+
                 foreach (var question in questions)
                 {
                     if (question.Options is not { Count: > 0 } options)

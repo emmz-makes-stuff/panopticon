@@ -65,33 +65,44 @@ public static class AgentSessionEndpoints
     /// <summary>Why the event is malformed, or null.</summary>
     internal static string? Problem(SessionEventRequest request)
     {
-        if (request.Repo is null
-            || string.IsNullOrWhiteSpace(request.Repo.Host)
-            || string.IsNullOrWhiteSpace(request.Repo.Owner)
-            || string.IsNullOrWhiteSpace(request.Repo.Name))
+        if (SessionFieldsProblem(request.Repo, request.Change, request.Machine, request.SessionId) is { } problem)
         {
-            return "Give the repo's host, owner and name.";
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Change))
-        {
-            return "Give the change's name.";
-        }
-
-        if (string.IsNullOrWhiteSpace(request.SessionId) || request.SessionId.Length > MaxSessionIdLength)
-        {
-            return $"Give a session id of at most {MaxSessionIdLength} characters.";
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Machine) || request.Machine.Length > MaxMachineLength)
-        {
-            return $"Give a machine name of at most {MaxMachineLength} characters.";
+            return problem;
         }
 
         if (request.Activity is { } activity
             && (activity.Length > SessionLimits.MaxActivityLength || activity.Any(char.IsControl)))
         {
             return $"An activity is one line of at most {SessionLimits.MaxActivityLength} characters.";
+        }
+
+        return null;
+    }
+
+    /// <summary>Why the fields naming a session are malformed, or null: shared by every hook endpoint.</summary>
+    internal static string? SessionFieldsProblem(RepoRef? repo, string? change, string? machine, string? sessionId)
+    {
+        if (repo is null
+            || string.IsNullOrWhiteSpace(repo.Host)
+            || string.IsNullOrWhiteSpace(repo.Owner)
+            || string.IsNullOrWhiteSpace(repo.Name))
+        {
+            return "Give the repo's host, owner and name.";
+        }
+
+        if (string.IsNullOrWhiteSpace(change))
+        {
+            return "Give the change's name.";
+        }
+
+        if (string.IsNullOrWhiteSpace(sessionId) || sessionId.Length > MaxSessionIdLength)
+        {
+            return $"Give a session id of at most {MaxSessionIdLength} characters.";
+        }
+
+        if (string.IsNullOrWhiteSpace(machine) || machine.Length > MaxMachineLength)
+        {
+            return $"Give a machine name of at most {MaxMachineLength} characters.";
         }
 
         return null;

@@ -61,6 +61,12 @@ public static class DashboardEndpoints
     /// <summary>A session left a change (ended, expired or moved on). Data is <see cref="SessionEndedData"/>.</summary>
     public const string SessionEndedEvent = "session-ended";
 
+    /// <summary>An answer from the dashboard was recorded on a change (D8). Data is <see cref="AnswerEntry"/>.</summary>
+    public const string AnswerRecordedEvent = "answer-recorded";
+
+    /// <summary>The viewer turned away on or off (D8), from any dashboard or the CLI. Data is <see cref="Contracts.AwayState"/>.</summary>
+    public const string AwayChangedEvent = "away-changed";
+
     /// <summary>Sent on an idle stream so proxies and browsers don't drop it; the dashboard doesn't listen for it.</summary>
     public const string PingEvent = "ping";
 
@@ -224,9 +230,21 @@ public static class DashboardEndpoints
                 {
                     if (membership.MemberId == viewer.MemberId)
                     {
-                        viewer = viewer.WithProject(membership.ProjectId, membership.IsMember);
+                        viewer = viewer.WithProject(membership.ProjectId, membership.Role);
                         lastSent = Stopwatch.GetTimestamp();
                         yield return ProjectsChangedItem(membership.ProjectId, membership.IsMember);
+                    }
+
+                    continue;
+                }
+
+                // agent-interaction D8: a member's away switch goes to their own streams only.
+                if (change is ChangeEvent.AwayChanged awayChanged)
+                {
+                    if (awayChanged.MemberId == viewer.MemberId)
+                    {
+                        lastSent = Stopwatch.GetTimestamp();
+                        yield return new SseItem<object?>(awayChanged.State, AwayChangedEvent);
                     }
 
                     continue;
@@ -236,7 +254,7 @@ public static class DashboardEndpoints
                 var (scope, item) = change switch
                 {
                     // tags D6: the subscriber's own personal tags only, from the event's map; no database read.
-                    ChangeEvent.Updated updated => (updated.Scope, new SseItem<object?>(updated.CardFor(viewer.MemberId), ChangeUpdatedEvent)
+                    ChangeEvent.Updated updated => (updated.Scope, new SseItem<object?>(updated.CardFor(viewer), ChangeUpdatedEvent)
                     {
                         EventId = updated.Card.LastReportedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
                     }),
@@ -246,9 +264,11 @@ public static class DashboardEndpoints
                         new ChangeScope(projectId, null),
                         new SseItem<object?>(new ProjectTagsChanged(projectId, tags), ProjectTagsChangedEvent)),
                     ChangeEvent.SessionUpdated(var changeId, var sessionScope, var session) =>
-                        (sessionScope, new SseItem<object?>(new SessionUpdatedData(changeId, session), SessionUpdatedEvent)),
+                        (sessionScope, new SseItem<object?>(new SessionUpdatedData(changeId, session.For(viewer, sessionScope)), SessionUpdatedEvent)),
                     ChangeEvent.SessionEnded(var changeId, var sessionScope, var sessionId) =>
                         (sessionScope, new SseItem<object?>(new SessionEndedData(changeId, sessionId), SessionEndedEvent)),
+                    ChangeEvent.AnswerRecorded(var answerScope, var sessionMemberId, var entry) =>
+                        (answerScope, new SseItem<object?>(entry.For(viewer, sessionMemberId, answerScope), AnswerRecordedEvent)),
                     _ => throw new UnreachableException(),
                 };
                 if (viewer.CanSee(scope))

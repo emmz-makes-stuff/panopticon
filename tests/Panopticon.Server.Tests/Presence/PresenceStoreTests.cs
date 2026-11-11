@@ -24,7 +24,7 @@ public sealed class PresenceStoreTests : IDisposable
     public PresenceStoreTests()
     {
         _subscription = _broadcaster.Subscribe();
-        _store = new PresenceStore(_broadcaster, _clock, Options.Create(new ActivityOptions()));
+        _store = new PresenceStore(_broadcaster, _clock, Options.Create(new ActivityOptions()), Options.Create(new PromptOptions()));
     }
 
     public void Dispose() => _subscription.Dispose();

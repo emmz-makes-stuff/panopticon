@@ -37,6 +37,15 @@ public sealed record ChangeCard(
     /// </summary>
     public DateTimeOffset LastActiveAt =>
         Sessions.Count == 0 ? LastReportedAt : new[] { LastReportedAt, Sessions.Max(s => s.LastEventAt) }.Max();
+
+    /// <summary>
+    /// The card with each session's prompt as <paramref name="viewer"/> may see it, on a change in
+    /// <paramref name="scope"/> (agent-interaction D5). Every card that goes to a person goes through here.
+    /// </summary>
+    public ChangeCard SessionsFor(Viewer viewer, ChangeScope scope) =>
+        Sessions.Any(s => s.PromptDetail is not null)
+            ? this with { Sessions = [.. Sessions.Select(s => s.For(viewer, scope))] }
+            : this;
 }
 
 /// <summary>
@@ -46,9 +55,16 @@ public sealed record ChangeCard(
 /// </summary>
 public sealed record LiveCard(ChangeCard Card, IReadOnlyDictionary<Guid, IReadOnlyList<PersonalTagRef>> PersonalTags)
 {
-    /// <summary>The card as <paramref name="memberId"/> sees it: with their own personal tags, and nobody else's.</summary>
-    public ChangeCard For(Guid memberId) =>
-        PersonalTags.TryGetValue(memberId, out var tags) ? Card with { PersonalTags = tags } : Card;
+    /// <summary>
+    /// The card as <paramref name="viewer"/> sees it, on a change in <paramref name="scope"/>: with their own personal
+    /// tags and nobody else's, and only the prompts they may answer in full.
+    /// </summary>
+    public ChangeCard For(Viewer viewer, ChangeScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(viewer);
+        var card = PersonalTags.TryGetValue(viewer.MemberId, out var tags) ? Card with { PersonalTags = tags } : Card;
+        return card.SessionsFor(viewer, scope);
+    }
 }
 
 /// <summary>A personal tag as a card shows it: its key and value, with no id (tags D6).</summary>
@@ -92,10 +108,10 @@ public sealed class ChangeCards(PanopticonDb db, PresenceStore? presence = null)
             .OrderByDescending(c => c.LastReportedAt)
             .ToListAsync(cancellationToken);
         var sessions = presence?.For([.. changes.Select(c => c.Id)]);
-        return changes.ConvertAll(c => ToCard(c, viewer.MemberId) with
+        return changes.ConvertAll(c => (ToCard(c, viewer.MemberId) with
         {
             Sessions = sessions?.GetValueOrDefault(c.Id) ?? [],
-        });
+        }).SessionsFor(viewer, new ChangeScope(c.ProjectId, c.OwnerMemberId)));
     }
 
     /// <summary>

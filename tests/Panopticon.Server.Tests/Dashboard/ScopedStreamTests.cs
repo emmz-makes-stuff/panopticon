@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Contracts;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Data;
 using Panopticon.Server.Live;
 using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
@@ -135,8 +136,8 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
             .GetAsyncEnumerator(Ct);
         var moving = stream.MoveNextAsync();
 
-        broadcaster.PublishMembershipChanged(_ids.Emmz, _ids.Pan, isMember: false);
-        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, isMember: false);
+        broadcaster.PublishMembershipChanged(_ids.Emmz, _ids.Pan, role: null);
+        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, role: null);
         broadcaster.Publish(Card("pan-after"), new ChangeScope(_ids.Pan, null));
         var sentinel = Card("kit-scratch");
         broadcaster.Publish(sentinel, new ChangeScope(null, _ids.Kit));
@@ -163,7 +164,7 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
         var moving = stream.MoveNextAsync();
 
         broadcaster.Publish(Card("pan-before"), new ChangeScope(_ids.Pan, null));
-        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, isMember: true);
+        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, ProjectRoles.Viewer);
         var after = Card("pan-after");
         broadcaster.Publish(after, new ChangeScope(_ids.Pan, null));
 

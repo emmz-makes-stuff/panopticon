@@ -92,6 +92,12 @@ public static class ServerSetup
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ActivityOptions>, ActivityOptionsValidation>();
 
+        // How long prompts are held and waited on (agent-interaction D6). Settable for tests.
+        services.AddOptions<PromptOptions>()
+            .Bind(configuration.GetSection(PromptOptions.Section))
+            .Validate(o => o.HoldLimit > TimeSpan.Zero && o.WaitGrace > o.WaitTimeout && o.WaitTimeout > TimeSpan.Zero, "Panopticon:Prompts needs positive times, with WaitGrace longer than WaitTimeout.")
+            .ValidateOnStart();
+
         // Storage.
         services.AddDbContext<PanopticonDb>((sp, options) =>
             DbOptions.Configure(
@@ -126,6 +132,7 @@ public static class ServerSetup
         services.AddSingleton<DocumentRenderer>();
         services.AddSingleton<ChangeBroadcaster>();
         services.AddSingleton<PresenceStore>();
+        services.AddScoped<AwayMode>();
         services.AddHostedService<PresenceSweep>();
 
         // Auth (team-auth D4): no default scheme, so nothing is looked up unless an endpoint's policy asks for it.
@@ -186,6 +193,9 @@ public static class ServerSetup
         app.MapChanges();
         app.MapChangeTags();
         app.MapAgentSessions();
+        app.MapAway();
+        app.MapAgentPrompts();
+        app.MapPromptAnswers();
         app.MapMetrics();
         app.MapProjects();
 
