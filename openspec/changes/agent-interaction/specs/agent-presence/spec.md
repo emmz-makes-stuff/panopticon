@@ -35,21 +35,31 @@ unreadable input. It SHALL write a failure to the CLI's log, never to stdout, an
 - **THEN** every hook exits 0 with no output, and nothing is sent
 
 ### Requirement: A session's change
-A session event SHALL name the change the session is working on: the change the bridge last reported for the
-session's working tree (see `cli-bridge`, Reported change recorded), or else the change in the branch name
-`change/<name>`. The event SHALL carry the repo identity and Project link as reports do. With neither change found,
-the hook SHALL send nothing.
-
-#### Scenario: Change from the bridge
-- **WHEN** the bridge last reported `team-auth` from this working tree, and the branch is `main`
-- **THEN** the session's events name `team-auth`
+A session event SHALL name the change the session is working on: the `change/<name>` branch's, else the bridge's
+last report for the working tree while that change is active (see `cli-bridge`, Reported change recorded), else the
+active change with the newest `tasks.md`. It SHALL carry the repo identity and Project link as reports do. With no
+change found, the hook SHALL send nothing.
 
 #### Scenario: Change from the branch
-- **WHEN** nothing has been reported from this working tree and the branch is `change/tags`
+- **WHEN** the branch is `change/tags`
 - **THEN** the session's events name `tags`
 
+#### Scenario: Switched branch before reporting
+- **WHEN** the bridge last reported `tags` from this working tree, and the session is now on `change/projects`
+- **THEN** the session's events name `projects`
+
+#### Scenario: Change from the bridge
+- **WHEN** the bridge last reported `team-auth` from this working tree, `team-auth` is still active, and the branch
+  is `main`
+- **THEN** the session's events name `team-auth`
+
+#### Scenario: Newest active change
+- **WHEN** the branch is `main`, nothing has been reported from this working tree, and `projects` is the active change
+  whose `tasks.md` changed last
+- **THEN** the session's events name `projects`
+
 #### Scenario: No change at all
-- **WHEN** nothing has been reported from this working tree and the branch is `main`
+- **WHEN** the branch is `main`, nothing has been reported from this working tree, and there is no active change
 - **THEN** the hook sends nothing
 
 ### Requirement: Session identity

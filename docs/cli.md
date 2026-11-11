@@ -323,8 +323,9 @@ The plugin runs `panopticon hook` from Claude Code's hooks, with the event on st
   and a one-line summary of the tool in use, of at most 120 characters. The summary is the Bash tool's own
   description, or the tool and a file name, for example `Editing tasks.md` or `Running agent: Review the diff`. A
   command, a file's content and any other tool input never leave the machine.
-- **Which change:** the one the bridge last reported from the session's working tree (see `worktrees.json` under
-  [Configuration](#configuration)), or else `<name>` from a `change/<name>` branch. With neither, it sends nothing.
+- **Which change:** `<name>` from a `change/<name>` branch. Otherwise, the change the bridge last reported from the
+  session's working tree (see `worktrees.json` under [Configuration](#configuration)), while it's still active.
+  Otherwise, the active change whose `tasks.md` changed last. With none, it sends nothing.
   The repo identity and Project link come from the same places as reports.
 - **It never gets in the way:** apart from a prompt that's waiting for an answer, it finishes within 5 seconds and
   exits 0 with nothing on stdout, whatever happens: no login, the server down, a refusal, or input it can't read.
@@ -407,5 +408,7 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
   login. Correct it, or remove it from the agent's MCP server environment. Check for an unexpanded
   `${PANOPTICON_TOKEN}` in `.mcp.json` (see above).
 - **A session doesn't show on its card**: look in `hook.log` (see [Configuration](#configuration)). No line at all
-  usually means the hook found no change: report the change once with the bridge, or work on a `change/<name>`
-  branch. A card shows sessions only for changes it already has, so the change must have been reported first.
+  usually means the hook found no change (no `change/<name>` branch, and no active change in `openspec/changes/`),
+  or a different one: with several active changes off a change branch, it takes the bridge's last report, else the
+  newest `tasks.md`. A card shows sessions only for changes it already has, so the change must have been reported
+  first.

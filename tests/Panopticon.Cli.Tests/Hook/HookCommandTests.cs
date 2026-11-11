@@ -77,9 +77,11 @@ public sealed class HookCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task The_change_comes_from_the_bridges_link_first()
+    public async Task Off_a_change_branch_the_change_comes_from_the_bridges_record()
     {
         using var repo = ChangeRepo("main");
+        repo.WriteTasks("tags", "## 1. Setup\n- [ ] 1.1 First\n");
+        repo.WriteTasks("projects", "## 1. Setup\n- [ ] 1.1 First\n");
         WorktreeLinksFile.NextTo(Config).Record(await GitRepository.FindRootAsync(repo.Root, Ct), "tags", DateTimeOffset.UnixEpoch);
         var server = new StubServer(HttpStatusCode.NoContent);
 

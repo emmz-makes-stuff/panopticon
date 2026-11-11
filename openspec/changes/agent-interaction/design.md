@@ -194,8 +194,13 @@ the 8 hours, so the CLI always gives up before Claude Code kills it.
 
 After each accepted report, the bridge writes `{<worktree root>: {change, at}}` into `worktrees.json`, in the CLI
 config's directory, with the same atomic 0600 write as the config file. An archived report removes the entry when it
-still names that change. The hook resolves the git top-level directory of `cwd` and reads its entry. Failing that, it
-takes the change from a `change/<name>` branch, or else sends nothing. The repo identity and `.panopticon.json`
+still names that change. The hook resolves the git top-level directory of `cwd`, then takes the change from the first
+of: a `change/<name>` branch; its entry, while that change is still active in `openspec/changes/`; the active change
+whose `tasks.md` changed last. With none, it sends nothing.
+
+**Amended during §6 (Emmz, 2026-11-11):** the entry came first at first, so after a switch from a branch that had
+reported `tags` to `change/projects`, activity landed on the `tags` card until the agent reported `projects`. The
+branch now wins, a stale entry is skipped, and the newest `tasks.md` is the last fallback. The repo identity and `.panopticon.json`
 come from the same code the bridge uses (`ProgressReporter.ParseRemote`, `ProjectLink`).
 
 Keying by worktree root means two worktrees never collide. Two sessions in one worktree, on two changes, would
