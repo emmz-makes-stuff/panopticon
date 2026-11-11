@@ -56,6 +56,8 @@ export interface Env {
   confirm: (message: string) => boolean;
   /** Puts text on the clipboard (a Project's link file). Rejects when the browser won't allow it. */
   copy: (text: string) => Promise<void>;
+  /** The visitor's OS as the browser names it (e.g. "macOS", "Windows", "MacIntel", "Win32"), for the install hint. */
+  platform: () => string;
 }
 
 export interface ShellDeps {
@@ -68,6 +70,7 @@ export interface ShellDeps {
   now?: (() => Date) | undefined;
   confirm?: ((message: string) => boolean) | undefined;
   copy?: ((text: string) => Promise<void>) | undefined;
+  platform?: (() => string) | undefined;
 }
 
 export interface Shell {
@@ -224,6 +227,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     createEventSource: deps.createEventSource,
     confirm: deps.confirm ?? ((message) => window.confirm(message)),
     copy: deps.copy ?? ((text) => navigator.clipboard.writeText(text)),
+    platform: deps.platform ?? browserPlatform,
   };
 
   const routes: Record<string, View> = {
@@ -285,4 +289,10 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
   });
   await router.start();
   return { router, member: () => member };
+}
+
+/** The browser's name for the OS: User-Agent Client Hints where there are some, else the older `navigator.platform`. */
+function browserPlatform(): string {
+  const hints = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  return hints?.platform || navigator.platform || "";
 }

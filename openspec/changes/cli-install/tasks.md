@@ -57,12 +57,12 @@
 
 ## 5. Web: install hint on the Tokens page
 
-- [ ] 5.1 On the Tokens page, fetch `/api/cli`, and show an "Install the CLI" panel with `sh` and PowerShell tabs. The
+- [x] 5.1 On the Tokens page, fetch `/api/cli`, and show an "Install the CLI" panel with `sh` and PowerShell tabs. The
   default tab comes from the visitor's OS, and each tab has a Copy button. A 404 shows the `make install` note
   instead (D8). Add the copy to `web/DESIGN.md`'s Tokens section. Verify with `tokens.test.ts`: the macOS and Windows
   defaults, switching tabs, Copy calling the clipboard with the exact command, and the no-builds state. Then
   `make web-test` → `WEB_TEST_EXIT:0`, plus `make web-lint` and `make web-format`.
-- [ ] 5.2 Human verification (stop and ask Emmz): the `frontend-design` pass on the panel, then her review of it in a
+- [x] 5.2 Human verification (stop and ask Emmz): the `frontend-design` pass on the panel, then her review of it in a
   real browser on the local server with a prepared `cli-dist`. Verify with Emmz's PASS, recorded in a devlog note.
 
 ## 6. Build and release
