@@ -14,6 +14,7 @@ internal sealed partial class ProgressReporter(
     BridgeSettings settings,
     ServerForwarder forwarder,
     ReportedChanges reported,
+    TimeProvider clock,
     ILogger<ProgressReporter> logger)
 {
     /// <summary>Used when the agent gave no client name at initialisation.</summary>
@@ -69,6 +70,8 @@ internal sealed partial class ProgressReporter(
                 },
                 settings.TokenFromEnvironment,
                 cancellationToken);
+
+            LinkWorktree(root, change, archived: folder.Archive is not null);
 
             // The archive watcher follows active changes reported in this session, and lets go once one is archived.
             if (folder.Archive is { } archive)
@@ -128,6 +131,36 @@ internal sealed partial class ProgressReporter(
         return [.. tags.Select(t => t.Text)];
     }
 
+    /// <summary>
+    /// Records the reported change for this working tree, or clears it once archived, so <c>panopticon hook</c> can
+    /// name a session's change (D9; spec cli-bridge, Reported change recorded). Only after the server accepted the
+    /// report. A failure to write is logged and never fails the report.
+    /// </summary>
+    private void LinkWorktree(string root, string change, bool archived)
+    {
+        if (settings.Config is not { } config)
+        {
+            return;
+        }
+
+        var links = WorktreeLinksFile.NextTo(config);
+        try
+        {
+            if (archived)
+            {
+                links.Clear(root, change);
+            }
+            else
+            {
+                links.Record(root, change, clock.GetUtcNow());
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            LogLinkFailed(links.Path, exception.Message);
+        }
+    }
+
     /// <summary>The repo identity from an origin URL; one that isn't a repo URL is a <see cref="BridgeException"/>.</summary>
     internal static RepoRef ParseRemote(string originUrl)
     {
@@ -149,6 +182,9 @@ internal sealed partial class ProgressReporter(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Problem} The report was sent without personal tags, so the server keeps the ones it has.")]
     private partial void LogTagsUnreadable(string problem);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The report went, but {Path} couldn't be updated, so agent hooks may not find this change: {Reason}")]
+    private partial void LogLinkFailed(string path, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Report for change {Change} failed: {Reason}")]
     private partial void LogFailed(string change, string reason);

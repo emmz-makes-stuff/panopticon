@@ -36,6 +36,7 @@ internal static class BridgeHost
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton(new ServerForwarder(createHttpClient));
         builder.Services.AddSingleton<ReportedChanges>();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ProgressReporter>();
         builder.Services.AddHostedService<ArchiveWatcher>();
 

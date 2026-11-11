@@ -14,7 +14,7 @@ namespace Panopticon.Server.Presence;
 /// </summary>
 public static class AgentPromptEndpoints
 {
-    public const string PromptsPath = "/api/agent/prompts";
+    public const string PromptsPath = "/" + AgentApiPaths.Prompts;
 
     public static string PreviewPath(Guid promptId) => $"{PromptsPath}/{promptId}/preview";
 

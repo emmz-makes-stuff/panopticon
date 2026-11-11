@@ -111,6 +111,14 @@ internal static partial class ChangeDocuments
         && ArchiveDatePrefix().IsMatch(folderName)
         && string.Equals(folderName[11..], change, StringComparison.Ordinal);
 
+    /// <summary>Whether <paramref name="change"/> is a single plain folder name: no separators, no dots-only, no padding.</summary>
+    public static bool IsPlainName(string change) =>
+        !string.IsNullOrWhiteSpace(change)
+        && change is not ("." or "..")
+        && change.Trim() == change
+        && change.IndexOfAny(['/', '\\', ':']) < 0
+        && change.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
+
     /// <summary>
     /// The change's folder, refusing any name that could leave <c>openspec/changes/</c>. Only a single plain path
     /// segment is accepted, and the combined path is checked as well.
@@ -120,11 +128,7 @@ internal static partial class ChangeDocuments
         ArgumentNullException.ThrowIfNull(change);
 
         var changesRoot = ChangesRoot(repoRoot);
-        if (string.IsNullOrWhiteSpace(change)
-            || change is "." or ".."
-            || change.Trim() != change
-            || change.IndexOfAny(['/', '\\', ':']) >= 0
-            || change.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        if (!IsPlainName(change))
         {
             throw InvalidName(change);
         }

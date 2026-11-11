@@ -18,17 +18,15 @@ internal sealed record CliConfig(string? ServerUrl, string? Token, IReadOnlyList
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     WriteIndented = true)]
 [JsonSerializable(typeof(CliConfig))]
+[JsonSerializable(typeof(Dictionary<string, WorktreeLink>))]
 internal sealed partial class CliJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// The CLI's config file (team-auth design D14). It's written atomically, through a temp file next to it, and on Unix
-/// it's readable by the user only: the file is 0600 and its directory 0700, set before anything is written.
+/// The CLI's config file (team-auth design D14), written through <see cref="UserOnlyFile"/>: atomically, and on Unix
+/// readable by the user only.
 /// </summary>
 internal sealed class CliConfigFile(string path)
 {
-    private const UnixFileMode UserOnlyFile = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-    private const UnixFileMode UserOnlyDirectory = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
-
     public string Path { get; } = path;
 
     /// <summary>
@@ -139,40 +137,6 @@ internal sealed class CliConfigFile(string path)
     public void Write(CliConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
-        var directory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(Path))!;
-        if (OperatingSystem.IsWindows())
-        {
-            Directory.CreateDirectory(directory);
-        }
-        else
-        {
-            Directory.CreateDirectory(directory, UserOnlyDirectory);
-            File.SetUnixFileMode(directory, UserOnlyDirectory);
-        }
-
-        var temp = System.IO.Path.Combine(directory, $".{System.IO.Path.GetFileName(Path)}.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
-            if (!OperatingSystem.IsWindows())
-            {
-                options.UnixCreateMode = UserOnlyFile;
-            }
-
-            using (var stream = new FileStream(temp, options))
-            {
-                JsonSerializer.Serialize(stream, config, CliJsonContext.Default.CliConfig);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(temp, Path, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(temp))
-            {
-                File.Delete(temp);
-            }
-        }
+        UserOnlyFile.Write(Path, stream => JsonSerializer.Serialize(stream, config, CliJsonContext.Default.CliConfig));
     }
 }

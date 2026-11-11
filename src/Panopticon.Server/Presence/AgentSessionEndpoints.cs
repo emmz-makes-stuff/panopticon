@@ -13,7 +13,7 @@ namespace Panopticon.Server.Presence;
 /// </summary>
 public static class AgentSessionEndpoints
 {
-    public const string EventsPath = "/api/agent/sessions/events";
+    public const string EventsPath = "/" + AgentApiPaths.SessionEvents;
 
     /// <summary>The longest session id and machine name accepted.</summary>
     public const int MaxSessionIdLength = 200;

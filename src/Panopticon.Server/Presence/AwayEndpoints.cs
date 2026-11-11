@@ -61,7 +61,7 @@ public sealed class AwayMode(PanopticonDb db, ChangeBroadcaster broadcaster, Pre
 /// </summary>
 public static class AwayEndpoints
 {
-    public const string AgentPath = "/api/agent/away";
+    public const string AgentPath = "/" + AgentApiPaths.Away;
     public const string MePath = "/api/me/away";
 
     public static IEndpointRouteBuilder MapAway(this IEndpointRouteBuilder endpoints)

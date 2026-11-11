@@ -1,0 +1,295 @@
+using System.Text.Json;
+using Panopticon.Cli.Bridge;
+using Panopticon.Cli.Config;
+using Panopticon.Cli.Git;
+using Panopticon.Contracts;
+
+namespace Panopticon.Cli.Hook;
+
+/// <summary>One Claude Code hook event, as read from stdin: only the fields the hook uses.</summary>
+internal sealed record HookEvent(string EventName, string SessionId, string Cwd, string? ToolName, JsonElement? ToolInput)
+{
+    /// <summary>The event in <paramref name="json"/>, or null when it isn't one (not JSON, or a field is missing).</summary>
+    public static HookEvent? Parse(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || Text(root, "hook_event_name") is not { } eventName
+                || Text(root, "session_id") is not { } sessionId
+                || Text(root, "cwd") is not { } cwd)
+            {
+                return null;
+            }
+
+            JsonElement? toolInput = root.TryGetProperty("tool_input", out var input) ? input.Clone() : null;
+            return new HookEvent(eventName, sessionId, cwd, Text(root, "tool_name"), toolInput);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? Text(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+        && !string.IsNullOrWhiteSpace(value.GetString())
+            ? value.GetString()
+            : null;
+}
+
+/// <summary>How long the sync hook waits on a held prompt (agent-interaction D6). Tests shorten these.</summary>
+/// <param name="HoldLimit">The longest a prompt is waited on in all: 8 hours, inside Claude Code's 30000s timeout.</param>
+/// <param name="ServerLossLimit">How long with no successful <c>wait</c> before the terminal takes over: 60s.</param>
+/// <param name="RetryDelay">The pause after a failed <c>wait</c>.</param>
+/// <param name="WaitCallTimeout">
+/// One <c>wait</c> call's limit: the server's 25s long-poll and 5s to spare. Two hung calls then use up the 60s, so a
+/// lost server hands the prompt back in about a minute, not two.
+/// </param>
+internal sealed record PromptWaitOptions(TimeSpan HoldLimit, TimeSpan ServerLossLimit, TimeSpan RetryDelay, TimeSpan WaitCallTimeout)
+{
+    public static PromptWaitOptions Default { get; } =
+        new(TimeSpan.FromHours(8), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(30));
+}
+
+/// <summary>
+/// <c>panopticon hook</c> (agent-interaction D1, D2, D6, D7, D9): reads one Claude Code hook event from stdin and
+/// sends the session's new state, with the same server and token as reports. Whatever happens it exits 0, and a
+/// failure goes to the <see cref="HookLog"/>, never to stdout (spec agent-presence, Hooks never break the session).
+/// <list type="bullet">
+/// <item>The async events finish within <see cref="Budget"/>, with no output.</item>
+/// <item>A question (<c>PreToolUse</c> on <c>AskUserQuestion</c>) or a permission prompt (<c>PermissionRequest</c>) is
+/// posted; when the server holds it, the hook waits for an answer and writes D7's output. Otherwise, and on any
+/// failure, it writes nothing and the terminal asks as usual.</item>
+/// </list>
+/// </summary>
+internal sealed class HookCommand(
+    Func<HttpClient> createHttpClient,
+    BridgeSettings settings,
+    WorktreeLinksFile? links,
+    HookLog log,
+    TextWriter stdout,
+    TimeProvider clock,
+    PromptWaitOptions? waitOptions = null)
+{
+    public const string AskUserQuestion = "AskUserQuestion";
+
+    /// <summary>
+    /// How long an event may take, network and git included, inside the spec's 5 seconds: the rest is process
+    /// start-up and reading stdin. A held prompt's wait is outside it.
+    /// </summary>
+    public static readonly TimeSpan Budget = TimeSpan.FromSeconds(4);
+
+    private readonly PromptWaitOptions _wait = waitOptions ?? PromptWaitOptions.Default;
+
+    private sealed record Target(AgentApiClient Client, RepoRef Repo, string Change, string? Project);
+
+    public async Task<int> RunAsync(TextReader stdin, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stdin);
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(Budget);
+        string? eventName = null;
+        HttpClient? http = null;
+        try
+        {
+            var hookEvent = HookEvent.Parse(await stdin.ReadToEndAsync(budget.Token));
+            if (hookEvent is null)
+            {
+                log.Write("hook: the input isn't a Claude Code hook event (JSON with hook_event_name, session_id and cwd); nothing was sent.");
+                return 0;
+            }
+
+            eventName = hookEvent.EventName;
+            var kind = PromptKindFor(hookEvent);
+            var update = kind is null ? StateFor(hookEvent) : null;
+            if (kind is null && update is null)
+            {
+                return 0;
+            }
+
+            http = createHttpClient();
+            if (await ResolveTargetAsync(hookEvent, http, budget.Token) is not { } target)
+            {
+                return 0;
+            }
+
+            if (kind is { } promptKind)
+            {
+                await AskAsync(hookEvent, promptKind, target, budget, cancellationToken);
+            }
+            else
+            {
+                await SendAsync(hookEvent, target, update!.Value.State, update.Value.Activity, budget.Token);
+            }
+        }
+        catch (BridgeException exception)
+        {
+            log.Write($"hook {eventName ?? "?"}: {exception.Message}");
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            log.Write($"hook {eventName ?? "?"}: gave up after {Budget.TotalSeconds:0}s, so the session's state wasn't sent.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or HttpRequestException or JsonException)
+        {
+            log.Write($"hook {eventName ?? "?"}: {exception.GetType().Name}: {exception.Message}");
+        }
+        finally
+        {
+            http?.Dispose();
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// The state an asynchronous event sets (spec agent-presence, Session states), or null for an event this path
+    /// doesn't send: one it doesn't use, and the prompts (<see cref="PromptKindFor"/>).
+    /// </summary>
+    internal static (SessionState State, string? Activity)? StateFor(HookEvent hookEvent)
+    {
+        ArgumentNullException.ThrowIfNull(hookEvent);
+        var tool = hookEvent.ToolName;
+        return hookEvent.EventName switch
+        {
+            "PreToolUse" when tool is not null and not AskUserQuestion => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
+            "PostToolUse" when tool is not null and not AskUserQuestion => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
+            "PostToolUse" => (SessionState.Working, null),
+            "UserPromptSubmit" => (SessionState.Working, null),
+            "Stop" => (SessionState.WaitingOnUser, null),
+            "SessionEnd" => (SessionState.Ended, null),
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The prompt an event raises, or null. A <c>PermissionRequest</c> for <c>AskUserQuestion</c> is ignored: Claude
+    /// Code raises one for every question the <c>PreToolUse</c> hook doesn't answer (D1, found in §1), and the
+    /// question is already posted.
+    /// </summary>
+    internal static PromptKind? PromptKindFor(HookEvent hookEvent)
+    {
+        ArgumentNullException.ThrowIfNull(hookEvent);
+        return hookEvent switch
+        {
+            { EventName: "PreToolUse", ToolName: AskUserQuestion } => PromptKind.Question,
+            { EventName: "PermissionRequest", ToolName: { } tool } when tool != AskUserQuestion => PromptKind.Permission,
+            _ => null,
+        };
+    }
+
+    /// <summary>The server, the repo and the change the event is for; null when the session isn't on a change.</summary>
+    private async Task<Target?> ResolveTargetAsync(HookEvent hookEvent, HttpClient http, CancellationToken cancellationToken)
+    {
+        var (baseUrl, token) = settings.RequireApi();
+        if (await SessionChange.ResolveAsync(hookEvent.Cwd, links, cancellationToken) is not { } change)
+        {
+            // Not working on a change: nothing to show, and nothing wrong.
+            return null;
+        }
+
+        var repo = ProgressReporter.ParseRemote(await GitRepository.GetOriginUrlAsync(change.WorktreeRoot, cancellationToken));
+        var project = await ProjectLink.ReadAsync(change.WorktreeRoot, cancellationToken);
+        return new Target(new AgentApiClient(http, baseUrl, token), repo, change.Change, project?.ToString());
+    }
+
+    private Task SendAsync(HookEvent hookEvent, Target target, SessionState state, string? activity, CancellationToken cancellationToken) =>
+        target.Client.SendEventAsync(
+            new SessionEventRequest(target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, state, activity, target.Project),
+            cancellationToken);
+
+    /// <summary>
+    /// Posts the prompt (spec remote-answers, A prompt while away). A permission prompt carries only its tool's name
+    /// until held. One that doesn't fit the limits, or can't be read, isn't posted: the card shows the session waiting,
+    /// and the terminal asks. When held, a permission prompt's preview goes up, then the hook waits.
+    /// </summary>
+    private async Task AskAsync(HookEvent hookEvent, PromptKind kind, Target target, CancellationTokenSource budget, CancellationToken cancellationToken)
+    {
+        var waiting = kind == PromptKind.Question ? SessionState.WaitingOnQuestion : SessionState.WaitingOnPermission;
+        var questions = kind == PromptKind.Question ? PromptHookOutput.Questions(hookEvent.ToolInput) : null;
+        var request = new PromptRequest(
+            target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, kind, questions, kind == PromptKind.Permission ? hookEvent.ToolName : null, target.Project);
+        var problem = kind == PromptKind.Question && questions is null
+            ? "its questions can't be read"
+            : PromptLimits.Problem(request);
+        if (problem is not null)
+        {
+            await SendAsync(hookEvent, target, waiting, null, budget.Token);
+            log.Write($"hook {hookEvent.EventName}: this prompt went to the terminal, not the dashboard: {problem}.");
+            return;
+        }
+
+        var created = await target.Client.AskAsync(request, budget.Token);
+        if (!created.Held || !Guid.TryParse(created.PromptId, out var promptId))
+        {
+            return;
+        }
+
+        if (kind == PromptKind.Permission)
+        {
+            try
+            {
+                await target.Client.SetPreviewAsync(promptId, PromptHookOutput.Preview(hookEvent.ToolName!, hookEvent.ToolInput), budget.Token);
+            }
+            catch (BridgeException exception)
+            {
+                // The prompt is still held: the dashboard can deny it, just not allow it.
+                log.Write($"hook {hookEvent.EventName}: the preview didn't reach the server, so the dashboard can only deny: {exception.Message}");
+            }
+        }
+
+        if (await WaitAsync(target.Client, promptId, hookEvent.EventName, cancellationToken) is { } answer
+            && PromptHookOutput.For(kind, hookEvent.ToolInput, answer) is { } output)
+        {
+            await stdout.WriteAsync(output);
+            await stdout.FlushAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Waits on a held prompt (D6): the answer, or null once it's released, unknown to the server (404), past the hold
+    /// limit, or the server has gone unanswered for <see cref="PromptWaitOptions.ServerLossLimit"/>.
+    /// </summary>
+    private async Task<PromptAnswer?> WaitAsync(AgentApiClient client, Guid promptId, string eventName, CancellationToken cancellationToken)
+    {
+        var started = clock.GetTimestamp();
+        var lastHeard = started;
+        while (clock.GetElapsedTime(started) < _wait.HoldLimit)
+        {
+            using var call = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            call.CancelAfter(_wait.WaitCallTimeout);
+            try
+            {
+                var result = await client.WaitAsync(promptId, call.Token);
+                lastHeard = clock.GetTimestamp();
+                switch (result?.State)
+                {
+                    case PromptWaitState.Answered when result.Answer is { } answer:
+                        return answer;
+                    case PromptWaitState.Pending:
+                        continue;
+                    default:
+                        // Released, or the server doesn't know it (404): the terminal asks.
+                        return null;
+                }
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                && exception is BridgeException or OperationCanceledException)
+            {
+                if (clock.GetElapsedTime(lastHeard) >= _wait.ServerLossLimit)
+                {
+                    log.Write($"hook {eventName}: lost the server for {_wait.ServerLossLimit.TotalSeconds:0}s, so the terminal asks: {exception.Message}");
+                    return null;
+                }
+
+                await Task.Delay(_wait.RetryDelay, clock, cancellationToken);
+            }
+        }
+
+        log.Write($"hook {eventName}: no answer within {_wait.HoldLimit.TotalHours:0} hours, so the terminal asks.");
+        return null;
+    }
+}

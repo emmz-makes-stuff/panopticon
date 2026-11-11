@@ -3,7 +3,9 @@
 `panopticon login` gives this machine an API token, approved in the dashboard. `panopticon mcp` is a local
 MCP server that agents talk to over stdio. It offers three tools, `report_progress`, `list_projects` and
 `tag_change`, and forwards each call to the Panopticon server's online MCP endpoint (`/mcp`). `panopticon tags`
-keeps the personal tags this machine's reports carry. `panopticon update` installs the build your server serves (see
+keeps the personal tags this machine's reports carry. `panopticon hook` sends Claude Code sessions' activity and
+prompts, and `panopticon away` turns away mode on or off (see [Session activity and away
+mode](#session-activity-and-away-mode)). `panopticon update` installs the build your server serves (see
 [Install](#install) and [Update](#update)).
 
 The agent only names the change. The bridge supplies the rest from the local working copy:
@@ -237,6 +239,16 @@ If neither source has a value, the bridge still starts. Each `report_progress` c
 naming the missing variable and saying to run `panopticon login`. If the saved file can't be read, the bridge
 treats it as missing and says so once on stderr, without its content.
 
+Two more files sit beside `config.json`, with the same permissions:
+
+- **`worktrees.json`**: each working tree's root and the change the bridge last reported from it, so
+  [`panopticon hook`](#session-activity-and-away-mode) knows a session's change. The bridge writes it after every
+  report the server accepts, and drops a working tree's entry when that change is reported archived. It's a cache:
+  delete it and the next report rebuilds it. If it can't be written, the report still goes, and the bridge logs a
+  warning.
+- **`hook.log`**: where `panopticon hook` writes its failures, one line each, never the token. At 1 MB it's moved
+  aside to `hook.log.1`.
+
 ## Claude Code
 
 Log the machine in first. Then the simplest route is the Panopticon plugin, from the public
@@ -297,6 +309,55 @@ and, optionally, `section` (the `## N.` it is working on). The reply states over
 progress, e.g. `Overall 7/20 · section 2 Core 2/5`. For an archived change it ends with the archive folder, e.g.
 `Overall 20/20 · section 4 Docs 3/3 · archived as 2026-11-08-team-auth`.
 
+## Session activity and away mode
+
+With the plugin's hooks installed, each Claude Code session shows on its change's card: what it's doing, or what
+it's waiting on. When you're away from the keyboard, its questions and permission prompts wait for you to answer
+them on the dashboard.
+
+### `panopticon hook`
+
+The plugin runs `panopticon hook` from Claude Code's hooks, with the event on stdin. You don't run it yourself.
+
+- **What it sends:** the session's state (working, waiting on a question, a permission prompt or you, or ended),
+  and a one-line summary of the tool in use, of at most 120 characters. The summary is the Bash tool's own
+  description, or the tool and a file name, for example `Editing tasks.md` or `Running agent: Review the diff`. A
+  command, a file's content and any other tool input never leave the machine.
+- **Which change:** the one the bridge last reported from the session's working tree (see `worktrees.json` under
+  [Configuration](#configuration)), or else `<name>` from a `change/<name>` branch. With neither, it sends nothing.
+  The repo identity and Project link come from the same places as reports.
+- **It never gets in the way:** apart from a prompt that's waiting for an answer, it finishes within 5 seconds and
+  exits 0 with nothing on stdout, whatever happens: no login, the server down, a refusal, or input it can't read.
+  Failures go to `hook.log` (see [Configuration](#configuration)).
+
+### Prompts
+
+A question (`AskUserQuestion`) or a permission prompt is posted to the server, which decides whether to hold it:
+
+- **You're not away:** the terminal asks as usual, and the card shows the session waiting with "answer in the
+  terminal". A permission prompt sends only the tool's name, never its input.
+- **You're away:** the hook holds the prompt and waits, and the terminal shows nothing. A permission prompt's input
+  goes up only now, as a preview cut to 2 KB. Once you, or an owner of the change's Project, answer it on the
+  dashboard, the session carries on with that answer. Allowing a tool runs it once and never adds a permission rule;
+  denying it gives the session your message.
+- **The terminal takes over** when you turn away mode off, after 8 hours, or when the server can't be reached for a
+  minute.
+- **Too big for the dashboard:** a question with more than four questions or four options, an option preview over
+  8 KB, or a prompt over 64 KB in all, goes to the terminal. The card shows the session waiting on a question it
+  can't show.
+
+### `panopticon away`
+
+```sh
+panopticon away        # prints whether you're away, and since when
+panopticon away on     # prompts from your sessions now wait for the dashboard
+panopticon away off    # held prompts go back to their terminals
+```
+
+Away mode is yours, not the machine's: it covers all your sessions on every machine, and the dashboard's header has
+the same switch. It uses the same server and token as reports. Without a login it exits 1 and says to run
+`panopticon login`.
+
 ## Other agents
 
 Any MCP client that can launch a stdio server works the same way. Its command is `panopticon` with the
@@ -345,3 +406,6 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
 - **"rejected the token from PANOPTICON_TOKEN"**: the variable is wrong, and it takes precedence over the saved
   login. Correct it, or remove it from the agent's MCP server environment. Check for an unexpanded
   `${PANOPTICON_TOKEN}` in `.mcp.json` (see above).
+- **A session doesn't show on its card**: look in `hook.log` (see [Configuration](#configuration)). No line at all
+  usually means the hook found no change: report the change once with the bridge, or work on a `change/<name>`
+  branch. A card shows sessions only for changes it already has, so the change must have been reported first.

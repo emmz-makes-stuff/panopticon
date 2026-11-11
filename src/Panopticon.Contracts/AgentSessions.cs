@@ -51,6 +51,18 @@ public sealed record SessionEventRequest(
 /// <param name="Since">When away was turned on. The server sets it in its answers and ignores it in a request.</param>
 public sealed record AwayState(bool Away, DateTimeOffset? Since = null);
 
+/// <summary>The hook endpoints' paths (D3), relative to the server's base URL, shared by the CLI and the server.</summary>
+public static class AgentApiPaths
+{
+    public const string SessionEvents = "api/agent/sessions/events";
+    public const string Prompts = "api/agent/prompts";
+    public const string Away = "api/agent/away";
+
+    public static string Preview(Guid promptId) => $"{Prompts}/{promptId}/preview";
+
+    public static string Wait(Guid promptId) => $"{Prompts}/{promptId}/wait";
+}
+
 /// <summary>What a session event may carry.</summary>
 public static class SessionLimits
 {
