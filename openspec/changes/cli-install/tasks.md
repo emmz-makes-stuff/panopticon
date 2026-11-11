@@ -89,7 +89,7 @@
   `README.md`'s Reporting progress section, and `docs/DISCOVERY.md` where it mentions installing. Add an *Amended
   2026-11-11* bullet to ADR-0004: the server serves the binaries, and GitHub Releases are kept as the record.
   Verify by reading each against the spec delta, and with `make validate` → `VALIDATE_EXIT:0`.
-- [ ] 7.2 Human verification (stop and ask Emmz): push a release tag. Check that all four `cli` jobs pass, that the
+- [x] 7.2 Human verification (stop and ask Emmz): push a release tag. Check that all four `cli` jobs pass, that the
   GitHub Release holds four builds and `SHA256SUMS`, and that `https://panopticon.team/api/cli` reports the tag's
   version with matching SHA-256s. Then run `curl -fsSL https://panopticon.team/install.sh | sh` on a Linux VM and on
   her Mac, `panopticon --version`, and `panopticon update` ("already up to date"). Verify with Emmz's PASS, recorded
