@@ -41,8 +41,8 @@
 
 ## 7. Plugin (in `../panopticon-skills`)
 
-- [ ] 7.1 Add `hooks/panopticon-hook.sh` (exits 0 when `panopticon` is missing or fails) and D1's `hooks.json` entries beside the existing `tasks-changed.sh` hook. Bump the plugin's version, and commit in that repo. Verify: `jq` parses `hooks.json`; and a test of the wrapper, using a fake `panopticon` on `PATH` and one missing from it, sees exit 0 and empty stdout.
-- [ ] 7.2 Update the plugin's README and skills: away mode, `panopticon away`, what a held prompt looks like in the terminal, and the minimum Claude Code version from §1. Add the away-mode step to `/panopticon:setup`'s checklist. Verify: the README and skills name every new hook and command, and `/panopticon:setup`'s steps still run in order.
+- [x] 7.1 Add `hooks/panopticon-hook.sh` (exits 0 when `panopticon` is missing or fails) and D1's `hooks.json` entries beside the existing `tasks-changed.sh` hook. Bump the plugin's version, and commit in that repo. Verify: `jq` parses `hooks.json`; and a test of the wrapper, using a fake `panopticon` on `PATH` and one missing from it, sees exit 0 and empty stdout.
+- [x] 7.2 Update the plugin's README and skills: away mode, `panopticon away`, what a held prompt looks like in the terminal, and the minimum Claude Code version from §1. Add the away-mode step to `/panopticon:setup`'s checklist. Verify: the README and skills name every new hook and command, and `/panopticon:setup`'s steps still run in order.
 
 ## 8. End to end
 
