@@ -21,7 +21,7 @@ clean" (designed with the `frontend-design` skill). Setup should take minutes on
 - **Contracts:** a shared .NET library that both the server and the CLI reference.
 - **Web:** **vanilla TypeScript + CSS**, built with **Vite**, with no UI framework. Live updates arrive
   through the browser's `EventSource`.
-- The SDK is pinned through `global.json` to 10.0.403 with `rollForward: latestFeature`. (Raised from 10.0.400, whose bundled AOT compiler had a known vulnerability.)
+- The SDK is pinned through `global.json` to 10.0.404 with `rollForward: latestFeature`. (Raised from 10.0.400, whose bundled AOT compiler had a known vulnerability, then from 10.0.403 for the 2026-11-10 servicing release: ASP.NET Core 10.0.15 fixes CVE-2026-114149.)
 
 ## Evidence
 
