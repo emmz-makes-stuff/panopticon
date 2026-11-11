@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -12,9 +11,7 @@ namespace Panopticon.Cli.Bridge;
 /// <summary>Builds the <c>panopticon mcp</c> host: an MCP server whose only output on its transport is protocol.</summary>
 internal static class BridgeHost
 {
-    public static string Version { get; } =
-        typeof(BridgeHost).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-        ?? "0.0.0";
+    public static string Version => CliVersion.Informational;
 
     /// <summary>Tool parameters bind through source-generated metadata (Native AOT), with the SDK's own types.</summary>
     private static readonly JsonSerializerOptions _toolJson = CreateToolJson();

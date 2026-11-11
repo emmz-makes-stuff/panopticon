@@ -21,12 +21,19 @@ internal static class CliApp
             stdout.WriteLine("  tags                    List the personal tags sent with this machine's reports");
             stdout.WriteLine("  tags add <tag>...       Add personal tags, e.g. dev or \"language: csharp\"");
             stdout.WriteLine("  tags remove <tag>...    Remove personal tags");
+            stdout.WriteLine("  --version               Print the CLI's version");
             stdout.WriteLine();
             stdout.WriteLine("Environment (each overrides the login 'panopticon login' saved):");
             stdout.WriteLine($"  {BridgeSettings.ServerUrlVariable}  The Panopticon server's base URL");
             stdout.WriteLine($"  {BridgeSettings.TokenVariable}       The API token for the server");
             stdout.WriteLine();
             stdout.WriteLine($"Saved login: {CliConfigFile.ForCurrentUser().Path}");
+            return 0;
+        }
+
+        if (args[0] is "--version" or "version")
+        {
+            stdout.WriteLine(CliVersion.Current);
             return 0;
         }
 

@@ -2,7 +2,7 @@
 
 ## 1. CLI: a version, and `--version`
 
-- [ ] 1.1 Set `<Version>0.0.0-dev</Version>` in `Panopticon.Cli.csproj`, and add `panopticon --version` (also
+- [x] 1.1 Set `<Version>0.0.0-dev</Version>` in `Panopticon.Cli.csproj`, and add `panopticon --version` (also
   `version`). It prints the informational version up to any `+<commit>` suffix, and exits 0 (D5). Add it to the
   `--help` text. Verify with a `CliApp` test, and with `make aot` then
   `dotnet publish … -p:Version=0.2.0` → `artifacts/cli/panopticon --version` prints `0.2.0`. Then `make build` →

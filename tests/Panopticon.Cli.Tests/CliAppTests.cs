@@ -18,7 +18,31 @@ public class CliAppTests
         Assert.Contains("  tags add <tag>...", help, StringComparison.Ordinal);
         Assert.Contains("  tags remove <tag>...", help, StringComparison.Ordinal);
         Assert.Contains("config.json", help, StringComparison.Ordinal);
+        Assert.Contains("  --version ", help, StringComparison.Ordinal);
     }
+
+    // Spec cli-distribution: Version command. A local build is 0.0.0-dev (design D5).
+    [Theory]
+    [InlineData("--version")]
+    [InlineData("version")]
+    public async Task Version_prints_the_version_without_build_metadata(string command)
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        var exit = await CliApp.RunAsync([command], stdout, stderr);
+
+        Assert.Equal(0, exit);
+        Assert.Equal("0.0.0-dev", stdout.ToString().Trim());
+        Assert.Empty(stderr.ToString());
+    }
+
+    [Theory]
+    [InlineData("0.2.0", "0.2.0")]
+    [InlineData("0.2.0+abc123", "0.2.0")]
+    [InlineData("0.0.0-dev+abc123", "0.0.0-dev")]
+    public void Build_metadata_is_dropped(string informational, string expected) =>
+        Assert.Equal(expected, CliVersion.WithoutBuildMetadata(informational));
 
     [Fact]
     public async Task Unknown_command_fails_with_a_message()
