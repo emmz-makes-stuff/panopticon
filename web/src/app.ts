@@ -83,7 +83,10 @@ export interface App {
    * reload. Under a filter, a card that no longer matches goes out. Returns how many cards changed.
    */
   retagProject(change: ProjectTagsChange): number;
-  /** Loads every card from the server and renders them. Throws if the load fails, leaving the cards as they were. */
+  /**
+   * Loads every card from the server and renders them, unless a newer refresh started meanwhile (that one renders).
+   * Throws if the load fails, leaving the cards as they were.
+   */
   refresh(): Promise<void>;
   /** Shows whether the live connection is up. */
   setStatus(status: LiveStatus): void;
@@ -207,6 +210,8 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     barStale = true;
   }
 
+  /** Counts refreshes, so only the newest one renders: an older list landing late would roll the cards back. */
+  let refreshes = 0;
   let heldKey: string | undefined;
   /** Tells `onHeld` about the held prompts, when they differ from the last it heard. */
   function heldChanged(): void {
@@ -405,7 +410,12 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
     },
 
     async refresh() {
-      app.render(await fetchChanges(api));
+      // Second review #4: several resyncs can overlap, and their lists can land out of order.
+      const mine = ++refreshes;
+      const cards = await fetchChanges(api);
+      if (mine === refreshes) {
+        app.render(cards);
+      }
     },
 
     updateTimes() {

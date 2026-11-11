@@ -71,9 +71,9 @@
 
 ## 12. Review fixes: live catch-up, from the second review
 
-- [ ] 12.1 When the stream sends `resync`, run the viewer recheck at once, before the queued events go out (#5), so a dropped membership change or member removal takes effect then. Verify with a server test: a dropped `MembershipChanged` for a joined Project is recognised right after `resync`, with no keep-alive wait.
-- [ ] 12.2 Make the newest `refresh` win (#4): a refresh that resolves after a later one has started is ignored, on the dashboard and the change page. Verify with vitest tests: two refreshes whose responses arrive in reverse order render the second.
-- [ ] 12.3 Stop an away reload from overwriting a newer state (#8): a `load` that started before a `set` (a toggle, or `away-changed`) is ignored when it resolves. Verify with a vitest test.
+- [x] 12.1 When the stream sends `resync`, run the viewer recheck at once, before the queued events go out (#5), so a dropped membership change or member removal takes effect then. Verify with a server test: a dropped `MembershipChanged` for a joined Project is recognised right after `resync`, with no keep-alive wait.
+- [x] 12.2 Make the newest `refresh` win (#4): a refresh that resolves after a later one has started is ignored, on the dashboard and the change page. Verify with vitest tests: two refreshes whose responses arrive in reverse order render the second.
+- [x] 12.3 Stop an away reload from overwriting a newer state (#8): a `load` that started before a `set` (a toggle, or `away-changed`) is ignored when it resolves. Verify with a vitest test.
 
 ## Workflow follow-up
 

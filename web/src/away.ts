@@ -10,7 +10,10 @@ export interface AwaySwitch {
   element: HTMLButtonElement;
   /** Shows `state`: from the server's answer, or an `away-changed` event. */
   set(state: AwayState): void;
-  /** Asks the server for the member's current state. A failure leaves the switch as it is, and says so. */
+  /**
+   * Asks the server for the member's current state. A failure leaves the switch as it is, and says so. An answer that
+   * lands after a newer state was set, or after a later load began, is ignored.
+   */
   load(): Promise<void>;
 }
 
@@ -35,7 +38,12 @@ export function awaySwitch(api: Api, onError: (text: string) => void): AwaySwitc
   button.append(label, " ", state);
 
   let away = false;
+  // Second review #8: bumped by every `set`, so a load that started before a newer state (a toggle, or `away-changed`)
+  // doesn't put the older one back; and only the newest load applies.
+  let version = 0;
+  let loads = 0;
   function set(next: AwayState): void {
+    version++;
     away = next.away;
     button.setAttribute("aria-pressed", String(away));
     button.dataset["away"] = String(away);
@@ -78,9 +86,11 @@ export function awaySwitch(api: Api, onError: (text: string) => void): AwaySwitc
     element: button,
     set,
     async load() {
+      const mine = ++loads;
+      const since = version;
       try {
         const next = parseAwayState(JSON.stringify((await api.get<unknown>(AWAY_PATH)) ?? null));
-        if (next) {
+        if (next && mine === loads && since === version) {
           set(next);
         }
       } catch (error) {

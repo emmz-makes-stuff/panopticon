@@ -225,6 +225,24 @@ public static class DashboardEndpoints
                 // queued go out after it; the browser's fresh load, landing after them, has the last word.
                 if (subscription.TakeDropped())
                 {
+                    // A dropped membership change or removal would leave this stream's own scope wrong: re-check now,
+                    // not at the next keep-alive (second review #5).
+                    if (recheck is not null)
+                    {
+                        if (await recheck(cancellationToken) is not { } current)
+                        {
+                            yield break;
+                        }
+
+                        foreach (var difference in ProjectsChangedBetween(viewer, current))
+                        {
+                            yield return difference;
+                        }
+
+                        viewer = current;
+                        lastCheck = Stopwatch.GetTimestamp();
+                    }
+
                     lastSent = Stopwatch.GetTimestamp();
                     yield return new SseItem<object?>(null, ResyncEvent);
                 }

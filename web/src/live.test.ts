@@ -289,6 +289,44 @@ describe("connectLive, resync", () => {
     expect(caughtUp).toBe(1);
   });
 
+  it("two overlapping reloads whose lists land out of order render the newer one (second review #4)", async () => {
+    const root = document.createElement("main");
+    const pending: ((cards: ChangeCard[]) => void)[] = [];
+    let first = true;
+    const fetch = () => {
+      if (first) {
+        first = false;
+        return Promise.resolve(new Response(JSON.stringify([card()])));
+      }
+
+      return new Promise<Response>((resolve) => {
+        pending.push((cards) => resolve(new Response(JSON.stringify(cards))));
+      });
+    };
+    const app = await mountApp(root, { fetch, now: () => NOW });
+    const rows = () => root.querySelectorAll(".card-session").length;
+    const session = {
+      id: "s1",
+      memberId: "m1",
+      memberName: "Emmz",
+      machine: "mbp",
+      state: "working" as const,
+      activity: "Run make gates",
+      since: NOW.toISOString(),
+      lastEventAt: NOW.toISOString(),
+    };
+
+    // The same report both times: only the sessions differ, and the older list has none yet.
+    const older = app.refresh();
+    const newer = app.refresh();
+    pending[1]?.([card({ sessions: [session] })]);
+    await newer;
+    pending[0]?.([card()]);
+    await older;
+
+    expect(rows()).toBe(1);
+  });
+
   it("reconnects when the reload after a resync fails", async () => {
     const { fetch, timers, status } = await start();
     FakeEventSource.latest().open();

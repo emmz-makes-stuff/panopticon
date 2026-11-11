@@ -50,6 +50,49 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("card-1", Assert.IsType<ChangeCard>(stream.Current.Data).Change);
     }
 
+    // Second review #5: a dropped membership change takes effect at the resync, not at the next keep-alive.
+    [Fact]
+    public async Task A_resync_rechecks_the_viewer_at_once_so_a_dropped_join_takes_effect()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var current = new Viewer(_ids.Kit, [_ids.Pan]);
+        var pan = new ChangeScope(_ids.Pan, null);
+        await using var stream = DashboardEndpoints.StreamAsync(
+                broadcaster, current, subscribed: null, TimeSpan.FromMinutes(5), recheck: _ => Task.FromResult<Viewer?>(current), Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), pan);
+        Assert.True(await moving);
+
+        // Kit joined Acme; that event is among those the full queue dropped.
+        current = new Viewer(_ids.Kit, [_ids.Pan, _ids.Acme]);
+        Enumerable.Range(0, ChangeBroadcaster.SubscriberCapacity + 1).ToList().ForEach(i => broadcaster.Publish(Card($"card-{i}"), pan));
+
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal(new ProjectsChanged(_ids.Acme, Member: true), stream.Current.Data);
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal(DashboardEndpoints.ResyncEvent, stream.Current.EventType);
+    }
+
+    [Fact]
+    public async Task A_resync_whose_recheck_finds_the_member_removed_ends_the_stream()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        Viewer? current = new Viewer(_ids.Kit, [_ids.Pan]);
+        var pan = new ChangeScope(_ids.Pan, null);
+        await using var stream = DashboardEndpoints.StreamAsync(
+                broadcaster, current, subscribed: null, TimeSpan.FromMinutes(5), recheck: _ => Task.FromResult<Viewer?>(current), Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), pan);
+        Assert.True(await moving);
+
+        current = null;
+        Enumerable.Range(0, ChangeBroadcaster.SubscriberCapacity + 1).ToList().ForEach(i => broadcaster.Publish(Card($"card-{i}"), pan));
+
+        Assert.False(await stream.MoveNextAsync());
+    }
+
     [Fact]
     public async Task A_stream_with_no_drops_sends_no_resync()
     {
