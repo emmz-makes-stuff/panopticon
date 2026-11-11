@@ -10,12 +10,12 @@
 
 ## 2. Server: the CLI catalogue, manifest and downloads
 
-- [ ] 2.1 Add the `/api/cli` manifest contract to `Panopticon.Contracts`, with source-generated JSON (D4). Add a CLI
+- [x] 2.1 Add the `/api/cli` manifest contract to `Panopticon.Contracts`, with source-generated JSON (D4). Add a CLI
   catalogue that scans `Panopticon:CliDirectory` (default `<app base>/cli`) at start-up. It reads `version` and each
   `<rid>/<file>` for the four supported platforms, and hashes them. A missing or incomplete directory gives an empty
   catalogue, and start-up doesn't fail (D1). Verify with unit tests: a full directory, a missing directory, no
   `version` file, an unexpected rid ignored.
-- [ ] 2.2 Map `GET /api/cli` and `GET /cli/{rid}/{file}` as anonymous endpoints, with URLs built on `PublicUrl` (D4).
+- [x] 2.2 Map `GET /api/cli` and `GET /cli/{rid}/{file}` as anonymous endpoints, with URLs built on `PublicUrl` (D4).
   An unknown rid or file is a 404, and an empty catalogue is a 404 with the "no CLI builds" message. Verify with
   integration tests against a temp `CliDirectory`: the manifest's values and hashes, a different `Host` header, a
   download's bytes and headers, `/cli/freebsd-x64/panopticon` → 404 and not `index.html`, and an empty catalogue

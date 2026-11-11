@@ -85,7 +85,7 @@ All of these are anonymous, and all are mapped before the fallback:
   `application/octet-stream`, with `Content-Disposition: attachment`.
 
 An explicit endpoint already outranks the fallback, so `/cli/...` never returns `index.html`. A test pins this down.
-With an empty catalogue, all four return 404 with a plain-text message (JSON `{ "error": … }` for `/api/cli`).
+With an empty catalogue, all four return 404 with a plain-text message (for `/api/cli`, Problem Details JSON with the message as `detail`, like the server's other API errors).
 
 The `/api/cli` shape:
 

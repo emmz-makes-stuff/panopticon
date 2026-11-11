@@ -7,6 +7,7 @@ using Panopticon.Server.Auth;
 using Panopticon.Server.Changes;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
+using Panopticon.Server.Distribution;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Live;
 using Panopticon.Server.Metrics;
@@ -139,6 +140,19 @@ public static class ServerSetup
                 .AddAuthenticationSchemes(ApiTokenHandler.SchemeName)
                 .RequireAuthenticatedUser());
 
+        // CLI distribution (cli-install D1): the builds bundled with this server, hashed once.
+        services.AddOptions<CliDistributionOptions>()
+            .Configure(o =>
+            {
+                if (configuration[CliDistributionOptions.ConfigKey] is { } directory && !string.IsNullOrWhiteSpace(directory))
+                {
+                    o.Directory = directory;
+                }
+            });
+        services.AddSingleton(sp => CliCatalogue.Load(
+            sp.GetRequiredService<IOptions<CliDistributionOptions>>().Value.Directory,
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<CliCatalogue>()));
+
         services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
             .WithTools<ReportProgressTool>()
@@ -170,6 +184,10 @@ public static class ServerSetup
         app.MapChangeTags();
         app.MapMetrics();
         app.MapProjects();
+
+        // The CLI builds this server hands out (cli-install). The catalogue is read now, at start-up (design D1).
+        _ = app.Services.GetRequiredService<CliCatalogue>();
+        app.MapCliDistribution();
 
         // Client-side routes fall back to the app shell; unknown API paths stay 404. `nonfile` keeps paths with a file
         // extension (the built assets) out of the fallback, so UseStaticFiles serves them: an endpoint matched here would
