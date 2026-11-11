@@ -63,7 +63,7 @@
 
 ## 5. Human verification
 
-- [ ] 5.1 Human verification (stop and ask Emmz): run the server locally (`make` dev flow, or `docker compose`), sign
+- [x] 5.1 Human verification (stop and ask Emmz): run the server locally (`make` dev flow, or `docker compose`), sign
   in as a member with no tokens, and check:
   - the Projects page and the Tokens page show the guide;
   - Hide works on Projects;
