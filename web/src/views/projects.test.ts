@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { MEMBER, q, until, type FakeServer } from "../testing";
+import { createApi } from "../api";
+import { MEMBER, fakeServer, q, until, type FakeServer } from "../testing";
 import { signedIn, startTestShell, type TestShellOptions } from "../testShell";
 import { codePlate } from "../projectLabel";
 import {
   linkFile,
+  projectTagSection,
   type Project,
   type ProjectDetails,
   type ProjectMember,
@@ -696,6 +698,166 @@ describe("/projects/{id} tags", () => {
     clickTagButton(root, 0, "Delete");
 
     expect(confirm).toHaveBeenCalledWith("Delete PAN/unused? No changes carry it.");
+  });
+});
+
+// project-page-live-tags D2: the Tags section redraws its rows in place, leaving the rest of the section alone.
+describe("projectTagSection redraw", () => {
+  const AREA = projectTag("t1", "area", "onboarding", 3);
+  const BUG = projectTag("t2", "bug", null, 12);
+
+  function open(role: Project["role"], tags: ProjectTag[]) {
+    const status = document.createElement("p");
+    const section = projectTagSection(
+      {
+        api: createApi({ fetch: fakeServer() }),
+        path: PATH,
+        confirm: () => false,
+        status,
+        reload: () => Promise.resolve(),
+      },
+      details(role, [emmz], tags),
+    );
+    document.body.replaceChildren(section.element, status);
+    const redraw = (next: ProjectTag[]) => section.redraw(details(role, [emmz], next));
+    return { root: section.element, status, redraw };
+  }
+
+  const rows = (root: HTMLElement) =>
+    [...root.querySelectorAll(".project-tag")].map((row) =>
+      row.querySelector(".tag-rename-form")
+        ? `renaming ${row.querySelector<HTMLInputElement>("input")?.value}`
+        : `${row.querySelector(".tag-chip")?.textContent} (${row.querySelector(".project-tag-count")?.textContent})`,
+    );
+
+  function startRename(root: HTMLElement, index: number): HTMLInputElement {
+    const row = root.querySelectorAll<HTMLElement>(".project-tag")[index];
+    const rename = [...(row?.querySelectorAll("button") ?? [])].find(
+      (b) => b.textContent === "Rename",
+    );
+    if (!rename) {
+      throw new Error(`No Rename button in tag row ${index}`);
+    }
+
+    rename.click();
+    return q<HTMLInputElement>(row ?? root, ".tag-rename-form input");
+  }
+
+  it("A rename by someone else: the row shows the new name in its sorted place, with its count", () => {
+    const { root, redraw } = open("viewer", [AREA, BUG]);
+
+    redraw([BUG, projectTag("t1", "zone", null, 3)]);
+
+    expect(rows(root)).toEqual(["PAN/bug (12 changes)", "PAN/zone (3 changes)"]);
+  });
+
+  it("An add from a change's page: the new tag joins with its count", () => {
+    const { root, redraw } = open("viewer", [BUG]);
+
+    redraw([projectTag("t9", "area", "billing", 1), BUG]);
+
+    expect(rows(root)).toEqual(["PAN/area: billing (1 change)", "PAN/bug (12 changes)"]);
+  });
+
+  it("A delete: the tag leaves the list, and the last one gone shows the empty state", () => {
+    const { root, redraw } = open("viewer", [AREA, BUG]);
+
+    redraw([AREA]);
+    expect(rows(root)).toEqual(["PAN/area: onboarding (3 changes)"]);
+
+    redraw([]);
+    expect(rows(root)).toEqual([]);
+    expect(q(root, ".project-tags-empty").textContent).toBe("PAN has no tags yet.");
+    expect(root.querySelector(".project-tags-hint")).toBeNull();
+  });
+
+  it("the first tag added to an empty Project replaces the empty state", () => {
+    const { root, redraw } = open("viewer", []);
+
+    redraw([BUG]);
+
+    expect(root.querySelector(".project-tags-empty")).toBeNull();
+    expect(rows(root)).toEqual(["PAN/bug (12 changes)"]);
+    expect(q(root, ".project-tags-hint").textContent).toBe("Owners and editors manage these tags.");
+  });
+
+  it("Another tag changes: an open rename keeps its form, its typed text and focus", () => {
+    const { root, redraw } = open("editor", [AREA, BUG]);
+    const input = startRename(root, 1);
+    input.value = "defect";
+
+    redraw([projectTag("t1", "area", "billing", 3), BUG]);
+
+    expect(rows(root)).toEqual(["PAN/area: billing (3 changes)", "renaming defect"]);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("a row being renamed keeps focus even when its place in the order moves", () => {
+    const { root, redraw } = open("editor", [AREA, BUG]);
+    const input = startRename(root, 1);
+    input.value = "defect";
+
+    // area: onboarding became zone, so bug (being renamed) now sorts first and its row moves up.
+    redraw([BUG, projectTag("t1", "zone", null, 3)]);
+
+    expect(rows(root)).toEqual(["renaming defect", "PAN/zone (3 changes)"]);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("Cancel on a kept rename shows the tag's name as it is now", () => {
+    const { root, redraw } = open("editor", [BUG]);
+    startRename(root, 0);
+
+    redraw([projectTag("t2", "defect", null, 12)]);
+    q(root, ".tag-rename-form").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+
+    expect(rows(root)).toEqual(["PAN/defect (12 changes)"]);
+  });
+
+  it("The tag being renamed is deleted: the form closes, the row goes, and the status says so", () => {
+    const { root, status, redraw } = open("editor", [AREA, BUG]);
+    startRename(root, 1);
+
+    redraw([AREA]);
+
+    expect(root.querySelector(".tag-rename-form")).toBeNull();
+    expect(rows(root)).toEqual(["PAN/area: onboarding (3 changes)"]);
+    expect(status.textContent).toBe("PAN/bug was deleted.");
+  });
+
+  it("a tag deleted while nobody renames it says nothing", () => {
+    const { status, redraw } = open("editor", [AREA, BUG]);
+
+    redraw([AREA]);
+
+    expect(status.textContent).toBe("");
+  });
+
+  it("The rest of the section stays put: text typed into the add form survives, and keeps focus", () => {
+    const { root, redraw } = open("owner", [BUG]);
+    const add = q<HTMLInputElement>(root, ".tag-add-form input");
+    add.value = "area: bil";
+    add.focus();
+
+    redraw([projectTag("t9", "area", "billing", 1), BUG]);
+
+    expect(q(root, ".tag-add-form input")).toBe(add);
+    expect(add.value).toBe("area: bil");
+    expect(document.activeElement).toBe(add);
+  });
+
+  it("the add form's help follows the count, at and below the limit", () => {
+    const { root, redraw } = open("owner", [BUG]);
+    const help = () => q(root, ".tag-add-form .field-help").textContent;
+    const full = Array.from({ length: 200 }, (_, i) => projectTag(`t${i}`, `tag-${i}`, null, 0));
+
+    redraw(full);
+    expect(help()).toBe("PAN has 200 tags, the most it can have.");
+
+    redraw([BUG]);
+    expect(help()).toBe("A key, or a key and a value: bug, or area: onboarding.");
   });
 });
 

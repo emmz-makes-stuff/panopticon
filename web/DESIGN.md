@@ -542,6 +542,12 @@ Rename PAN/bug [defect          ] [Save] [Cancel]
     - **At the limit:** with 200 tags, the form stays, and the help line says "PAN has 200 tags, the most it can
       have."
 - **Live:** the list follows `project-tags-changed`, so a rename by someone else shows without a reload.
+    - **Only the rows move.** Typed text in the add form and the invite form stays, and so does focus.
+    - **A rename in progress stays open** if someone else edits another tag, and its Cancel shows the tag's name as it
+      is now.
+    - **If the tag being renamed is deleted,** the form closes, the row goes, and the status line reads "PAN/bug was
+      deleted."
+    - **Counts** update with the list, not each time a change is tagged.
 
 **The states:**
 
