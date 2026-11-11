@@ -11,8 +11,8 @@
 
 ## 3. Docs and human verification
 
-- [ ] 3.1 Update `docs/DISCOVERY.md`: drop the Tags section's "Not built" note, and say the Project page's Tags list is live (tags only, with counts as of the last list change). Verify by reading it against the spec delta.
-- [ ] 3.2 Human verification (stop and ask Emmz): two browsers signed in as different members of one Project, both on its page. In one, add, rename and delete tags, and add a tag from a change's picker. The other's Tags list follows each, an open rename in the second browser survives an edit to another tag, and a delete of the tag being renamed closes it with the status line. Verify with Emmz's PASS, recorded in a devlog note.
+- [x] 3.1 Update `docs/DISCOVERY.md`: drop the Tags section's "Not built" note, and say the Project page's Tags list is live (tags only, with counts as of the last list change). Verify by reading it against the spec delta.
+- [x] 3.2 Human verification (stop and ask Emmz): two browsers signed in as different members of one Project, both on its page. In one, add, rename and delete tags, and add a tag from a change's picker. The other's Tags list follows each, an open rename in the second browser survives an edit to another tag, and a delete of the tag being renamed closes it with the status line. Verify with Emmz's PASS, recorded in a devlog note.
 
 ## Workflow follow-up
 

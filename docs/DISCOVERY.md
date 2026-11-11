@@ -117,7 +117,9 @@ Project page, and they put them on changes from the change page, or agents do it
 using existing tags only. Personal tags are kept per machine with `panopticon tags`, carried by reports, and seen
 only by their owner. Chips show on cards, change pages and history rows, and edits show live. A multi-select Tags
 filter on the dashboard, history and metrics matches every chosen tag, or a key alone, and goes in the address.
-Not built: the Project page's Tags list doesn't update live (deferred by Emmz, 2026-11-10).
+The Project page's Tags list is live too, since the `project-page-live-tags` change (2026-11-11). It shows tags as
+others add, rename or delete them, keeping an open rename. Only the tags update live: counts are as of the last list
+change, and members, roles and the name need a reload (Emmz, 2026-11-11).
 
 - **What a tag is:** an arbitrary dimension to filter on. A tag has an optional value, so there could be a `dev` tag
   and a `language: csharp` tag.
