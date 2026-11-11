@@ -105,7 +105,16 @@ tool list of any MCP client that connects to the online endpoint, and each call 
   prompt that isn't held or isn't a permission. Until the preview arrives, the dashboard shows the prompt with Deny
   only.
 - `GET /api/agent/prompts/{id}/wait`: a 25s long-poll that gives `{state: pending|answered|released, answer?}`, or
-  404 when the server no longer knows the prompt (say, after a restart).
+  404 when the server no longer knows the prompt (say, after a restart). An answer is kept until a wait reads it, or
+  `WaitGrace` passes, even when the session's next event lands first (review fix 10.2).
+- `DELETE /api/agent/prompts/{id}` (review fix 10.2): the hook gave up before waiting, so a pending prompt goes back
+  to the terminal and can't be answered from the dashboard. It gives 204, and 404 for a prompt the server doesn't
+  know. The hook calls it as a best effort.
+- Session events carry an optional `occurredAt`, the time the hook's process started (review fix 10.1). The server
+  ignores an event older than the last one it applied for the session, and one no newer than a stamped
+  `SessionEnd`. Events from an older CLI carry no time, and are applied as they arrive.
+- The live stream sends `resync`, with no data, when its queue has dropped events (review fix 10.3). The dashboard
+  and the change page then load their state again, the away switch included, as they do on a reconnect.
 - `GET` / `PUT /api/agent/away` for `panopticon away`, and `GET` / `PUT /api/me/away` for the dashboard (the
   `Member` policy).
 - `POST /api/prompts/{id}/answer` (`Member`): `{answers}` or `{allow, message?}` gives 200, 403 when the caller may

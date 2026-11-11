@@ -235,6 +235,31 @@ public class AgentPromptEndpointTests(PostgresFixture postgres, S3Fixture s3)
     }
 
     [Fact]
+    public async Task A_prompt_the_hook_released_cant_be_answered_from_the_dashboard()
+    {
+        await using var world = await WorldAsync(away: true);
+        var created = await AskAsync(world, Question(project: world.Tags.Pan));
+        var promptId = Guid.Parse(created.PromptId);
+
+        using (var released = await world.Agent.DeleteAsync(AgentPromptEndpoints.PromptPath(promptId), Ct))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, released.StatusCode);
+        }
+
+        using (var answered = await world.Tags.Emmz.PostApiAsync(
+            PromptAnswerEndpoints.AnswerPath(promptId),
+            new { answers = new Dictionary<string, string> { ["Which store?"] = "Memory" } },
+            Ct))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, answered.StatusCode);
+        }
+
+        Assert.Equal(PromptWaitState.Released, (await WaitAsync(world, created.PromptId)).Result!.State);
+        using var unknown = await world.Agent.DeleteAsync(AgentPromptEndpoints.PromptPath(Guid.NewGuid()), Ct);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+    }
+
+    [Fact]
     public async Task A_wait_returns_as_soon_as_an_answer_lands()
     {
         await using var world = await WorldAsync(away: true, waitTimeout: "00:00:20");

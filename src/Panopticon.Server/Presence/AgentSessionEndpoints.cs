@@ -49,7 +49,7 @@ public static class AgentSessionEndpoints
 
         if (request.State == SessionState.Ended)
         {
-            presence.Remove(memberId, request.SessionId);
+            presence.End(memberId, request.SessionId, request.OccurredAt);
             return TypedResults.NoContent();
         }
 
@@ -58,7 +58,7 @@ public static class AgentSessionEndpoints
             .Select(m => m.DisplayName)
             .SingleAsync(cancellationToken);
         var placement = await SessionChanges.FindAsync(db, memberId, request.Repo, request.Change, request.Project, cancellationToken);
-        presence.Record(memberId, memberName, request.SessionId, placement, request.Machine.Trim(), request.State, request.Activity);
+        presence.Record(memberId, memberName, request.SessionId, placement, request.Machine.Trim(), request.State, request.Activity, request.OccurredAt);
         return TypedResults.NoContent();
     }
 

@@ -52,10 +52,17 @@ public sealed class PresenceStore(
     private readonly Dictionary<(Guid MemberId, string SessionId), Entry> _sessions = [];
     private readonly Dictionary<Guid, Prompt> _prompts = [];
 
+    /// <summary>
+    /// Sessions that ended with a stamped <c>SessionEnd</c>: its time, and when the store saw it. A late event from
+    /// before the end can't bring the session back. Swept with the stale threshold.
+    /// </summary>
+    private readonly Dictionary<(Guid MemberId, string SessionId), (DateTimeOffset OccurredAt, DateTimeOffset SeenAt)> _ended = [];
+
     private long _sequence;
 
     // Order: when the store first saw the session, as a counter, so two sessions seen in the same instant keep theirs.
-    private sealed record Entry(SessionPlacement? Placement, SessionView View, long Order, Guid? PromptId = null);
+    /// <param name="OccurredAt">The newest stamped event applied to the session, if any.</param>
+    private sealed record Entry(SessionPlacement? Placement, SessionView View, long Order, Guid? PromptId = null, DateTimeOffset? OccurredAt = null);
 
     /// <summary>A prompt's state; changed only under the store's lock.</summary>
     private sealed class Prompt((Guid MemberId, string SessionId) session, PromptRequest request, bool held, DateTimeOffset askedAt)
@@ -76,6 +83,18 @@ public sealed class PresenceStore(
 
         public PromptAnswer? Answer { get; set; }
 
+        /// <summary>When it was answered: a detached answer is kept for <see cref="PromptOptions.WaitGrace"/> from then.</summary>
+        public DateTimeOffset AnsweredAt { get; set; }
+
+        /// <summary>A wait has read where it ended up, so the hook has its answer.</summary>
+        public bool Read { get; set; }
+
+        /// <summary>
+        /// Its session moved on before a wait read the answer (code review F4): it's kept, apart from the session, until
+        /// a wait reads it or the grace passes.
+        /// </summary>
+        public bool Detached { get; set; }
+
         /// <summary>Completed when <see cref="State"/> leaves pending, waking any <c>wait</c>.</summary>
         public TaskCompletionSource Settled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -85,26 +104,30 @@ public sealed class PresenceStore(
     /// <summary>
     /// Records a session's new state. <paramref name="placement"/> is null when its change has no active card: the
     /// session is kept, but shows nowhere. <see cref="SessionState.Ended"/> removes it. Moving to another change ends
-    /// it on the old one. Activity is kept only while working. Any event clears a prompt that isn't pending (spec
-    /// remote-answers: answering in the terminal, or moving on, clears it); a pending one stays, since the session is
-    /// paused on it.
+    /// it on the old one. Activity is kept only while working. Any event clears a prompt that isn't pending from the
+    /// session (spec remote-answers: answering in the terminal, or moving on, clears it), though an answer the hook
+    /// hasn't read yet is kept for it; a pending one stays, since the session is paused on it.
+    /// <para>
+    /// With <paramref name="occurredAt"/> (code review F2), an event older than the last stamped one applied to the
+    /// session is ignored, as is one no newer than a stamped <c>SessionEnd</c>. Returns whether it was applied.
+    /// </para>
     /// </summary>
-    public void Record(
+    public bool Record(
         Guid memberId,
         string memberName,
         string sessionId,
         SessionPlacement? placement,
         string machine,
         SessionState state,
-        string? activity)
+        string? activity,
+        DateTimeOffset? occurredAt = null)
     {
         ArgumentNullException.ThrowIfNull(memberName);
         ArgumentNullException.ThrowIfNull(sessionId);
         ArgumentNullException.ThrowIfNull(machine);
         if (state == SessionState.Ended)
         {
-            Remove(memberId, sessionId);
-            return;
+            return End(memberId, sessionId, occurredAt);
         }
 
         var now = clock.GetUtcNow();
@@ -113,10 +136,17 @@ public sealed class PresenceStore(
         {
             var key = (memberId, sessionId);
             _sessions.TryGetValue(key, out var existing);
+            if (IsStale(key, existing, occurredAt))
+            {
+                return false;
+            }
+
+            _ended.Remove(key);
+            var stamp = Newest(existing?.OccurredAt, occurredAt);
             if (existing?.PromptId is { } pendingId && _prompts[pendingId].IsPending)
             {
-                Put(key, existing with { View = existing.View with { LastEventAt = now } });
-                return;
+                Put(key, existing with { View = existing.View with { LastEventAt = now }, OccurredAt = stamp });
+                return true;
             }
 
             DropPrompt(existing);
@@ -130,9 +160,45 @@ public sealed class PresenceStore(
                 activity,
                 unchanged ? existing!.View.Since : now,
                 now);
-            Put(key, new Entry(placement, view, existing?.Order ?? ++_sequence), existing);
+            Put(key, new Entry(placement, view, existing?.Order ?? ++_sequence, OccurredAt: stamp), existing);
+            return true;
         }
     }
+
+    /// <summary>
+    /// A session closed (<c>SessionEnd</c>): removes it, unless an applied event is newer. A stamped end is remembered,
+    /// so a late event from before it is ignored. Returns whether it was applied.
+    /// </summary>
+    public bool End(Guid memberId, string sessionId, DateTimeOffset? occurredAt)
+    {
+        ArgumentNullException.ThrowIfNull(sessionId);
+        lock (_gate)
+        {
+            var key = (memberId, sessionId);
+            _sessions.TryGetValue(key, out var existing);
+            if (IsStale(key, existing, occurredAt))
+            {
+                return false;
+            }
+
+            if (occurredAt is { } endedAt)
+            {
+                _ended[key] = (endedAt, clock.GetUtcNow());
+            }
+
+            Remove(memberId, sessionId);
+            return true;
+        }
+    }
+
+    /// <summary>Whether a stamped event is older than the session's last applied one, or no newer than its end.</summary>
+    private bool IsStale((Guid MemberId, string SessionId) key, Entry? existing, DateTimeOffset? occurredAt) =>
+        occurredAt is { } at
+        && ((existing?.OccurredAt is { } last && at < last)
+            || (_ended.TryGetValue(key, out var ended) && at <= ended.OccurredAt));
+
+    private static DateTimeOffset? Newest(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is { } x && b is { } y ? (x > y ? x : y) : a ?? b;
 
     /// <summary>
     /// A session asks (D3, D6): it waits on the prompt, which is held for the dashboard when <paramref name="away"/>
@@ -179,7 +245,7 @@ public sealed class PresenceStore(
                     now,
                     request.Kind == PromptKind.Question && request.Questions is { } questions ? [.. questions.Select(PromptQuestionView.For)] : null),
             };
-            Put(key, new Entry(placement, view, existing?.Order ?? ++_sequence, promptId), existing);
+            Put(key, new Entry(placement, view, existing?.Order ?? ++_sequence, promptId, existing?.OccurredAt), existing);
             return new PromptCreated(promptId.ToString(), held);
         }
     }
@@ -223,7 +289,7 @@ public sealed class PresenceStore(
 
             if (!prompt.IsPending)
             {
-                return new PromptWaitResult(prompt.State, prompt.Answer);
+                return Read(promptId, prompt);
             }
 
             prompt.LastWaitAt = clock.GetUtcNow();
@@ -249,9 +315,45 @@ public sealed class PresenceStore(
             if (prompt.IsPending)
             {
                 prompt.LastWaitAt = clock.GetUtcNow();
+                return new PromptWaitResult(prompt.State);
             }
 
-            return new PromptWaitResult(prompt.State, prompt.Answer);
+            return Read(promptId, prompt);
+        }
+    }
+
+    /// <summary>A settled prompt's result, which the hook now has: a detached one has done its job and goes.</summary>
+    private PromptWaitResult Read(Guid promptId, Prompt prompt)
+    {
+        prompt.Read = true;
+        if (prompt.Detached)
+        {
+            _prompts.Remove(promptId);
+        }
+
+        return new PromptWaitResult(prompt.State, prompt.Answer);
+    }
+
+    /// <summary>
+    /// The hook gave up on a prompt it created before waiting (code review F3): a pending one goes back to the terminal,
+    /// so no one answers it in vain. False when the store doesn't know it, or it isn't this member's (404). One being
+    /// answered right now is left to land: the record stands, as when a session ends mid-answer.
+    /// </summary>
+    public bool Release(Guid memberId, Guid promptId)
+    {
+        lock (_gate)
+        {
+            if (!_prompts.TryGetValue(promptId, out var prompt) || prompt.Session.MemberId != memberId)
+            {
+                return false;
+            }
+
+            if (prompt.IsPending && !prompt.Claimed)
+            {
+                Settle(prompt, PromptWaitState.Released, answer: null);
+            }
+
+            return true;
         }
     }
 
@@ -341,6 +443,7 @@ public sealed class PresenceStore(
             prompt.Claimed = false;
             prompt.State = PromptWaitState.Answered;
             prompt.Answer = answer;
+            prompt.AnsweredAt = clock.GetUtcNow();
             prompt.Settled.TrySetResult();
             if (_sessions.TryGetValue(prompt.Session, out var entry))
             {
@@ -355,7 +458,8 @@ public sealed class PresenceStore(
                     PromptDetail = null,
                 };
 
-                // The prompt stays known, answered, until the session's next event, so the hook's wait can read it.
+                // The prompt stays known, answered, until the hook's wait reads it (DropPrompt keeps it past the
+                // session's next event), so the answer always reaches the terminal.
                 Put(prompt.Session, entry with { View = working });
             }
         }
@@ -452,6 +556,18 @@ public sealed class PresenceStore(
                 Remove(key.MemberId, key.SessionId);
             }
 
+            // A detached answer the hook never came back for: it's gone too.
+            foreach (var (id, _) in _prompts.Where(p => p.Value.Detached && now - p.Value.AnsweredAt >= limits.WaitGrace).ToList())
+            {
+                _prompts.Remove(id);
+            }
+
+            // By the stale threshold, any late event from before the end has long arrived.
+            foreach (var key in _ended.Where(e => e.Value.SeenAt <= cutoff).Select(e => e.Key).ToList())
+            {
+                _ended.Remove(key);
+            }
+
             return expired.Count;
         }
     }
@@ -470,12 +586,24 @@ public sealed class PresenceStore(
         Put(prompt.Session, entry with { View = entry.View with { PromptDetail = detail, LastEventAt = clock.GetUtcNow() } });
     }
 
+    /// <summary>
+    /// The session is done with its prompt. An answer no wait has read yet is kept, detached, for the hook to collect
+    /// (code review F4); anything else goes.
+    /// </summary>
     private void DropPrompt(Entry? entry)
     {
-        if (entry?.PromptId is { } promptId)
+        if (entry?.PromptId is not { } promptId || !_prompts.TryGetValue(promptId, out var prompt))
         {
-            _prompts.Remove(promptId);
+            return;
         }
+
+        if (prompt.State == PromptWaitState.Answered && !prompt.Read)
+        {
+            prompt.Detached = true;
+            return;
+        }
+
+        _prompts.Remove(promptId);
     }
 
     /// <summary>Stores the entry and publishes it, ending it on its old change first if it moved.</summary>

@@ -25,8 +25,20 @@ public static class AgentPromptEndpoints
         endpoints.MapPost(PromptsPath, AskAsync).RequireAuthorization(AuthPolicies.Reporter);
         endpoints.MapPut($"{PromptsPath}/{{id:guid}}/preview", SetPreview).RequireAuthorization(AuthPolicies.Reporter);
         endpoints.MapGet($"{PromptsPath}/{{id:guid}}/wait", WaitAsync).RequireAuthorization(AuthPolicies.Reporter);
+        endpoints.MapDelete($"{PromptsPath}/{{id:guid}}", Release).RequireAuthorization(AuthPolicies.Reporter);
         return endpoints;
     }
+
+    public static string PromptPath(Guid promptId) => $"{PromptsPath}/{promptId}";
+
+    /// <summary>
+    /// The hook gave up on its prompt before waiting (code review F3): a pending one goes back to the terminal, and can't
+    /// be answered from the dashboard. 204, also when it had already moved on; 404 unknown, or not this member's.
+    /// </summary>
+    internal static IResult Release(Guid id, ClaimsPrincipal user, PresenceStore presence) =>
+        user.GetMemberId() is { } memberId && presence.Release(memberId, id)
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
 
     /// <summary>
     /// Records the prompt on its session and says whether it's held (D3: the server decides, from the member's away

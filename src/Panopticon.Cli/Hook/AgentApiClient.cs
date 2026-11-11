@@ -44,6 +44,19 @@ internal sealed class AgentApiClient(HttpClient http, Uri baseUrl, string token)
             HttpMethod.Put, AgentApiPaths.Preview(promptId), new PromptPreview(preview), ContractsJsonContext.Default.PromptPreview, "the prompt's preview", cancellationToken);
     }
 
+    /// <summary>Releases a held prompt the hook won't wait on (204); one the server doesn't know (404) is already gone.</summary>
+    public async Task ReleaseAsync(Guid promptId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await SendAsync<object>(HttpMethod.Delete, AgentApiPaths.Prompt(promptId), null, null, "the prompt's release", cancellationToken);
+        }
+        catch (BridgeException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            // Nothing held to release.
+        }
+    }
+
     /// <summary>One long-poll on a held prompt: where it stands, or null once the server doesn't know it (404).</summary>
     public async Task<PromptWaitResult?> WaitAsync(Guid promptId, CancellationToken cancellationToken)
     {

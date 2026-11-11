@@ -77,6 +77,20 @@ public sealed class HookCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_event_carries_the_time_its_hook_started_so_the_server_can_order_it()
+    {
+        using var repo = ChangeRepo();
+        var server = new StubServer(HttpStatusCode.NoContent);
+        var before = DateTimeOffset.UtcNow;
+
+        await Hook(server).RunAsync(new StringReader(Event("Stop", repo.Root)), Ct);
+
+        var sent = JsonSerializer.Deserialize(Assert.Single(server.Requests).Body, ContractsJsonContext.Default.SessionEventRequest)!;
+        Assert.NotNull(sent.OccurredAt);
+        Assert.InRange(sent.OccurredAt.Value, before, DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
     public async Task Off_a_change_branch_the_change_comes_from_the_bridges_record()
     {
         using var repo = ChangeRepo("main");
@@ -202,6 +216,9 @@ public sealed class HookCommandTests : IDisposable
 
         public bool Hang { get; init; }
 
+        /// <summary>Hangs only the requests it says, until the caller gives up.</summary>
+        public Func<SeenRequest, bool>? HangWhen { get; init; }
+
         public Func<SeenRequest, (HttpStatusCode Status, string Body)?>? Respond { get; init; }
 
         /// <summary>When it says so, the response's headers arrive, then the connection drops part way into the body.</summary>
@@ -220,7 +237,7 @@ public sealed class HookCommandTests : IDisposable
                 Requests.Add(seen);
             }
 
-            if (Hang)
+            if (Hang || HangWhen?.Invoke(seen) == true)
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
             }

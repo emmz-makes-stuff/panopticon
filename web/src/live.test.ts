@@ -7,6 +7,7 @@ import {
   parseProjectTagsChange,
   PROJECT_TAGS_CHANGED,
   PROJECTS_CHANGED,
+  RESYNC,
 } from "./live";
 import { card, FakeEventSource, fakeFetch, NOW, settle } from "./testing";
 import type { ChangeCard } from "./types";
@@ -14,7 +15,7 @@ import type { ChangeCard } from "./types";
 const later = (minutes: number) =>
   new Date(Date.parse("2026-11-08T11:57:00Z") + minutes * 60_000).toISOString();
 
-async function start(initial: ChangeCard[] = [card()]) {
+async function start(initial: ChangeCard[] = [card()], onCatchUp?: () => void) {
   const root = document.createElement("main");
   const fetch = fakeFetch(initial);
   const app = await mountApp(root, { fetch, now: () => NOW });
@@ -22,6 +23,7 @@ async function start(initial: ChangeCard[] = [card()]) {
   const stop = connectLive(app, {
     createEventSource: (url) => new FakeEventSource(url),
     setTimer: (callback, ms) => timers.push({ callback, ms }),
+    onCatchUp,
   });
 
   const cards = () => [...root.querySelectorAll<HTMLElement>("article.card")];
@@ -246,6 +248,58 @@ describe("connectLive, archived changes", () => {
     FakeEventSource.latest().emit(CHANGE_ARCHIVED, JSON.stringify({ changeId: "team-auth" }));
     expect(cards()).toHaveLength(0);
     expect(root.querySelector(".empty-state")).not.toBeNull();
+  });
+});
+
+// Code review F8: a stream whose server queue dropped events catches up as on a reconnect.
+describe("connectLive, resync", () => {
+  it("resync reloads every card, and the state outside them", async () => {
+    let caughtUp = 0;
+    const { fetch, cards, status } = await start([card()], () => caughtUp++);
+    FakeEventSource.latest().open();
+    await settle();
+    expect(caughtUp).toBe(0);
+
+    // A session-ended and a report were among the dropped events.
+    fetch.cards = [
+      card({ changeId: "other", change: "add-auth", lastReportedAt: later(20) }),
+      card(),
+    ];
+    FakeEventSource.latest().emit(RESYNC, "");
+    await settle();
+
+    expect(caughtUp).toBe(1);
+    expect(fetch.urls.filter((url) => url === "/api/changes")).toHaveLength(3);
+    expect(cards().map((c) => c.dataset["changeId"])).toEqual(["other", "c1"]);
+    expect(status()).toBe("Live");
+  });
+
+  it("a reconnect catches the state outside the cards up too, but the first open doesn't", async () => {
+    let caughtUp = 0;
+    await start([card()], () => caughtUp++);
+    const source = FakeEventSource.latest();
+    source.open();
+    await settle();
+    expect(caughtUp).toBe(0);
+
+    source.fail(0);
+    source.open();
+    await settle();
+
+    expect(caughtUp).toBe(1);
+  });
+
+  it("reconnects when the reload after a resync fails", async () => {
+    const { fetch, timers, status } = await start();
+    FakeEventSource.latest().open();
+    await settle();
+
+    fetch.status = 500;
+    FakeEventSource.latest().emit(RESYNC, "");
+    await settle();
+
+    expect(status()).toBe("Offline, reconnecting…");
+    expect(timers).toHaveLength(1);
   });
 });
 

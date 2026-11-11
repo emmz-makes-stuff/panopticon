@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ANSWER_RECORDED, CHANGE_ARCHIVED, CHANGE_UPDATED, PROJECTS_CHANGED } from "../live";
+import {
+  ANSWER_RECORDED,
+  CHANGE_ARCHIVED,
+  CHANGE_UPDATED,
+  PROJECTS_CHANGED,
+  RESYNC,
+} from "../live";
 import { savedReturn, signedIn, signedOut, startTestShell } from "../testShell";
 import { card, FakeEventSource, q, until } from "../testing";
 import type {
@@ -180,6 +186,21 @@ describe("change page", () => {
 
     expect(server.to("GET", "/api/changes/c1")).toHaveLength(before + 1);
     expect(source.url).toBe("/api/events");
+  });
+
+  it("resync reloads the change and the away switch, as a reconnect does (code review F8)", async () => {
+    const server = serverFor();
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".change-head") !== null);
+    const source = FakeEventSource.latest();
+    source.open();
+    const changes = server.to("GET", "/api/changes/c1").length;
+    const away = server.to("GET", "/api/me/away").length;
+
+    source.emit(RESYNC, "");
+    await until(() => server.to("GET", "/api/changes/c1").length === changes + 1);
+
+    expect(server.to("GET", "/api/me/away")).toHaveLength(away + 1);
   });
 
   it("Archived while reading: says it has been archived, keeps its documents, and stops following", async () => {

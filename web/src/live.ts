@@ -55,6 +55,12 @@ export const AWAY_CHANGED = "away-changed";
 /** The SSE event the server sends when an answer from the dashboard is recorded on a change (agent-interaction D8). */
 export const ANSWER_RECORDED = "answer-recorded";
 
+/**
+ * The SSE event the server sends when the stream's queue dropped events (code review F8): the page loads its state
+ * again, as on a reconnect. It has no data.
+ */
+export const RESYNC = "resync";
+
 /** The parts of the browser's EventSource this module uses, so tests can supply a fake. */
 export interface EventSourceLike {
   readonly readyState: number;
@@ -78,6 +84,11 @@ export interface LiveOptions {
   checkSignedIn?: (() => Promise<boolean>) | undefined;
   /** The viewer's away switch changed, from this or another dashboard, or `panopticon away`. */
   onAway?: ((state: AwayState) => void) | undefined;
+  /**
+   * The stream may have missed events (a reconnect after the first open, or `resync`): state outside the cards, such
+   * as the away switch, loads again. The cards reload themselves.
+   */
+  onCatchUp?: (() => void) | undefined;
 }
 
 /** EventSource.CLOSED: the browser won't retry by itself. */
@@ -97,6 +108,7 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
   let source: EventSourceLike | null = null;
   let failures = 0;
   let stopped = false;
+  let opened = false;
 
   function open(): void {
     const current = create("/api/events");
@@ -104,6 +116,11 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
 
     current.onopen = () => {
       // Events can be missed while disconnected, so start from the server's full state.
+      if (opened) {
+        options.onCatchUp?.();
+      }
+
+      opened = true;
       app.refresh().then(
         () => {
           failures = 0;
@@ -167,6 +184,16 @@ export function connectLive(app: App, options: LiveOptions = {}): () => void {
       if (change) {
         app.retagProject(change);
       }
+    });
+
+    // The server's queue for this stream overflowed: catch up as on a reconnect. If the load fails, reconnect.
+    current.addEventListener(RESYNC, () => {
+      options.onCatchUp?.();
+      app.refresh().catch(() => {
+        app.setStatus("offline");
+        current.close();
+        retry();
+      });
     });
 
     current.addEventListener(AWAY_CHANGED, (event) => {

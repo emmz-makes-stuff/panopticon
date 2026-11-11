@@ -74,6 +74,21 @@ public class AgentSessionEndpointTests(PostgresFixture postgres, S3Fixture s3)
     }
 
     [Fact]
+    public async Task A_late_event_from_before_the_session_ended_doesnt_bring_it_back()
+    {
+        await using var world = await TagWorld.CreateAsync(postgres, s3, Ct);
+        await world.ReportChangeAsync(TagWorld.Report("team-auth", world.Pan), Ct);
+        using var agent = await AgentClientAsync(world);
+        var t0 = DateTimeOffset.UtcNow;
+
+        Assert.Equal(HttpStatusCode.NoContent, await PostAsync(agent, Event("team-auth", world.Pan) with { OccurredAt = t0 }));
+        Assert.Equal(HttpStatusCode.NoContent, await PostAsync(agent, Event("team-auth", world.Pan, state: SessionState.Ended, activity: null) with { OccurredAt = t0.AddSeconds(2) }));
+        Assert.Equal(HttpStatusCode.NoContent, await PostAsync(agent, Event("team-auth", world.Pan, state: SessionState.WaitingOnUser, activity: null) with { OccurredAt = t0.AddSeconds(1) }));
+
+        Assert.Equal(0, (await CardAsync(world.Emmz, "team-auth")).GetProperty("sessions").GetArrayLength());
+    }
+
+    [Fact]
     public async Task An_event_for_a_change_with_no_card_is_accepted_and_shows_nowhere()
     {
         await using var world = await TagWorld.CreateAsync(postgres, s3, Ct);

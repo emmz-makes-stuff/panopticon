@@ -37,6 +37,9 @@ public sealed class SessionStateConverter()
 /// <summary>
 /// Body of <c>POST /api/agent/sessions/events</c>. <see cref="Activity"/> is the CLI's one-line summary (D2), at most
 /// <see cref="SessionLimits.MaxActivityLength"/> characters, and only for <see cref="SessionState.Working"/>.
+/// <see cref="OccurredAt"/> is when the hook's process started, on the session's own machine: async hooks can arrive out
+/// of order, so the server ignores an event older than the last it applied for the session (code review F2). An older
+/// CLI sends none, and its events are applied in the order they arrive.
 /// </summary>
 public sealed record SessionEventRequest(
     RepoRef Repo,
@@ -45,7 +48,8 @@ public sealed record SessionEventRequest(
     string SessionId,
     SessionState State,
     string? Activity = null,
-    string? Project = null);
+    string? Project = null,
+    DateTimeOffset? OccurredAt = null);
 
 /// <summary>A member's away switch (D8): the body and answer of <c>/api/agent/away</c> and <c>/api/me/away</c>.</summary>
 /// <param name="Since">When away was turned on. The server sets it in its answers and ignores it in a request.</param>
@@ -57,6 +61,9 @@ public static class AgentApiPaths
     public const string SessionEvents = "api/agent/sessions/events";
     public const string Prompts = "api/agent/prompts";
     public const string Away = "api/agent/away";
+
+    /// <summary>A held prompt: <c>DELETE</c> releases it, when the hook gives up before waiting.</summary>
+    public static string Prompt(Guid promptId) => $"{Prompts}/{promptId}";
 
     public static string Preview(Guid promptId) => $"{Prompts}/{promptId}/preview";
 

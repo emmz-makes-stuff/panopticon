@@ -66,6 +66,8 @@ export interface Env {
   copy: (text: string) => Promise<void>;
   /** A view's live stream heard `away-changed`: the header's switch shows it. */
   awayChanged(state: AwayState): void;
+  /** A view's live stream may have missed `away-changed` (a reconnect, or `resync`): the switch loads again. */
+  refreshAway(): void;
   /** Opt-in notifications for held prompts (agent-interaction D10). The cards view tells it what's held. */
   notifier: Notifier;
   /** The visitor's OS as the browser names it (e.g. "macOS", "Windows", "MacIntel", "Win32"), for the install hint. */
@@ -309,6 +311,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
     copy: deps.copy ?? ((text) => navigator.clipboard.writeText(text)),
     platform: deps.platform ?? browserPlatform,
     awayChanged: (state) => away.set(state),
+    refreshAway: () => void away.load(),
     notifier,
   };
 

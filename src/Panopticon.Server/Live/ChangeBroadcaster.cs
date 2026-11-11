@@ -97,18 +97,21 @@ public sealed class ChangeBroadcaster
 
     public Subscription Subscribe()
     {
-        var channel = Channel.CreateBounded<ChangeEvent>(new BoundedChannelOptions(SubscriberCapacity)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-        });
+        var drops = new Drops();
+        var channel = Channel.CreateBounded<ChangeEvent>(
+            new BoundedChannelOptions(SubscriberCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+            },
+            _ => drops.Note());
 
         lock (_gate)
         {
             _subscribers.Add(channel);
         }
 
-        return new Subscription(this, channel);
+        return new Subscription(this, channel, drops);
     }
 
     /// <summary>Publishes a card with each member's personal tags (tags D6).</summary>
@@ -220,10 +223,26 @@ public sealed class ChangeBroadcaster
         channel.Writer.TryComplete();
     }
 
-    public sealed class Subscription(ChangeBroadcaster owner, Channel<ChangeEvent> channel) : IDisposable
+    public sealed class Subscription(ChangeBroadcaster owner, Channel<ChangeEvent> channel, Drops drops) : IDisposable
     {
         public ChannelReader<ChangeEvent> Reader => channel.Reader;
 
+        /// <summary>
+        /// Whether the queue dropped an event since the last call (code review F8): the stream sends <c>resync</c>, and
+        /// the browser loads the state again, as on a reconnect.
+        /// </summary>
+        public bool TakeDropped() => drops.Take();
+
         public void Dispose() => owner.Remove(channel);
+    }
+
+    /// <summary>A subscriber's dropped-event flag, set by the channel as it drops and taken by the stream.</summary>
+    public sealed class Drops
+    {
+        private int _dropped;
+
+        internal void Note() => Interlocked.Exchange(ref _dropped, 1);
+
+        internal bool Take() => Interlocked.Exchange(ref _dropped, 0) == 1;
     }
 }

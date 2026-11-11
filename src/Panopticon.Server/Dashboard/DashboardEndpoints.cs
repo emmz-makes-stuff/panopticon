@@ -67,6 +67,12 @@ public static class DashboardEndpoints
     /// <summary>The viewer turned away on or off (D8), from any dashboard or the CLI. Data is <see cref="Contracts.AwayState"/>.</summary>
     public const string AwayChangedEvent = "away-changed";
 
+    /// <summary>
+    /// The stream's queue overflowed and dropped events (code review F8): load the state again, as on a reconnect. No
+    /// data.
+    /// </summary>
+    public const string ResyncEvent = "resync";
+
     /// <summary>Sent on an idle stream so proxies and browsers don't drop it; the dashboard doesn't listen for it.</summary>
     public const string PingEvent = "ping";
 
@@ -213,8 +219,21 @@ public static class DashboardEndpoints
                 lastCheck = Stopwatch.GetTimestamp();
             }
 
-            while (reader.TryRead(out var change))
+            while (true)
             {
+                // Checked before each event, as the queue can overflow while this one is being sent. The events still
+                // queued go out after it; the browser's fresh load, landing after them, has the last word.
+                if (subscription.TakeDropped())
+                {
+                    lastSent = Stopwatch.GetTimestamp();
+                    yield return new SseItem<object?>(null, ResyncEvent);
+                }
+
+                if (!reader.TryRead(out var change))
+                {
+                    break;
+                }
+
                 // projects D3, §11: this member's membership changes take effect at once, in order with the changes.
                 if (change is ChangeEvent.MemberRemoved removed)
                 {

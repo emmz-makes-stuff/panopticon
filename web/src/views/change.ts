@@ -18,6 +18,7 @@ import {
   parseCard,
   parseProjectsChange,
   parseProjectTagsChange,
+  RESYNC,
   retagCard,
 } from "../live";
 import { renderChangeMetrics } from "../metricsPanel";
@@ -291,10 +292,16 @@ export function changeView(env: Env): View {
       source.onopen = () => {
         if (opened) {
           refresh();
+          env.refreshAway();
         }
 
         opened = true;
       };
+      // The server's queue for this stream overflowed (code review F8): catch up as on a reconnect.
+      source.addEventListener(RESYNC, () => {
+        refresh();
+        env.refreshAway();
+      });
       source.onerror = () => {
         // The browser retries by itself. If it gives up, the page keeps its documents without live updates.
       };

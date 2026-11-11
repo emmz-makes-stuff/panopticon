@@ -84,11 +84,15 @@ internal sealed class HookCommand(
 
     private readonly PromptWaitOptions _wait = waitOptions ?? PromptWaitOptions.Default;
 
+    /// <summary>When this run began (one run per hook process): the event's <c>OccurredAt</c>, which orders it (F2).</summary>
+    private DateTimeOffset _startedAt;
+
     private sealed record Target(AgentApiClient Client, RepoRef Repo, string Change, string? Project);
 
     public async Task<int> RunAsync(TextReader stdin, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(stdin);
+        _startedAt = clock.GetUtcNow();
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budget.CancelAfter(Budget);
         string? eventName = null;
@@ -198,7 +202,7 @@ internal sealed class HookCommand(
 
     private Task SendAsync(HookEvent hookEvent, Target target, SessionState state, string? activity, CancellationToken cancellationToken) =>
         target.Client.SendEventAsync(
-            new SessionEventRequest(target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, state, activity, target.Project),
+            new SessionEventRequest(target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, state, activity, target.Project, _startedAt),
             cancellationToken);
 
     /// <summary>
@@ -228,17 +232,26 @@ internal sealed class HookCommand(
             return;
         }
 
-        if (kind == PromptKind.Permission)
+        try
         {
-            try
+            if (kind == PromptKind.Permission)
             {
-                await target.Client.SetPreviewAsync(promptId, PromptHookOutput.Preview(hookEvent.ToolName!, hookEvent.ToolInput), budget.Token);
+                try
+                {
+                    await target.Client.SetPreviewAsync(promptId, PromptHookOutput.Preview(hookEvent.ToolName!, hookEvent.ToolInput), budget.Token);
+                }
+                catch (BridgeException exception)
+                {
+                    // The prompt is still held: the dashboard can deny it, just not allow it.
+                    log.Write($"hook {hookEvent.EventName}: the preview didn't reach the server, so the dashboard can only deny: {exception.Message}");
+                }
             }
-            catch (BridgeException exception)
-            {
-                // The prompt is still held: the dashboard can deny it, just not allow it.
-                log.Write($"hook {hookEvent.EventName}: the preview didn't reach the server, so the dashboard can only deny: {exception.Message}");
-            }
+        }
+        catch
+        {
+            // Giving up before the wait (the budget ran out, say): the terminal asks, so no one may answer it in vain.
+            await ReleaseAsync(target.Client, promptId, hookEvent.EventName, cancellationToken);
+            throw;
         }
 
         if (await WaitAsync(target.Client, promptId, hookEvent.EventName, cancellationToken) is { } answer
@@ -246,6 +259,24 @@ internal sealed class HookCommand(
         {
             await stdout.WriteAsync(output);
             await stdout.FlushAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>How long the best-effort release of a prompt may take, once the event's budget is spent.</summary>
+    internal static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>Gives a held prompt back to the terminal on the server (code review F3); a failure is only logged.</summary>
+    private async Task ReleaseAsync(AgentApiClient client, Guid promptId, string eventName, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ReleaseTimeout);
+        try
+        {
+            await client.ReleaseAsync(promptId, timeout.Token);
+        }
+        catch (Exception exception) when (exception is BridgeException or OperationCanceledException)
+        {
+            log.Write($"hook {eventName}: couldn't release the held prompt, so the server keeps it until its wait grace passes: {exception.Message}");
         }
     }
 

@@ -27,6 +27,46 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
         new CardProgress(0, 1),
         DateTimeOffset.UnixEpoch);
 
+    // Code review F8: a dropped session-ended or away-changed would otherwise never be caught up.
+    [Fact]
+    public async Task A_stream_whose_queue_dropped_events_sends_resync_then_the_events_it_kept()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var kit = new Viewer(_ids.Kit, [_ids.Pan]);
+        var pan = new ChangeScope(_ids.Pan, null);
+        await using var stream = DashboardEndpoints.StreamAsync(broadcaster, kit, subscribed: null, TimeSpan.FromSeconds(30), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), pan);
+        Assert.True(await moving);
+
+        // The stream is busy sending the first event while the queue overflows by one.
+        var cards = Enumerable.Range(0, ChangeBroadcaster.SubscriberCapacity + 1).Select(i => Card($"card-{i}")).ToList();
+        cards.ForEach(card => broadcaster.Publish(card, pan));
+
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal((DashboardEndpoints.ResyncEvent, null), (stream.Current.EventType, stream.Current.Data));
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal("card-1", Assert.IsType<ChangeCard>(stream.Current.Data).Change);
+    }
+
+    [Fact]
+    public async Task A_stream_with_no_drops_sends_no_resync()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var kit = new Viewer(_ids.Kit, [_ids.Pan]);
+        await using var stream = DashboardEndpoints.StreamAsync(broadcaster, kit, subscribed: null, TimeSpan.FromSeconds(30), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), new ChangeScope(_ids.Pan, null));
+        broadcaster.Publish(Card("second"), new ChangeScope(_ids.Pan, null));
+
+        Assert.True(await moving);
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal(DashboardEndpoints.ChangeUpdatedEvent, stream.Current.EventType);
+        Assert.Equal("second", Assert.IsType<ChangeCard>(stream.Current.Data).Change);
+    }
+
     [Fact]
     public async Task A_viewer_gets_only_the_events_of_changes_they_can_see()
     {

@@ -52,6 +52,7 @@ export function cardsView(env: Env): View {
     const stopLive = connectLive(app, {
       createEventSource: env.createEventSource,
       onAway: (state) => env.awayChanged(state),
+      onCatchUp: () => env.refreshAway(),
       checkSignedIn: () =>
         env.api.get("/api/session").then(
           () => true,

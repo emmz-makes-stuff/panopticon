@@ -176,6 +176,127 @@ public sealed class PresenceStoreTests : IDisposable
         Assert.Equal(_clock.GetUtcNow(), (card with { Sessions = byChange[_tags.ChangeId] }).LastActiveAt);
     }
 
+    // Code review F2: async hooks arrive in any order, so each event carries the time its hook process started.
+    private bool At(DateTimeOffset occurredAt, SessionState state, string? activity = null) =>
+        _store.Record(_emmz, "Emmz", "s-1", _teamAuth, "vm-1", state, activity, occurredAt);
+
+    private static readonly DateTimeOffset _t0 = new(2026, 11, 8, 9, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void A_late_PostToolUse_from_before_Stop_leaves_the_session_waiting_on_the_user()
+    {
+        Assert.True(At(_t0.AddSeconds(2), SessionState.WaitingOnUser));
+
+        Assert.False(At(_t0.AddSeconds(1), SessionState.Working, "Run make gates"));
+
+        var session = Assert.Single(_store.For(_teamAuth.ChangeId));
+        Assert.Equal((SessionState.WaitingOnUser, null), (session.State, session.Activity));
+    }
+
+    [Fact]
+    public void A_late_Stop_from_before_SessionEnd_doesnt_bring_the_session_back()
+    {
+        At(_t0, SessionState.Working, "Run make gates");
+        Assert.True(At(_t0.AddSeconds(2), SessionState.Ended));
+        Published();
+
+        Assert.False(At(_t0.AddSeconds(1), SessionState.WaitingOnUser));
+
+        Assert.Equal(0, _store.Count);
+        Assert.Empty(Published());
+    }
+
+    [Fact]
+    public void A_SessionEnd_older_than_the_last_event_is_ignored()
+    {
+        At(_t0.AddSeconds(2), SessionState.Working, "Run make gates");
+
+        Assert.False(At(_t0.AddSeconds(1), SessionState.Ended));
+
+        Assert.Single(_store.For(_teamAuth.ChangeId));
+    }
+
+    [Fact]
+    public void A_newer_event_after_the_end_starts_the_session_again()
+    {
+        At(_t0, SessionState.Ended);
+
+        Assert.True(At(_t0.AddSeconds(1), SessionState.Working, "Resumed"));
+
+        Assert.Equal("Resumed", Assert.Single(_store.For(_teamAuth.ChangeId)).Activity);
+    }
+
+    [Fact]
+    public void Events_with_no_time_from_an_older_CLI_apply_in_the_order_they_arrive()
+    {
+        At(_t0.AddSeconds(2), SessionState.WaitingOnUser);
+
+        Work(_emmz, "s-1", _teamAuth, "Run make gates");
+
+        Assert.Equal(SessionState.Working, Assert.Single(_store.For(_teamAuth.ChangeId)).State);
+    }
+
+    [Fact]
+    public void The_sweep_forgets_an_end_after_the_stale_threshold()
+    {
+        At(_t0.AddSeconds(2), SessionState.Ended);
+        _clock.Advance(new ActivityOptions().StaleAfter);
+        _store.Sweep();
+
+        Assert.True(At(_t0.AddSeconds(1), SessionState.WaitingOnUser));
+    }
+
+    // Code review F4: an answer reaches the hook even when the session moves on before the hook's wait reads it.
+    private Guid AnsweredPrompt()
+    {
+        var request = new PromptRequest(new RepoRef("github.com", "emmz", "panopticon"), "team-auth", "vm-1", "s-1", PromptKind.Permission, Tool: "Bash");
+        var promptId = Guid.Parse(_store.Ask(_emmz, "Emmz", _teamAuth, request, away: true).PromptId);
+        Assert.True(_store.TryClaim(promptId));
+        _store.CompleteAnswer(promptId, new PromptAnswer("Bob", Allow: true));
+        return promptId;
+    }
+
+    [Fact]
+    public async Task An_event_between_the_answer_and_the_wait_still_leaves_the_answer_for_the_wait()
+    {
+        var promptId = AnsweredPrompt();
+
+        Work(_emmz, "s-1", _teamAuth, "Run make gates");
+
+        var result = await _store.WaitAsync(_emmz, promptId, TestContext.Current.CancellationToken);
+        Assert.Equal((PromptWaitState.Answered, true), (result!.State, result.Answer!.Allow));
+        Assert.Null(_store.For(_teamAuth.ChangeId).Single().PromptDetail);
+
+        // Read once, it has done its job.
+        Assert.Null(await _store.WaitAsync(_emmz, promptId, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_detached_answer_no_wait_collects_goes_after_the_wait_grace()
+    {
+        var promptId = AnsweredPrompt();
+        Work(_emmz, "s-1", _teamAuth, "Run make gates");
+
+        _clock.Advance(new PromptOptions().WaitGrace);
+        _store.Sweep();
+
+        Assert.Null(await _store.WaitAsync(_emmz, promptId, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_released_prompt_cant_be_claimed_and_its_wait_says_released()
+    {
+        var request = new PromptRequest(new RepoRef("github.com", "emmz", "panopticon"), "team-auth", "vm-1", "s-1", PromptKind.Permission, Tool: "Bash");
+        var promptId = Guid.Parse(_store.Ask(_emmz, "Emmz", _teamAuth, request, away: true).PromptId);
+
+        Assert.False(_store.Release(_sam, promptId));
+        Assert.True(_store.Release(_emmz, promptId));
+
+        Assert.False(_store.TryClaim(promptId));
+        Assert.Equal(PromptWaitState.Released, (await _store.WaitAsync(_emmz, promptId, TestContext.Current.CancellationToken))!.State);
+        Assert.False(_store.Release(_emmz, Guid.NewGuid()));
+    }
+
     [Fact]
     public async Task A_wait_on_a_pending_prompt_answers_pending_once_the_clock_passes_its_timeout()
     {

@@ -253,6 +253,28 @@ public sealed class PromptHookCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task A_preview_upload_that_runs_out_of_time_releases_the_held_prompt_for_the_terminal()
+    {
+        var server = new StubServer(HttpStatusCode.NoContent)
+        {
+            Respond = request => request switch
+            {
+                { Method.Method: "POST", Url: var url } when url.EndsWith("/api/agent/prompts", StringComparison.Ordinal) => (HttpStatusCode.OK, Created(held: true)),
+                _ => null,
+            },
+            HangWhen = request => request.Url.EndsWith("/preview", StringComparison.Ordinal),
+        };
+
+        Assert.Equal(0, await RunAsync(server, PermissionEvent()));
+
+        Assert.Equal("", _stdout.ToString());
+        var released = server.Requests.Last();
+        Assert.Equal((HttpMethod.Delete, $"https://panopticon.example/api/agent/prompts/{_promptId}"), (released.Method, released.Url));
+        Assert.Equal("1", released.RequestHeader);
+        Assert.DoesNotContain(server.Requests, r => r.Url.EndsWith("/wait", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_question_over_the_limits_goes_to_the_terminal_and_the_card_shows_it_waiting()
     {
         var server = Server(held: true);
