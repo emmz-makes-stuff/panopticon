@@ -224,6 +224,7 @@ export const MEMBER = {
   email: "emmz@example.com",
   displayName: "Emmz",
   canRemoveMembers: true,
+  canInviteMembers: true,
 };
 
 /** Waits until `check` passes (or fails after a few event-loop turns), for UI that updates after fetches. */

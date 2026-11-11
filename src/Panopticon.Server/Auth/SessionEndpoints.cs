@@ -25,7 +25,7 @@ public static class SessionEndpoints
     {
         var memberId = user.GetMemberId();
         var member = await db.Members.AsNoTracking().SingleAsync(m => m.Id == memberId, cancellationToken);
-        return TypedResults.Ok(new SessionMember(member.Id, member.Email, member.DisplayName, initialMembers.Contains(member.EmailKey)));
+        return TypedResults.Ok(SessionMember.From(member, initialMembers.Contains(member.EmailKey)));
     }
 
     private static async Task<IResult> SignOutAsync(

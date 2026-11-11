@@ -152,4 +152,6 @@ export interface SessionMember {
   displayName: string;
   /** Whether they may remove members from the server: initial members only (projects D8). */
   canRemoveMembers: boolean;
+  /** Whether they may invite people to the server: initial members only (server-invites D4). */
+  canInviteMembers: boolean;
 }

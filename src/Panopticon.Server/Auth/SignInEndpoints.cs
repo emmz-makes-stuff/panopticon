@@ -11,7 +11,18 @@ public sealed record ConfirmRequest(string? Secret);
 
 /// <summary>The signed-in member, as the dashboard sees them.</summary>
 /// <param name="CanRemoveMembers">Whether they're an initial member, so the Members page offers Remove (projects D8).</param>
-public sealed record SessionMember(Guid Id, string Email, string DisplayName, bool CanRemoveMembers);
+/// <param name="CanInviteMembers">
+/// Whether the Members page offers the server invite (server-invites D4). The same as <paramref name="CanRemoveMembers"/>
+/// today: both belong to initial members.
+/// </param>
+public sealed record SessionMember(Guid Id, string Email, string DisplayName, bool CanRemoveMembers, bool CanInviteMembers)
+{
+    public static SessionMember From(Member member, bool isInitialMember)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        return new(member.Id, member.Email, member.DisplayName, isInitialMember, isInitialMember);
+    }
+}
 
 /// <summary>Magic-link sign-in (spec dashboard-sign-in; design D8).</summary>
 public static class SignInEndpoints
@@ -81,11 +92,7 @@ public static class SignInEndpoints
         }
 
         await sessions.StartAsync(link.MemberId, context.Response, cancellationToken);
-        return TypedResults.Ok(new SessionMember(
-            link.Member.Id,
-            link.Member.Email,
-            link.Member.DisplayName,
-            initialMembers.Contains(link.Member.EmailKey)));
+        return TypedResults.Ok(SessionMember.From(link.Member, initialMembers.Contains(link.Member.EmailKey)));
     }
 
     private static Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult Refused(string reason) => TypedResults.Problem(
