@@ -15,6 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The install scripts, filled in per request (cli-install design D3). -->
+    <EmbeddedResource Include="Distribution\install.sh" LogicalName="Panopticon.Server.Distribution.install.sh" />
+    <EmbeddedResource Include="Distribution\install.ps1" LogicalName="Panopticon.Server.Distribution.install.ps1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Panopticon.Server.Tests" />
   </ItemGroup>
 

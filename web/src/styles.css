@@ -1775,3 +1775,73 @@ body {
   font-size: var(--step--1);
   color: var(--ink-muted);
 }
+
+/* The Tokens page's "Install the CLI" panel (cli-install D8): the same quiet tool styling as the token list. */
+.install-cli {
+  margin-top: 2rem;
+}
+
+.install-cli h3 {
+  margin: 0 0 0.25rem;
+  font: 700 var(--step-1) / 1.2 var(--font-display);
+}
+
+.install-cli > p {
+  margin: 0 0 0.75rem;
+  color: var(--ink-muted);
+}
+
+/* Two outlined buttons, joined; the pressed one is ink, like a primary action, never teal. */
+.install-cli-os {
+  display: inline-flex;
+  margin-bottom: 0.6rem;
+}
+
+.page .install-cli-choice {
+  padding: 0.3rem 0.85rem;
+  font-size: var(--step--1);
+}
+
+.page .install-cli-choice:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.page .install-cli-choice + .install-cli-choice {
+  margin-left: -1px;
+  border-radius: 0 4px 4px 0;
+}
+
+.page .install-cli-choice[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--card);
+}
+
+.install-cli-command {
+  margin: 0 0 0.75rem;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: var(--step--1);
+  line-height: 1.6;
+}
+
+.install-cli-command code {
+  user-select: all;
+}
+
+.install-cli-version,
+.install-cli-note {
+  margin: 0.6rem 0 0;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+/* The shell's prompt, so the block reads as a terminal line: not selectable, and hidden from screen readers. */
+.install-cli-command::before {
+  content: attr(data-prompt) " " / "";
+  color: var(--ink-muted);
+  user-select: none;
+}

@@ -1,0 +1,4 @@
+The server image copies this folder to /app/cli (cli-install design D1, D2): a `version` file and
+<platform>/panopticon[.exe] for each CLI build the server hands out. Only this file is tracked. The release
+workflow fills it in CI, and `make cli-dist-linux` fills it locally (for `make e2e`). An image built with only
+this file has no CLI builds, and says so.

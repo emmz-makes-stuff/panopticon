@@ -116,6 +116,19 @@ To invite someone, open one of your Projects. Its owners can invite people from 
 - **Members:** there's no invite form, since people join through a Project. Instead there's one muted line
   with a link to `/projects`. Remove appears only for initial members (`canRemoveMembers` on the session),
   and its confirmation says the person leaves every Project.
+- **Tokens: Install the CLI.** Below the token list sits a Gabarito subheading, "Install the CLI", and one muted line:
+  "Run this on a machine to install panopticon there, then log it in with panopticon login." Under that:
+    - Two joined, outlined buttons, "macOS and Linux" and "Windows". The pressed one is `--ink`, like a primary action,
+      because teal is for progress. The visitor's OS picks the default: PowerShell for Windows, `sh` for everything
+      else. Switching changes the command in place, so focus stays on the button.
+    - The command in a bordered block, like the link file: `curl -fsSL <server>/install.sh | sh` or
+      `irm <server>/install.ps1 | iex`. A muted prompt sits in front, `$` or `PS>`, drawn by CSS so selecting the command
+      never copies it and screen readers skip it. Then Copy, with the status line "Copied." or "Couldn't copy. Select the text
+      and copy it."
+    - A small muted line, "Installs panopticon 0.2.0."
+    - On a server without CLI builds, there's only the muted note "This server has no CLI builds. Build the CLI from
+      source instead: clone the repo and run make install." If the manifest fails to load, the note says "Couldn't load
+      the install command. Reload the page to try again." The tokens show either way.
 
 - **One left-aligned column**, 38rem wide, under the header. The page heading is Gabarito 700 at 25px, the
   same as the empty state's. Subheadings ("New Project", "Invite someone") are Gabarito at 20px. Lead text is

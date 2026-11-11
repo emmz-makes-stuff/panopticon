@@ -126,8 +126,10 @@ in the address, so a filtered view can be shared. Project tags go by id there, s
 
 ### Reporting progress
 
-Build and install the CLI with `make install` (it puts `panopticon` in `~/.local/bin`; set `INSTALL_DIR` for
-elsewhere), then give this machine a token:
+Install the CLI from the server: the Tokens page shows the command for your OS (`curl -fsSL <server>/install.sh | sh`
+or `irm <server>/install.ps1 | iex`), and `panopticon update` keeps it in step with the server later. A server built
+locally has no CLI builds, so build and install it from source with `make install` instead (it puts `panopticon`
+in `~/.local/bin`; set `INSTALL_DIR` for elsewhere). Then give this machine a token:
 
 ```sh
 panopticon login --server http://localhost:7480
@@ -228,7 +230,9 @@ dotnet run --project src/Panopticon.Server -- --migrate
 
 ## Run it in a container
 
-The `Dockerfile` builds the dashboard and the server into one image. To run it against the compose services:
+The `Dockerfile` builds the dashboard and the server into one image. It also copies in the CLI builds in `cli-dist/`
+for the server to hand out. Locally that folder is empty unless you've run `make cli-dist-linux`, and the server then
+says it has no CLI builds. To run it against the compose services:
 
 ```sh
 docker build -t panopticon .
@@ -291,16 +295,27 @@ Panopticon__Resend__ApiKey=…                      # railway variable set --std
 PORT=8080
 ```
 
-A pushed version tag deploys it. On every `v*` tag, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs
-`railway config apply`, then `railway up`, with a Railway project token for the production environment in the
-`RAILWAY_TOKEN` repository secret. A plan that would delete something fails the deploy rather than going ahead. The
-service isn't connected to GitHub, so pushes to `main` don't deploy.
+A pushed version tag releases the CLI and deploys the server, at one version. On every `v*` tag,
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs these jobs:
+
+1. **The CLI builds:** a Native AOT build on each OS (linux-x64, linux-arm64, osx-arm64, win-x64), stamped with the
+   tag's version and checked with `--version`.
+2. **The GitHub Release** for the tag, holding those four builds and `SHA256SUMS`, kept as the record.
+3. **The deploy:** `railway config apply`, then `railway up` from a staged copy of the tag that has the same builds in
+   `cli-dist/` ([`.github/scripts/stage-deploy-context.sh`](.github/scripts/stage-deploy-context.sh)), so the deployed
+   server hands them out. It uses a Railway project token for the production environment, in the `RAILWAY_TOKEN`
+   repository secret.
+
+If any build fails, nothing is released or deployed. A plan that would delete something fails the deploy rather than
+going ahead. The service isn't connected to GitHub, so pushes to `main` don't deploy.
 
 ```sh
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
-To deploy from a checkout by hand, run `railway up --service panopticon`.
+To deploy from a checkout by hand, run `railway up --service panopticon`. That server has no CLI builds unless
+`cli-dist/` holds them. `make cli-dist-linux` builds the Linux one for the Docker host's CPU, and the same applies to
+a local `docker build`.
 
 ## Development
 

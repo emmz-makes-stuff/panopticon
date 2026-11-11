@@ -32,6 +32,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app ./
+# The CLI builds this server hands out (cli-install D1, D2): cli-dist/ is filled by the release workflow, or by
+# `make cli-dist-linux`. With only its .keep file, the server has no CLI builds and says so.
+COPY cli-dist/ /app/cli/
 USER $APP_UID
 EXPOSE 8080
 # Configuration comes from the environment, e.g. ConnectionStrings__Panopticon, Panopticon__InitialMembers and

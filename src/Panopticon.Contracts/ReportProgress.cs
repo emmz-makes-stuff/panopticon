@@ -135,6 +135,7 @@ public sealed record ReportProgressResult(
 [JsonSerializable(typeof(DeviceStartResponse))]
 [JsonSerializable(typeof(DevicePollRequest))]
 [JsonSerializable(typeof(DevicePollResponse))]
+[JsonSerializable(typeof(CliManifest))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(int))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;

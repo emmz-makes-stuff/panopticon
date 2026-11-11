@@ -3,6 +3,7 @@ import { alertLine, button, el, page } from "../dom";
 import { calendarDate, relativeTime } from "../format";
 import type { View } from "../router";
 import type { Env } from "../shell";
+import { installCliPanel } from "./installCli";
 
 /** One of your API tokens (server: Auth/TokenEndpoints TokenView). There's never a secret in it. */
 export interface Token {
@@ -19,6 +20,7 @@ export function tokensView(env: Env): View {
   return async ({ root }) => {
     const list = el("ul", "token-list");
     const error = alertLine();
+    const install = installCliPanel(env);
     const status = el("p", "form-status");
     status.setAttribute("role", "status");
 
@@ -96,8 +98,9 @@ export function tokensView(env: Env): View {
         status,
         error.element,
         list,
+        install.element,
       ),
     );
-    await load();
+    await Promise.all([load(), install.load()]);
   };
 }

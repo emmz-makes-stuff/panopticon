@@ -3,7 +3,8 @@
 `panopticon login` gives this machine an API token, approved in the dashboard. `panopticon mcp` is a local
 MCP server that agents talk to over stdio. It offers three tools, `report_progress`, `list_projects` and
 `tag_change`, and forwards each call to the Panopticon server's online MCP endpoint (`/mcp`). `panopticon tags`
-keeps the personal tags this machine's reports carry.
+keeps the personal tags this machine's reports carry. `panopticon update` installs the build your server serves (see
+[Install](#install) and [Update](#update)).
 
 The agent only names the change. The bridge supplies the rest from the local working copy:
 
@@ -131,12 +132,59 @@ change later created with the same name starts a fresh card.
 
 ## Install
 
-The CLI is one native executable with no .NET runtime needed. Until releases are published, build it from
-this repo with `make install`. That builds it (`make aot`, which writes `artifacts/cli/panopticon`) and copies
-it to `~/.local/bin/panopticon`, or to another directory with `make install INSTALL_DIR=…`. It says if that
-directory isn't on your `PATH`. Run it again after pulling to update, then restart your agent so its
-`panopticon mcp` bridge runs the new build. You can also use `artifacts/cli/panopticon`'s full path as the
-`command` below.
+The CLI is one native executable with no .NET runtime needed. Your Panopticon server hands out the build of its
+own release. The Tokens page shows the command for your OS, with a Copy button.
+
+On Linux or macOS:
+
+```sh
+curl -fsSL https://panopticon.example.com/install.sh | sh
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://panopticon.example.com/install.ps1 | iex
+```
+
+The script picks your platform's build, checks its SHA-256 and checks that it runs before putting it in place. Then
+it prints the `panopticon login --server …` command to run next. Every download comes from the server you fetched
+the script from.
+
+- **Where it goes:** on Linux and macOS, `~/.local/bin/panopticon`, or `$PANOPTICON_INSTALL_DIR/panopticon` when
+  that's set. If the directory isn't on your `PATH`, the script says so and shows the line to add. On Windows,
+  `%LOCALAPPDATA%\Programs\panopticon\panopticon.exe`, and that directory is added to your user `PATH`, so open a
+  new terminal afterwards. Running the script again replaces the CLI that's there.
+- **Platforms:** Linux x64 and arm64 with glibc 2.35 or later (Ubuntu 22.04+, Debian 12+), macOS on Apple Silicon,
+  and Windows x64. musl Linux (Alpine), Intel Macs and Windows on Arm aren't supported. The script says so and
+  installs nothing.
+- **A check fails** (a bad checksum, or a build that won't run here, such as on an older glibc): nothing is installed,
+  and an existing CLI is left as it was.
+- **A server built without CLI builds** (a local `docker build`, say) answers `/install.sh` with a note saying so.
+  Build the CLI from source instead: `make install` in this repo builds it (`make aot`, which writes
+  `artifacts/cli/panopticon`) and copies it to `~/.local/bin`, or to `make install INSTALL_DIR=…`. You can also use
+  `artifacts/cli/panopticon`'s full path as the `command` below.
+
+`panopticon --version` prints the version. A build from source is `0.0.0-dev`.
+
+## Update
+
+```sh
+panopticon update
+```
+
+This installs the build your server serves, so the CLI matches the server it reports to, whether that's newer or
+older. It does nothing if the versions already match. It uses the same server as `panopticon login`: `--server
+<url>`, then `PANOPTICON_SERVER_URL`, then the server you last logged in to. It needs no token.
+
+- It checks the download's size and SHA-256 before replacing anything. If anything fails, the old CLI keeps working,
+  and it says what went wrong.
+- It only updates over https, except from this machine (`localhost`, `127.0.0.1`, `::1`). Over plain http, anyone on
+  the way could swap the build together with its checksum.
+- Afterwards, restart your agent, so its `panopticon mcp` bridge runs the new version.
+- On Windows, the running `panopticon.exe` is renamed to `panopticon.exe.old`, and the new one takes its place. The
+  next `panopticon` command deletes the old one.
+- A CLI built from source updates the same way. To stay on your own builds, run `make install` again after pulling.
 
 ## Log in
 
@@ -262,6 +310,14 @@ The bridge logs to stderr. Stdout carries nothing but the MCP protocol. Tool err
 - **"The Panopticon server refused the tag change: …"**: the server's reason follows. For an unknown tag it lists the
   Project's tags, and for a viewer's token it says only owners and editors can tag.
 - **"Couldn't reach the Panopticon server at …"**: check `PANOPTICON_SERVER_URL`, and that the server is up.
+- **"panopticon update needs an https server"**: the server URL is plain http and isn't this machine. Use the
+  server's https address, or reinstall with its install script.
+- **"has no CLI builds"** (from `panopticon update`, the install scripts or the Tokens page): this server was built
+  without them. Build from source with `make install`.
+- **"Checksum mismatch"** (from `panopticon update` or `install.sh`): the download doesn't match the server's
+  manifest. Nothing was changed. Try again, and if it persists, check for a proxy rewriting downloads.
+- **"the downloaded CLI doesn't run on this machine"** (from `install.sh`): usually a glibc older than 2.35. Nothing
+  was installed.
 - **"isn't configured: … not set"**: run `panopticon login`, or set the variables it names.
 - **"saved login is for …, not PANOPTICON_SERVER_URL"**: the environment points at another server. Log in to
   that server with `panopticon login --server <url>`, or remove `PANOPTICON_SERVER_URL`.

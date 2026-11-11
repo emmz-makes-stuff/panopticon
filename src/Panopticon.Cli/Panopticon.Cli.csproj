@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>panopticon</AssemblyName>
+    <!-- The release workflow overrides this with -p:Version=X.Y.Z from the tag (cli-install design D5). -->
+    <Version>0.0.0-dev</Version>
     <RootNamespace>Panopticon.Cli</RootNamespace>
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>

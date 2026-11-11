@@ -14,6 +14,8 @@ import {
 export interface TestShellOptions {
   confirm?: (message: string) => boolean;
   copy?: (text: string) => Promise<void>;
+  /** The browser's OS name; macOS unless a test says otherwise. */
+  platform?: string;
   /** What localStorage holds at start. */
   local?: Record<string, string>;
   /** Replaces localStorage altogether, e.g. with one that throws, as blocked site data does. */
@@ -41,6 +43,7 @@ export async function startTestShell(
     now: () => new Date("2026-11-08T12:00:00Z"),
     confirm: options.confirm ?? (() => true),
     copy: options.copy ?? (() => Promise.resolve()),
+    platform: () => options.platform ?? "macOS",
   });
   const heading = () => root.querySelector(".view h2")?.textContent;
   return { root, nav, local, shell, heading, events };
