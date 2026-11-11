@@ -154,6 +154,23 @@ directory it can't write to. It SHALL exit non-zero with a message naming the pr
 - **WHEN** `panopticon update` runs on Windows while the binary is in use
 - **THEN** the new build takes its place, and the next `panopticon` run is the new version
 
+### Requirement: Updates only over HTTPS
+`panopticon update` SHALL refuse, before downloading anything, a server or a build URL that isn't `https`, unless its
+host is this machine (`localhost`, `127.0.0.1`, `::1`). The manifest and its checksums come over the same connection
+as the build, so plain http would let anyone on the path swap both.
+
+#### Scenario: Plain http server
+- **WHEN** someone runs `panopticon update --server http://panopticon.example.com`
+- **THEN** it exits non-zero, saying it needs an https server, makes no request, and changes nothing
+
+#### Scenario: Plain http build URL
+- **WHEN** an https server's manifest gives an `http://` URL for this platform's build
+- **THEN** it exits non-zero without downloading it, and the binary is unchanged
+
+#### Scenario: Local server
+- **WHEN** someone runs `panopticon update --server http://localhost:7480`
+- **THEN** the update goes ahead over http
+
 ### Requirement: Install hint on the Tokens page
 The Tokens page SHALL show the one-line install command for the visitor's OS, from the manifest's script URLs, with
 a way to copy it and to see the other OS's command. The commands are `curl -fsSL <url> | sh` and `irm <url> | iex`.

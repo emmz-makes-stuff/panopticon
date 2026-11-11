@@ -47,6 +47,13 @@ internal sealed class UpdateCommand(
             return 1;
         }
 
+        if (!IsSecure(root))
+        {
+            await stderr.WriteLineAsync(
+                $"panopticon update needs an https server, not {BridgeSettings.Display(root)}: over plain http, anyone on the way could swap the build and its checksum. Nothing was changed.");
+            return 1;
+        }
+
         if (string.IsNullOrEmpty(binaryPath))
         {
             await stderr.WriteLineAsync("Can't tell where this panopticon binary is, so it can't replace itself.");
@@ -109,6 +116,12 @@ internal sealed class UpdateCommand(
             || (buildUrl.Scheme != Uri.UriSchemeHttp && buildUrl.Scheme != Uri.UriSchemeHttps))
         {
             throw new JsonException();
+        }
+
+        if (!IsSecure(buildUrl))
+        {
+            await stderr.WriteLineAsync($"The server at {display} offers this build over plain http ({buildUrl}), so it wasn't downloaded. Nothing was changed.");
+            return 1;
         }
 
         var directory = Path.GetDirectoryName(Path.GetFullPath(binaryPath))!;
@@ -181,6 +194,9 @@ internal sealed class UpdateCommand(
 
         return true;
     }
+
+    /// <summary>https, or http to this machine only (spec: Updates only over HTTPS).</summary>
+    internal static bool IsSecure(Uri url) => url.Scheme == Uri.UriSchemeHttps || url.IsLoopback;
 
     private static void TryDelete(string path)
     {

@@ -50,6 +50,10 @@
   server whose catalogue holds a different "build" (a copy of the binary with a different `version` file), run
   `update`, and check that the file was replaced and that a second run says it's up to date. Then `make test` →
   `TEST_EXIT:0`.
+- [x] 4.3 Security review fix (Emmz, 2026-11-11): `update` refuses a server or build URL that isn't https, unless it's
+  loopback, before any request or download (spec: Updates only over HTTPS). Verify with `UpdateCommandTests`: a plain
+  http server makes no request, a plain http build URL isn't downloaded, and localhost, 127.0.0.1 and ::1 work over
+  http. Then `make test` → `TEST_EXIT:0`.
 
 ## 5. Web: install hint on the Tokens page
 

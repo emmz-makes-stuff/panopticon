@@ -260,6 +260,46 @@ public sealed class UpdateCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task A_plain_http_server_is_refused_before_any_request()
+    {
+        _server.Serve("0.2.0", "new build");
+
+        var run = await RunAsync(args: ["--server", "http://panopticon.example.com"]);
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains("needs an https server", run.Stderr, StringComparison.Ordinal);
+        Assert.Empty(_server.Paths);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+    }
+
+    [Fact]
+    public async Task A_plain_http_build_url_is_not_downloaded()
+    {
+        _server.Serve("0.2.0", "new build", buildUrlBase: "http://cdn.example.com");
+
+        var run = await RunAsync();
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains("over plain http (http://cdn.example.com/cli/linux-x64/panopticon)", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal(["/api/cli"], _server.Paths);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:7480")]
+    [InlineData("http://127.0.0.1:7480")]
+    [InlineData("http://[::1]:7480")]
+    public async Task A_server_on_this_machine_may_use_http(string server)
+    {
+        _server.Serve("0.2.0", "new build", buildUrlBase: server);
+
+        var run = await RunAsync(args: ["--server", server]);
+
+        Assert.True(run.Exit == 0, run.Stderr);
+        Assert.Equal("new build", await File.ReadAllTextAsync(_binary, Ct));
+    }
+
+    [Fact]
     public async Task An_unknown_option_is_a_usage_error()
     {
         var run = await RunAsync(args: ["--force"]);
@@ -279,7 +319,7 @@ public sealed class UpdateCommandTests : IDisposable
 
         public IEnumerable<string> Paths => Requests.Select(r => r.RequestUri!.AbsolutePath);
 
-        public void Serve(string version, string content, string platform = Platform, string? sha256 = null, long? size = null)
+        public void Serve(string version, string content, string platform = Platform, string? sha256 = null, long? size = null, string buildUrlBase = Server)
         {
             var bytes = Encoding.UTF8.GetBytes(content);
             var file = CliPlatforms.FileName(platform);
@@ -289,7 +329,7 @@ public sealed class UpdateCommandTests : IDisposable
                 $"{Server}/install.ps1",
                 new Dictionary<string, CliPlatformBuild>
                 {
-                    [platform] = new($"{Server}/cli/{platform}/{file}", size ?? bytes.Length, sha256 ?? Convert.ToHexStringLower(SHA256.HashData(bytes))),
+                    [platform] = new($"{buildUrlBase}/cli/{platform}/{file}", size ?? bytes.Length, sha256 ?? Convert.ToHexStringLower(SHA256.HashData(bytes))),
                 });
             var json = JsonSerializer.Serialize(manifest, ContractsJsonContext.Default.CliManifest);
             _respond = request => request.RequestUri!.AbsolutePath switch

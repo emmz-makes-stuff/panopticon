@@ -119,7 +119,10 @@ the size, sets mode 755 on Unix, then:
   `panopticon.exe.old`, and then the temp file is moved to `processPath`. If that second step fails, the rename is
   undone. The next start of any `panopticon` command deletes a stale `.old` file, best effort and silent.
 
-Any failure deletes the temp file and leaves the old binary in place (spec: Safe self-update). The HTTP client and the
+Any failure deletes the temp file and leaves the old binary in place (spec: Safe self-update). `update` only talks https, except to
+loopback hosts (spec: Updates only over HTTPS). The checksum comes over the same connection as the build, so on
+plain http it would prove nothing. Signing builds was considered and left for later: it needs a key in CI and a
+public key compiled into the CLI. The HTTP client and the
 file-system steps sit behind small seams, so unit tests can cover the mismatch, no-build, unwritable and Windows-path
 cases without a network.
 
