@@ -19,6 +19,8 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly reason?: string,
+    /** The Problem Details `detail` the server sent, when there was one. */
+    readonly detail?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -68,6 +70,7 @@ export function createApi(options: ApiOptions = {}): Api {
         response.status,
         problem.detail ?? `${method} ${path} answered ${response.status}`,
         problem.reason,
+        problem.detail,
       );
     }
 

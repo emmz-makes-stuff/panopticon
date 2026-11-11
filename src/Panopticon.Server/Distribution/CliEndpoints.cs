@@ -71,7 +71,7 @@ public static class CliEndpoints
         return TypedResults.Text(script, "text/plain; charset=utf-8");
     }
 
-    internal static IResult Download(string platform, string file, CliCatalogue catalogue)
+    internal static IResult Download(HttpContext context, string platform, string file, CliCatalogue catalogue)
     {
         if (catalogue.IsEmpty)
         {
@@ -83,6 +83,9 @@ public static class CliEndpoints
             return NotFoundText($"There's no CLI build at /cli/{platform}/{file}.");
         }
 
+        // The URL carries no version, so a cache must check back each time: stale bytes would fail the manifest's
+        // checksum. The ETag and Last-Modified that PhysicalFile sends keep that check cheap.
+        context.Response.Headers.CacheControl = "no-cache";
         return TypedResults.PhysicalFile(build.FilePath, "application/octet-stream", build.FileName);
     }
 

@@ -123,14 +123,14 @@ From the whole-change review and `code-review` (devlog `20261111-1920-whole-chan
 
 ## 9. Review fixes: server and install scripts
 
-- [ ] 9.1 `CliCatalogue.Load` logs a build it can't read or hash (`IOException`, `UnauthorizedAccessException`) and
+- [x] 9.1 `CliCatalogue.Load` logs a build it can't read or hash (`IOException`, `UnauthorizedAccessException`) and
   leaves it out. The server still starts, and with no readable build at all the catalogue is empty. Verify with a
   catalogue test on an unreadable file (Unix mode 000, skipped on Windows).
-- [ ] 9.2 `/cli/<rid>/<file>` downloads send `Cache-Control: no-cache`, so a cache revalidates against the bytes the
+- [x] 9.2 `/cli/<rid>/<file>` downloads send `Cache-Control: no-cache`, so a cache revalidates against the bytes the
   manifest describes. Verify with an endpoint test on the header.
-- [ ] 9.3 `install.ps1` moves `panopticon.exe.old` back when moving the new `.exe` into place fails, matching
+- [x] 9.3 `install.ps1` moves `panopticon.exe.old` back when moving the new `.exe` into place fails, matching
   `BinaryReplacer` (design D6). Verify by reading it against `BinaryReplacer`. The script itself is run in 7.3.
-- [ ] 9.4 The Tokens page's no-builds note shows the server's Problem `detail` (`ApiError.message`). It falls back to
+- [x] 9.4 The Tokens page's no-builds note shows the server's Problem `detail` (`ApiError.message`). It falls back to
   the current text only if that's empty. Verify with a `tokens.test.ts` case where the 404 has a different `detail`.
 
 ## Workflow follow-up

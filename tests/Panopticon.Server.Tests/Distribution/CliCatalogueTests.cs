@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Panopticon.Contracts;
 using Panopticon.Server.Distribution;
@@ -40,6 +41,43 @@ public class CliCatalogueTests
         var catalogue = Load(builds.Path);
 
         Assert.Equal([CliPlatforms.LinuxArm64], catalogue.Builds.Keys);
+    }
+
+    [Fact]
+    public void An_unreadable_build_is_logged_and_left_out_rather_than_failing_start_up()
+    {
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root")
+        {
+            Assert.Skip("Needs Unix permissions, as a user other than root.");
+            return;
+        }
+
+        using var builds = CliBuildsDirectory.Create("0.2.0");
+        var unreadable = Path.Combine(builds.Path, CliPlatforms.OsxArm64, "panopticon");
+        File.SetUnixFileMode(unreadable, UnixFileMode.None);
+        var logger = new ListLogger<CliCatalogue>();
+
+        var catalogue = CliCatalogue.Load(builds.Path, logger);
+
+        Assert.False(catalogue.IsEmpty);
+        Assert.DoesNotContain(CliPlatforms.OsxArm64, catalogue.Builds.Keys);
+        Assert.Equal(3, catalogue.Builds.Count);
+        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error && e.Message.Contains(unreadable, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Only_unreadable_builds_is_empty()
+    {
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root")
+        {
+            Assert.Skip("Needs Unix permissions, as a user other than root.");
+            return;
+        }
+
+        using var builds = CliBuildsDirectory.Create("0.2.0", [CliPlatforms.LinuxX64]);
+        File.SetUnixFileMode(Path.Combine(builds.Path, CliPlatforms.LinuxX64, "panopticon"), UnixFileMode.None);
+
+        Assert.True(Load(builds.Path).IsEmpty);
     }
 
     [Fact]

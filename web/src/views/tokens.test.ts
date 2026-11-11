@@ -189,13 +189,37 @@ describe("/tokens install panel", () => {
   it("a server without CLI builds points to make install and shows no command", async () => {
     const { root } = await openInstall(
       {},
-      { status: 404, body: { detail: "This server has no CLI builds." } },
+      {
+        status: 404,
+        body: {
+          detail:
+            "This server has no CLI builds. Build the CLI from source instead: clone the repo and run make install.",
+        },
+      },
     );
 
     expect(root.querySelector(".install-cli-note")?.textContent).toContain("make install");
     expect(root.querySelector(".install-cli-note")?.textContent).toContain("no CLI builds");
     expect(command(root)).toBeUndefined();
     expect(machines(root)).toEqual(["vm-1"]);
+  });
+
+  it("the no-builds note is the server's own message", async () => {
+    const { root } = await openInstall(
+      {},
+      { status: 404, body: { detail: "No CLI builds here: see docs/cli.md." } },
+    );
+
+    expect(root.querySelector(".install-cli-note")?.textContent).toBe(
+      "No CLI builds here: see docs/cli.md.",
+    );
+    expect(command(root)).toBeUndefined();
+  });
+
+  it("a 404 without a detail still points to make install", async () => {
+    const { root } = await openInstall({}, { status: 404, body: {} });
+
+    expect(root.querySelector(".install-cli-note")?.textContent).toContain("make install");
   });
 
   it("a failed manifest request says to reload, and the tokens still show", async () => {

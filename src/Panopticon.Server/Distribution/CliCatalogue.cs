@@ -71,9 +71,17 @@ public sealed partial class CliCatalogue
                 continue;
             }
 
-            using var stream = File.OpenRead(path);
-            var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
-            builds[platform] = new CliBuild(platform, fileName, path, stream.Length, sha256);
+            // An unreadable build is left out, never a reason not to start (spec: Server without CLI builds).
+            try
+            {
+                using var stream = File.OpenRead(path);
+                var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
+                builds[platform] = new CliBuild(platform, fileName, path, stream.Length, sha256);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                LogUnreadableBuild(logger, ex, path);
+            }
         }
 
         if (builds.Count == 0)
@@ -91,6 +99,9 @@ public sealed partial class CliCatalogue
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No CLI builds in {Directory} ({Reason}): the server won't hand out the CLI.")]
     private static partial void LogNoBuilds(ILogger logger, string directory, string reason);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Can't read the CLI build {Path}: the server won't hand it out.")]
+    private static partial void LogUnreadableBuild(ILogger logger, Exception exception, string path);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "CLI builds {Version} for {Platforms}, from {Directory}.")]
     private static partial void LogLoaded(ILogger logger, string version, IEnumerable<string> platforms, string directory);

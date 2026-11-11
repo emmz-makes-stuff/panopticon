@@ -12,6 +12,10 @@ export interface CliManifest {
 
 type Os = "unix" | "windows";
 
+/** Only for a 404 with no Problem `detail`, such as a proxy's: the server always sends its own message. */
+const NO_BUILDS_FALLBACK =
+  "This server has no CLI builds. Build the CLI from source instead: clone the repo and run make install.";
+
 const LABELS: Record<Os, string> = { unix: "macOS and Linux", windows: "Windows" };
 
 /** The one-line install command for each OS (spec cli-distribution, "Install hint on the Tokens page"). */
@@ -56,7 +60,8 @@ export function installCliPanel(env: Env): { element: HTMLElement; load(): Promi
           "p",
           "install-cli-note",
           failure instanceof ApiError && failure.status === 404
-            ? "This server has no CLI builds. Build the CLI from source instead: clone the repo and run make install."
+            ? // The server's own words (CliCatalogue.NoBuildsMessage), as the CLI and install scripts show them.
+              failure.detail || NO_BUILDS_FALLBACK
             : "Couldn't load the install command. Reload the page to try again.",
         ),
       );

@@ -46,11 +46,20 @@
             Fail "the downloaded CLI doesn't run on this machine. Nothing was installed. It said: $installed"
         }
 
-        # A running panopticon.exe can't be overwritten, but it can be renamed aside (design D6).
+        # A running panopticon.exe can't be overwritten, but it can be renamed aside. If the new one then can't move in,
+        # the old one goes back, so a failed install never leaves no panopticon.exe (design D6, as BinaryReplacer does).
+        $old = "$target.old"
+        $movedAside = $false
         if (Test-Path $target) {
-            Move-Item -Force -Path $target -Destination "$target.old"
+            Move-Item -Force -Path $target -Destination $old
+            $movedAside = $true
         }
-        Move-Item -Force -Path $tmp -Destination $target
+        try {
+            Move-Item -Force -Path $tmp -Destination $target
+        } catch {
+            if ($movedAside) { Move-Item -Force -Path $old -Destination $target }
+            Fail "can't write ${target}: $($_.Exception.Message) The CLI that was there is still there."
+        }
     } finally {
         if (Test-Path $tmp) { Remove-Item -Force $tmp }
     }

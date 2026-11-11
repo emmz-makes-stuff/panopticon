@@ -85,6 +85,7 @@ public class CliEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/octet-stream", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal(file, response.Content.Headers.ContentDisposition?.FileNameStar ?? response.Content.Headers.ContentDisposition?.FileName);
+        Assert.True(response.Headers.CacheControl?.NoCache, "a download must be revalidated: its URL carries no version");
         var bytes = await response.Content.ReadAsByteArrayAsync(Ct);
         Assert.Equal(builds.Sha256(platform), Convert.ToHexStringLower(SHA256.HashData(bytes)));
     }
