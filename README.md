@@ -256,6 +256,52 @@ Panopticon__S3__Bucket=panopticon-documents
 Panopticon__S3__ForcePathStyle=true
 ```
 
+## Deploy to Railway
+
+The reference deployment is one Railway project in a single region: a service built from the `Dockerfile`, Railway
+Postgres, and a Railway Bucket. [`.railway/railway.ts`](.railway/railway.ts) (Railway Infrastructure as Code) holds
+the service's build and deploy settings: it runs `--migrate` as the pre-deploy command, checks `/healthz`, and pins the
+region. It owns only the `panopticon` service. Postgres, the Bucket and the variables are managed outside it.
+`railway config plan` shows any drift, and `railway config apply` fixes it (run `npm --prefix .railway ci` first).
+
+Set up a project once:
+
+```sh
+railway init                                     # or `railway link` to an existing project
+railway add --database postgres                  # then put its volume in the service's region
+railway bucket create panopticon-documents --region iad
+railway add --service panopticon
+railway domain --service panopticon --port 8080
+```
+
+Then set the service's variables. References such as `${{Postgres.PGHOST}}` keep the credentials in Railway:
+
+```sh
+ConnectionStrings__Panopticon=Host=${{Postgres.PGHOST}};Port=${{Postgres.PGPORT}};Database=${{Postgres.PGDATABASE}};Username=${{Postgres.PGUSER}};Password=${{Postgres.PGPASSWORD}}
+Panopticon__S3__ServiceUrl=${{panopticon-documents.ENDPOINT}}
+Panopticon__S3__Region=${{panopticon-documents.REGION}}
+Panopticon__S3__AccessKey=${{panopticon-documents.ACCESS_KEY_ID}}
+Panopticon__S3__SecretKey=${{panopticon-documents.SECRET_ACCESS_KEY}}
+Panopticon__S3__Bucket=${{panopticon-documents.BUCKET}}
+Panopticon__S3__ForcePathStyle=false
+Panopticon__PublicUrl=https://panopticon.example.com
+Panopticon__InitialMembers=you@example.com
+Panopticon__Email__From=PANOPTICON <sign-in@example.com>
+Panopticon__Resend__ApiKey=…                      # railway variable set --stdin Panopticon__Resend__ApiKey
+PORT=8080
+```
+
+A pushed version tag deploys it. On every `v*` tag, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs
+`railway config apply`, then `railway up`, with a Railway project token for the production environment in the
+`RAILWAY_TOKEN` repository secret. A plan that would delete something fails the deploy rather than going ahead. The
+service isn't connected to GitHub, so pushes to `main` don't deploy.
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+To deploy from a checkout by hand, run `railway up --service panopticon`.
+
 ## Development
 
 Builds are gated through the `Makefile`. `make gates` runs everything (build, tests, format, the CLI's Native

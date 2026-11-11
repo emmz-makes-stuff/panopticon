@@ -16,6 +16,11 @@ internet, and the repo lives on GitHub.
 - The **reference deployment is Railway**: one service built from the Dockerfile and deployed from
   GitHub, plus Railway Postgres and a Railway Bucket (ADR-0003). Secrets (database URL, S3 credentials,
   Resend API key) are Railway environment variables.
+- *Amended 2026-11-10:* a **version tag** (`v*`) deploys it, not a push to a branch. Railway's GitHub
+  trigger only watches branches, so a GitHub Actions workflow runs `railway up` on each tag with a project
+  token. The service's settings are in `.railway/railway.ts` (Railway Infrastructure as Code; Config as
+  Code's `railway.toml` is deprecated and stops working on 2026-12-01), and the service, Postgres and the
+  Bucket share one region (US East).
 - **CLI binaries** for linux-x64, linux-arm64, osx-arm64 and win-x64 are published as **GitHub
   Releases** assets.
 

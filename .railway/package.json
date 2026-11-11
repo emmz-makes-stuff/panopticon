@@ -1,0 +1,9 @@
+{
+  "name": "panopticon-railway",
+  "private": true,
+  "description": "Railway Infrastructure as Code for the panopticon service (railway.ts).",
+  "type": "module",
+  "devDependencies": {
+    "railway": "3.16.0"
+  }
+}

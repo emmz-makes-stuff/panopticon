@@ -13,4 +13,5 @@
 | git | repo identity, version control | any | `git --version` | — | `brew install git` |
 | openspec | change tracking | >=1.15 | `openspec --version` | — | `npm i -g @fission-ai/openspec` |
 | gh | PRs, GitHub Releases for CLI binaries | any | `gh --version` | `gh auth status` | `brew install gh`, then `gh auth login` |
-| railway | reference deployment (Railway service, Postgres, Bucket) | >=4 | `railway --version` | `railway whoami` | `brew install railway`, then `railway login` |
+| railway | reference deployment (Railway service, Postgres, Bucket); `railway config plan/apply` for `.railway/railway.ts` | >=5.71 | `railway --version` | `railway whoami` | `brew install railway`, then `railway login` |
+| railway (npm) | the `railway/iac` module `.railway/railway.ts` imports | 3.16.0 (pinned in `.railway/package.json`) | `test -f .railway/node_modules/railway/package.json` | — | `npm --prefix .railway ci` |

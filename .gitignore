@@ -9,6 +9,9 @@ artifacts/
 web/node_modules/
 web/coverage/
 
+# Railway IaC
+.railway/node_modules/
+
 # Vite builds the web app into the server's wwwroot (design D10)
 src/Panopticon.Server/wwwroot/
 
