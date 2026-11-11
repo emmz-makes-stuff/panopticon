@@ -32,16 +32,20 @@
 
 ## Decisions
 
-### D1. `POST /api/members` reuses `MemberInvites.FindOrAddAsync`
+### D1. `POST /api/members` shares Project invites' member-making step
 
 The endpoint, in order:
 
-1. Validate the address (400). Check the caller is an initial member (403), and the rate limit (D3, 429).
-2. In one transaction, lock the caller's row `FOR NO KEY UPDATE`, as invites do, and refuse with 403 if the caller
-   has been removed.
-3. Check for an active member with the address's key. If there is one, return 409 "already a member".
-4. Otherwise call `FindOrAddAsync`. A unique violation, from a concurrent invite of the same new address (server or
-   Project), returns the same 409 that Project invites give.
+1. Check the caller is an initial member (403). Then validate the address (400), and check the rate limit (D3, 429).
+2. In one transaction, lock the caller's row and the address's row `FOR NO KEY UPDATE`, in id order as a removal locks
+   them, so the two can't deadlock. Refuse with 403 if the caller has been removed.
+3. If that read finds an active member with the address's key, return 409 "already a member".
+4. Otherwise call `MemberInvites.AddUnlessActiveAsync`, the same locking read and add as `FindOrAddAsync`, which
+   reports whether the address was already active. If it was, return the same 409.
+   - Step 3's statement can't see a member that a concurrent invite committed while this one waited on the
+     caller's lock: its snapshot is older. Step 4's new statement can. Found in §1, where two concurrent invites both
+     got a 201.
+   - A unique violation, from a concurrent uncommitted insert of the same address, also returns 409.
 5. Commit, then queue the email (D2), and return 201 with the `MemberView`.
 
 The email is queued only after the commit, so a refused or rolled-back invite never sends one.

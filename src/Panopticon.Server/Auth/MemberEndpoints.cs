@@ -1,12 +1,17 @@
 using System.Net;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Npgsql;
 using Panopticon.Server.Data;
 using Panopticon.Server.Live;
+using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Auth;
 
 public sealed record RenameRequest(string? DisplayName);
+
+public sealed record ServerInviteRequest(string? Email);
 
 /// <summary>An active member, as the members page lists them. <c>JoinedAt</c> is when the row was created.</summary>
 public sealed record MemberView(Guid Id, string Email, string DisplayName, DateTimeOffset JoinedAt)
@@ -19,9 +24,10 @@ public sealed record MemberView(Guid Id, string Email, string DisplayName, DateT
 }
 
 /// <summary>
-/// Listing, renaming and removing members (spec team-members; design D11, projects D8). People join through a
-/// Project's invite now. Every endpoint needs a session; the state-changing ones also need the D6 header, which
-/// <see cref="RequestHeaderMiddleware"/> enforces for all of <c>/api</c>.
+/// Listing, inviting, renaming and removing members (spec team-members; design D11, projects D8, server-invites). People
+/// join through a Project's invite, or an initial member's invite to the server. Every endpoint needs a session; the
+/// state-changing ones also need the D6 header, which <see cref="RequestHeaderMiddleware"/> enforces for all of
+/// <c>/api</c>.
 /// </summary>
 public static class MemberEndpoints
 {
@@ -31,9 +37,97 @@ public static class MemberEndpoints
     public static IEndpointRouteBuilder MapMembers(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(MembersPath, ListAsync).RequireAuthorization(AuthPolicies.Member);
+        endpoints.MapPost(MembersPath, InviteAsync).RequireAuthorization(AuthPolicies.Member);
         endpoints.MapPatch(MePath, RenameAsync).RequireAuthorization(AuthPolicies.Member);
         endpoints.MapDelete($"{MembersPath}/{{id:guid}}", RemoveAsync).RequireAuthorization(AuthPolicies.Member);
         return endpoints;
+    }
+
+    /// <summary>
+    /// An initial member invites an address to the server, in no Project (spec team-members, "Inviting to the server";
+    /// server-invites D1). It makes a new member, or a removed one active again, with the same locking read as Project
+    /// invites (<see cref="MemberInvites.AddUnlessActiveAsync"/>), and emails them once the invite has committed.
+    /// </summary>
+    internal static async Task<IResult> InviteAsync(
+        ServerInviteRequest request,
+        ClaimsPrincipal user,
+        HttpContext context,
+        PanopticonDb db,
+        InitialMemberList initialMembers,
+        AuthLimits limits,
+        EmailOutbox emails,
+        IOptions<PublicUrlOptions> publicUrl,
+        IHostEnvironment environment,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(limits);
+        ArgumentNullException.ThrowIfNull(emails);
+        ArgumentNullException.ThrowIfNull(publicUrl);
+        var inviterId = user.GetRequiredMemberId();
+        if (!await CanRemoveMembersAsync(db, initialMembers, inviterId, cancellationToken))
+        {
+            return SignInEndpoints.Problem(HttpStatusCode.Forbidden, "Only an initial member can invite people to the server.");
+        }
+
+        if (!MemberEmail.IsValid(request.Email))
+        {
+            return SignInEndpoints.Problem(HttpStatusCode.BadRequest, "That isn't a valid email address.");
+        }
+
+        // D3: before any database work, so a flood of refused requests costs nothing.
+        if (!limits.TryServerInvite(inviterId))
+        {
+            return SignInEndpoints.Problem(HttpStatusCode.TooManyRequests, "You've sent a lot of invites. Try again later.");
+        }
+
+        var email = request.Email!;
+        var key = MemberEmail.Key(email);
+        var now = time.GetUtcNow();
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // The inviter's row and the invited address's row, in id order, as a removal locks member rows, so the two can't
+        // deadlock. A removal of the inviter that commits first is seen here (review fix 12.5).
+        var locked = await db.Members
+            .FromSql($"SELECT * FROM members WHERE id = {inviterId} OR email_key = {key} ORDER BY id FOR NO KEY UPDATE")
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var inviter = locked.SingleOrDefault(m => m.Id == inviterId);
+        if (inviter is not { IsActive: true })
+        {
+            return SignInEndpoints.Problem(HttpStatusCode.Forbidden, "You've been removed from the server.");
+        }
+
+        if (locked.SingleOrDefault(m => m.EmailKey == key) is { IsActive: true } existing)
+        {
+            return AlreadyAMember(existing.Email);
+        }
+
+        Member? member;
+        try
+        {
+            // This read is a new statement, so it sees a member that a concurrent invite committed while this one waited
+            // on the inviter's lock, which the read above can't.
+            member = await MemberInvites.AddUnlessActiveAsync(db, email, inviterId, now, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Another invite, to the server or a Project, added the same new address at the same moment.
+            return AlreadyAMember(MemberEmail.Clean(email));
+        }
+
+        if (member is null)
+        {
+            return AlreadyAMember(MemberEmail.Clean(email));
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        // Only after the commit, so a refused or rolled-back invite never sends an email.
+        var signInPage = SignInEndpoints.LinkRoot(publicUrl.Value, context, environment);
+        emails.Enqueue(new ServerInviteJob(ServerInviteEmail.Create(member.Email, inviter.DisplayName, signInPage)));
+        return TypedResults.Created($"{MembersPath}/{member.Id}", MemberView.From(member));
     }
 
     /// <summary>
@@ -165,15 +259,25 @@ public static class MemberEndpoints
 
     /// <summary>
     /// The active members who share a Project with the caller, and the caller (spec team-members, "Member list";
-    /// projects D8).
+    /// projects D8). An initial member gets every active member instead, so they can see and remove the people they
+    /// invited to the server (server-invites D4).
     /// </summary>
-    internal static async Task<IResult> ListAsync(ClaimsPrincipal user, PanopticonDb db, CancellationToken cancellationToken)
+    internal static async Task<IResult> ListAsync(
+        ClaimsPrincipal user,
+        PanopticonDb db,
+        InitialMemberList initialMembers,
+        CancellationToken cancellationToken)
     {
         var me = user.GetRequiredMemberId();
-        var myProjects = db.ProjectMembers.Where(m => m.MemberId == me).Select(m => m.ProjectId);
-        var members = await db.Members.AsNoTracking()
-            .Where(m => m.RemovedAt == null
-                && (m.Id == me || db.ProjectMembers.Any(pm => pm.MemberId == m.Id && myProjects.Contains(pm.ProjectId))))
+        var active = db.Members.AsNoTracking().Where(m => m.RemovedAt == null);
+        if (!await CanRemoveMembersAsync(db, initialMembers, me, cancellationToken))
+        {
+            var myProjects = db.ProjectMembers.Where(m => m.MemberId == me).Select(m => m.ProjectId);
+            active = active.Where(m =>
+                m.Id == me || db.ProjectMembers.Any(pm => pm.MemberId == m.Id && myProjects.Contains(pm.ProjectId)));
+        }
+
+        var members = await active
             .OrderBy(m => m.CreatedAt)
             .ThenBy(m => m.EmailKey)
             .ToListAsync(cancellationToken);
@@ -198,6 +302,9 @@ public static class MemberEndpoints
         await db.SaveChangesAsync(cancellationToken);
         return TypedResults.Ok(MemberView.From(member));
     }
+
+    private static IResult AlreadyAMember(string email) =>
+        SignInEndpoints.Problem(HttpStatusCode.Conflict, $"{email} is already a member.");
 
     private static IResult BadName() =>
         SignInEndpoints.Problem(

@@ -2,14 +2,15 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Data;
 using Panopticon.Server.Tests.Infrastructure;
 
 namespace Panopticon.Server.Tests.Auth;
 
-// specs/team-members: "Member list", "Display names", "Removing a member" (design D11; projects D8). Inviting is the
-// Project invite's now, tested in ProjectEndpointTests.
+// specs/team-members: "Member list", "Display names", "Removing a member" (design D11; projects D8), and inviting to the
+// server (server-invites). Project invites are tested in ProjectEndpointTests.
 public class MemberEndpointTests(PostgresFixture postgres, S3Fixture s3)
 {
     private const string Sam = "sam@example.com";
@@ -83,16 +84,216 @@ public class MemberEndpointTests(PostgresFixture postgres, S3Fixture s3)
     }
 
     [Fact]
-    public async Task Inviting_through_members_is_gone()
+    public async Task An_initial_member_sees_every_active_member_even_with_no_shared_Project()
     {
         await using var factory = await FactoryAsync();
-        using var http = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        (await InviteAsync(emmz, Kit)).Dispose();
 
-        using var invited = await http.PostApiAsync(MemberEndpoints.MembersPath, new { email = Sam }, Ct);
+        var members = await ListAsync(emmz);
 
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, invited.StatusCode);
+        Assert.Equal([PanopticonFactory.MemberEmail, Kit], members.Select(m => m.Email));
+    }
+
+    [Fact]
+    public async Task People_invited_to_the_server_dont_see_each_other()
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        (await InviteAsync(emmz, Kit)).Dispose();
+        (await InviteAsync(emmz, Sam)).Dispose();
+        using var kit = await factory.CreateSignedInClientAsync(Kit, Ct);
+
+        Assert.Equal([Kit], (await ListAsync(kit)).Select(m => m.Email));
+    }
+
+    // --- "Inviting to the server", "Inviting an existing member", "Invitation email", "Invite rate limit" ---
+
+    private static Task<HttpResponseMessage> InviteAsync(HttpClient http, string? email) =>
+        http.PostApiAsync(MemberEndpoints.MembersPath, new { email }, Ct);
+
+    /// <summary>
+    /// Emails go out in the background, one at a time and in order. So once a later invite's email has arrived, an
+    /// earlier refused invite would have sent its email already, if it had sent one.
+    /// </summary>
+    private static async Task AssertNoEmailToAsync(PanopticonFactory factory, HttpClient initialMember, string address)
+    {
+        const string Marker = "marker@example.com";
+        (await InviteAsync(initialMember, Marker)).Dispose();
+        await factory.Emails.WaitForAsync(Marker, cancellationToken: Ct);
+        Assert.Empty(factory.Emails.To(address));
+    }
+
+    [Fact]
+    public async Task An_initial_member_invites_a_friend_who_joins_no_Project_and_gets_an_email()
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        using var renamed = await RenameAsync(emmz, "Emmz");
+
+        using var invited = await InviteAsync(emmz, " kit@example.com ");
+
+        Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+        var view = (await invited.Content.ReadFromJsonAsync<MemberView>(Ct))!;
+        Assert.Equal(Kit, view.Email);
+        Assert.Equal("kit", view.DisplayName);
+        await using (var db = factory.NewDb())
+        {
+            var kit = await db.Members.SingleAsync(m => m.EmailKey == Kit, Ct);
+            Assert.True(kit.IsActive);
+            Assert.Equal(await factory.MemberIdAsync(PanopticonFactory.MemberEmail, Ct), kit.InvitedByMemberId);
+            Assert.False(await db.ProjectMembers.AnyAsync(m => m.MemberId == kit.Id, Ct));
+        }
+
+        var email = Assert.Single(await factory.Emails.WaitForAsync(Kit, cancellationToken: Ct));
+        Assert.Equal(ServerInviteEmail.Subject("Emmz"), email.Subject);
+        Assert.Contains(PanopticonFactory.PublicUrl, email.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sign-in/confirm", email.Text, StringComparison.Ordinal);
+
+        // And they can sign in.
+        using var kitsBrowser = await factory.CreateSignedInClientAsync(Kit, Ct);
+        Assert.Equal(Kit, Assert.Single(await ListAsync(kitsBrowser)).Email);
+    }
+
+    [Fact]
+    public async Task Inviting_a_removed_member_back_makes_them_active_with_no_Projects_or_tokens()
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        var pan = await emmz.CreateProjectAsync("PAN", Ct);
+        var sam = await JoinAsync(factory, emmz, pan, Sam);
+        await using (var db = factory.NewDb())
+        {
+            db.ApiTokens.Add(new ApiToken
+            {
+                MemberId = sam,
+                SecretHash = Secrets.Hash("sams-token"),
+                MachineName = "vm-1",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        (await RemoveAsync(emmz, sam)).Dispose();
+
+        using var invited = await InviteAsync(emmz, Sam);
+
+        Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
+        Assert.Equal(sam, (await invited.Content.ReadFromJsonAsync<MemberView>(Ct))!.Id);
+        await using (var db = factory.NewDb())
+        {
+            Assert.True((await db.Members.SingleAsync(m => m.Id == sam, Ct)).IsActive);
+            Assert.False(await db.ProjectMembers.AnyAsync(m => m.MemberId == sam, Ct));
+            Assert.False(await db.ApiTokens.AnyAsync(t => t.MemberId == sam && t.RevokedAt == null, Ct));
+        }
+
+        await factory.Emails.WaitForAsync(Sam, cancellationToken: Ct);
+    }
+
+    [Fact]
+    public async Task Only_initial_members_invite_to_the_server_and_nothing_changes_otherwise()
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        await JoinAsync(factory, emmz, await emmz.CreateProjectAsync("PAN", Ct), Sam, "owner");
+        using var sam = await factory.CreateSignedInClientAsync(Sam, Ct);
+
+        using var refused = await InviteAsync(sam, Kit);
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("Only an initial member", await DetailAsync(refused), StringComparison.Ordinal);
+        Assert.False((await sam.GetFromJsonAsync<JsonElement>(SessionEndpoints.SessionPath, Ct)).GetProperty("canInviteMembers").GetBoolean());
+        Assert.True((await emmz.GetFromJsonAsync<JsonElement>(SessionEndpoints.SessionPath, Ct)).GetProperty("canInviteMembers").GetBoolean());
+        await using (var db = factory.NewDb())
+        {
+            Assert.False(await db.Members.AnyAsync(m => m.EmailKey == Kit, Ct));
+        }
+
+        await AssertNoEmailToAsync(factory, emmz, Kit);
+    }
+
+    [Theory]
+    [InlineData("not-an-address")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task An_invalid_address_is_refused_and_nobody_is_added(string? email)
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+
+        using var refused = await InviteAsync(emmz, email);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("valid email address", await DetailAsync(refused), StringComparison.Ordinal);
         await using var db = factory.NewDb();
         Assert.Equal(1, await db.Members.CountAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Inviting_an_active_member_is_refused_with_no_email()
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        (await InviteAsync(emmz, Kit)).Dispose();
+        await factory.Emails.WaitForAsync(Kit, cancellationToken: Ct);
+
+        using var again = await InviteAsync(emmz, "Kit@Example.com");
+
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        Assert.Equal($"{Kit} is already a member.", await DetailAsync(again));
+        const string Marker = "marker@example.com";
+        (await InviteAsync(emmz, Marker)).Dispose();
+        await factory.Emails.WaitForAsync(Marker, cancellationToken: Ct);
+        Assert.Single(factory.Emails.To(Kit));
+    }
+
+    [Fact]
+    public async Task Two_invites_of_one_new_address_at_once_add_one_member()
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+
+        var responses = await Task.WhenAll(InviteAsync(emmz, Kit), InviteAsync(emmz, Kit));
+
+        try
+        {
+            Assert.Equal(
+                [HttpStatusCode.Created, HttpStatusCode.Conflict],
+                responses.Select(r => r.StatusCode).Order());
+        }
+        finally
+        {
+            foreach (var response in responses)
+            {
+                response.Dispose();
+            }
+        }
+
+        await using var db = factory.NewDb();
+        Assert.Equal(1, await db.Members.CountAsync(m => m.EmailKey == Kit, Ct));
+    }
+
+    [Fact]
+    public async Task Over_the_limit_an_invite_is_refused_adds_nobody_and_sends_nothing()
+    {
+        await using var factory = await FactoryAsync();
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var limits = scope.ServiceProvider.GetRequiredService<AuthLimits>();
+            var me = await factory.MemberIdAsync(PanopticonFactory.MemberEmail, Ct);
+            while (limits.TryServerInvite(me))
+            {
+            }
+        }
+
+        using var refused = await InviteAsync(emmz, Kit);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        Assert.Contains("Try again later", await DetailAsync(refused), StringComparison.Ordinal);
+        await using var db = factory.NewDb();
+        Assert.False(await db.Members.AnyAsync(m => m.EmailKey == Kit, Ct));
+        Assert.Empty(factory.Emails.To(Kit));
     }
 
     // --- "Display names" ---
@@ -324,11 +525,14 @@ public class MemberEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(MemberEndpoints.MembersPath, Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await RenameAsync(anonymous, "x")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await RemoveAsync(anonymous, Guid.NewGuid())).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await InviteAsync(anonymous, Kit)).StatusCode);
 
         using var http = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
         using var noHeader = await http.PatchAsJsonAsync(MemberEndpoints.MePath, new { displayName = "x" }, Ct);
+        using var inviteWithoutHeader = await http.PostAsJsonAsync(MemberEndpoints.MembersPath, new { email = Kit }, Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, noHeader.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, inviteWithoutHeader.StatusCode);
         Assert.Equal("member", Assert.Single(await ListAsync(http)).DisplayName);
     }
 }

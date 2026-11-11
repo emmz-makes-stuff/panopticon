@@ -439,6 +439,30 @@ public static class MemberInvites
         string email,
         Guid inviterId,
         DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        (await InviteAsync(db, email, inviterId, now, cancellationToken)).Member;
+
+    /// <summary>
+    /// As <see cref="FindOrAddAsync"/>, but null when the address already belongs to an active member, judged by the
+    /// same locking read (server-invites D1). An earlier check can't see a member that a concurrent invite committed
+    /// after its statement began, and this read can.
+    /// </summary>
+    public static async Task<Member?> AddUnlessActiveAsync(
+        PanopticonDb db,
+        string email,
+        Guid inviterId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var (member, wasActive) = await InviteAsync(db, email, inviterId, now, cancellationToken);
+        return wasActive ? null : member;
+    }
+
+    private static async Task<(Member Member, bool WasActive)> InviteAsync(
+        PanopticonDb db,
+        string email,
+        Guid inviterId,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -452,7 +476,7 @@ public static class MemberInvites
             .SingleOrDefaultAsync(cancellationToken);
         if (member is { IsActive: true })
         {
-            return member;
+            return (member, true);
         }
 
         if (member is not null)
@@ -460,7 +484,7 @@ public static class MemberInvites
             member.RemovedAt = null;
             member.InvitedByMemberId = inviterId;
             await db.SaveChangesAsync(cancellationToken);
-            return member;
+            return (member, false);
         }
 
         member = new Member
@@ -473,7 +497,7 @@ public static class MemberInvites
         };
         db.Members.Add(member);
         await db.SaveChangesAsync(cancellationToken);
-        return member;
+        return (member, false);
     }
 }
 
