@@ -1,10 +1,12 @@
 import { ApiError, type Api } from "../api";
-import { alertLine, button, el, field, page, routeLink, selectField } from "../dom";
+import { alertLine, button, copyRow, el, field, page, routeLink, selectField } from "../dom";
 import { PROJECT_TAGS_CHANGED, parseProjectTagsChange, type EventSourceLike } from "../live";
 import { codePlate } from "../projectLabel";
 import { tagChip, tagText } from "../tagChips";
 import type { View } from "../router";
 import type { Env } from "../shell";
+import { SETUP_GUIDE_HIDDEN_KEY, setupGuide, stepsDone } from "./setupGuide";
+import type { Token } from "./tokens";
 
 export type ProjectRole = "owner" | "editor" | "viewer";
 
@@ -86,6 +88,7 @@ export function projectsView(env: Env): View {
   return async ({ root, navigate }) => {
     const list = el("ul", "project-list");
     const listError = alertLine();
+    const guideSlot = el("div", "projects-setup");
 
     async function load(): Promise<void> {
       try {
@@ -110,6 +113,35 @@ export function projectsView(env: Env): View {
       } catch (failure) {
         listError.show(failureText(failure));
       }
+    }
+
+    // Spec machine-setup, "Guide on the Projects page": until one of your tokens has been used, unless hidden here.
+    async function loadGuide(): Promise<void> {
+      if (env.local.getItem(SETUP_GUIDE_HIDDEN_KEY) === "1") {
+        return;
+      }
+
+      let tokens: Token[];
+      try {
+        tokens = await env.api.get<Token[]>("/api/tokens");
+      } catch {
+        // Without the tokens there's no telling whether this member is set up; the Projects list is the page's job.
+        return;
+      }
+
+      if (stepsDone(tokens).connect) {
+        return;
+      }
+
+      const guide = setupGuide(env, {
+        onHide: () => {
+          env.local.setItem(SETUP_GUIDE_HIDDEN_KEY, "1");
+          guideSlot.replaceChildren();
+        },
+      });
+      guide.setTokens(tokens);
+      guideSlot.replaceChildren(guide.element);
+      await guide.load();
     }
 
     function row(project: Project): HTMLLIElement {
@@ -167,6 +199,7 @@ export function projectsView(env: Env): View {
     root.replaceChildren(
       page(
         "Projects",
+        guideSlot,
         listError.element,
         list,
         el("h3", undefined, "New Project"),
@@ -174,7 +207,7 @@ export function projectsView(env: Env): View {
         form,
       ),
     );
-    await load();
+    await Promise.all([load(), loadGuide()]);
   };
 }
 
@@ -649,18 +682,6 @@ export function projectView(env: Env): View {
     function linkBlock(project: ProjectDetails): HTMLElement {
       const text = linkFile(project.id);
       const block = el("pre", "link-file", text);
-      const copied = el("span", "copy-status");
-      copied.setAttribute("role", "status");
-      const copy = button("Copy", () => {
-        env.copy(text).then(
-          () => {
-            copied.textContent = "Copied.";
-          },
-          () => {
-            copied.textContent = "Couldn't copy. Select the text and copy it.";
-          },
-        );
-      });
       return el(
         "section",
         "link-repo",
@@ -671,7 +692,12 @@ export function projectView(env: Env): View {
           `Commit this as .panopticon.json at the root of a repo, and its reports go to ${project.code}.`,
         ),
         block,
-        el("div", "copy-row", copy, copied),
+        copyRow(env.copy, () => text).element,
+        el(
+          "p",
+          "link-repo-agent",
+          `Or ask your agent to link this repo to ${project.code}: it can look the Project up and write the file.`,
+        ),
       );
     }
 

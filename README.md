@@ -126,18 +126,34 @@ in the address, so a filtered view can be shared. Project tags go by id there, s
 
 ### Reporting progress
 
-Install the CLI from the server: the Tokens page shows the command for your OS (`curl -fsSL <server>/install.sh | sh`
-or `irm <server>/install.ps1 | iex`), and `panopticon update` keeps it in step with the server later. A server built
-locally has no CLI builds, so build and install it from source with `make install` instead (it puts `panopticon`
-in `~/.local/bin`; set `INSTALL_DIR` for elsewhere). Then give this machine a token:
+The **Set up a machine** guide takes you through it, on the Tokens page and, until your first report, on the Projects
+page. Each step shows as done once your tokens show it. On the machine where your agent works:
 
-```sh
-panopticon login --server http://localhost:7480
-```
+1. **Install the CLI.** The guide shows the command for your OS (`curl -fsSL <server>/install.sh | sh` or
+   `irm <server>/install.ps1 | iex`), and `panopticon update` keeps it in step with the server later. A server built
+   locally has no CLI builds, so build and install it from source with `make install` instead (it puts `panopticon`
+   in `~/.local/bin`; set `INSTALL_DIR` for elsewhere).
+2. **Log in**, which gives this machine a token:
 
-It prints a code and a link. Open the link while signed in, check the code, and choose **Approve**. The CLI saves
-the token, and `panopticon mcp` uses it from then on. Connecting Claude Code and other agents is covered in
-[`docs/cli.md`](docs/cli.md). The Tokens page lists every machine's token, and revoking one stops its reports at once.
+   ```sh
+   panopticon login --server http://localhost:7480
+   ```
+
+   It prints a code and a link. Open the link while signed in, check the code, and choose **Approve**. The CLI saves
+   the token, and `panopticon mcp` uses it from then on.
+3. **Connect your agent.** In Claude Code, add the Panopticon plugin, then check the setup:
+
+   ```text
+   /plugin marketplace add emmz-makes-stuff/panopticon-skills
+   /plugin install panopticon@panopticon-skills
+   /panopticon:setup
+   ```
+
+   The plugin starts the bridge with the saved login, so the commands are the same for every server. Other agents,
+   and the `.mcp.json` route, are in [`docs/cli.md`](docs/cli.md#claude-code).
+
+To have a repo's reports go to a Project, ask your agent to link the repo to it, or commit the `.panopticon.json`
+from the Project's page. The Tokens page lists every machine's token, and revoking one stops its reports at once.
 
 ### Change pages and the history
 

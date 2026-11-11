@@ -133,7 +133,8 @@ change later created with the same name starts a fresh card.
 ## Install
 
 The CLI is one native executable with no .NET runtime needed. Your Panopticon server hands out the build of its
-own release. The Tokens page shows the command for your OS, with a Copy button.
+own release. The **Set up a machine** guide on the Tokens page shows the command for your OS, with a Copy button, and
+then the log-in and connect steps below.
 
 On Linux or macOS:
 
@@ -238,9 +239,27 @@ treats it as missing and says so once on stderr, without its content.
 
 ## Claude Code
 
-Log the machine in first. Then add the bridge to the repo's `.mcp.json`. It needs no settings, because it
-reads the saved login. Claude Code starts stdio servers in the project directory, which is how the bridge finds
-the repo.
+Log the machine in first. Then the simplest route is the Panopticon plugin, from the public
+[`emmz-makes-stuff/panopticon-skills`](https://github.com/emmz-makes-stuff/panopticon-skills) marketplace. Run these in
+Claude Code:
+
+```text
+/plugin marketplace add emmz-makes-stuff/panopticon-skills
+/plugin install panopticon@panopticon-skills
+/panopticon:setup
+```
+
+The plugin does three things:
+
+- it registers the `panopticon mcp` bridge;
+- it nudges the agent to call `report_progress` whenever a change's `tasks.md` changes;
+- it adds `/panopticon:setup`, which checks the CLI, the login and the repo, and says what's missing.
+
+It uses the machine's saved login, so the commands are the same for every server. Don't also add a `panopticon`
+server to the repo's `.mcp.json`: two copies of the bridge would both report.
+
+**Without the plugin**, add the bridge to the repo's `.mcp.json`. It needs no settings, because it reads the saved
+login. Claude Code starts stdio servers in the project directory, which is how the bridge finds the repo.
 
 ```json
 {

@@ -4,6 +4,7 @@ import { PROJECT_TAGS_CHANGED } from "../live";
 import { FakeEventSource, MEMBER, fakeServer, q, settle, until, type FakeServer } from "../testing";
 import { signedIn, startTestShell, type TestShellOptions } from "../testShell";
 import { codePlate } from "../projectLabel";
+import { SETUP_GUIDE_HIDDEN_KEY } from "./setupGuide";
 import {
   linkFile,
   projectTagSection,
@@ -1122,5 +1123,122 @@ describe("codePlate", () => {
     expect(codePlate("PAN").classList.contains("personal")).toBe(false);
     expect(codePlate(null).textContent).toBe("Personal");
     expect(codePlate(null).className).toBe("project-code personal");
+  });
+});
+
+// Spec machine-setup, "Guide on the Projects page" (onboarding-guide D4).
+describe("/projects setup guide", () => {
+  const unused = {
+    id: "t1",
+    machineName: "vm-1",
+    createdAt: "2026-11-01T09:00:00Z",
+    lastUsedAt: null as string | null,
+  };
+  const reported = { ...unused, lastUsedAt: "2026-11-08T11:46:00Z" };
+
+  function server(tokens: { status: number; body?: unknown }) {
+    return signedIn()
+      .on("GET", "/api/projects", { status: 200, body: [] })
+      .on("GET", "/api/tokens", tokens)
+      .on("GET", "/api/cli", {
+        status: 200,
+        body: {
+          version: "0.2.0",
+          installSh: "https://panopticon.team/install.sh",
+          installPs1: "https://panopticon.team/install.ps1",
+          platforms: {},
+        },
+      });
+  }
+
+  async function openWithGuide(fake: FakeServer, options: TestShellOptions = {}) {
+    const shell = await startTestShell("/projects", fake, options);
+    await until(() => shell.root.querySelector(".project-empty") !== null);
+    await settle();
+    return shell;
+  }
+
+  const guide = (root: HTMLElement) => root.querySelector(".projects-setup .setup-guide");
+
+  it("New member: a member with no tokens sees the guide, above the list", async () => {
+    const { root } = await openWithGuide(server({ status: 200, body: [] }));
+
+    expect(guide(root)).not.toBeNull();
+    const order = [...q(root, ".page").children].map((c) => c.className);
+    expect(order.indexOf("projects-setup")).toBeLessThan(order.indexOf("project-list"));
+    expect(root.querySelector(".projects-setup .setup-guide-hide")?.textContent).toBe("Hide");
+  });
+
+  it("a member logged in but not yet used still sees it, with install and log in done", async () => {
+    const { root } = await openWithGuide(server({ status: 200, body: [unused] }));
+
+    expect(
+      [...root.querySelectorAll(".projects-setup .setup-step")].map((s) =>
+        s.classList.contains("is-done"),
+      ),
+    ).toEqual([true, true, false]);
+  });
+
+  it("Hidden: Hide removes it, remembers that, and the next open doesn't show it", async () => {
+    const { root, local } = await openWithGuide(server({ status: 200, body: [] }));
+
+    q<HTMLButtonElement>(root, ".setup-guide-hide").click();
+
+    expect(guide(root)).toBeNull();
+    expect(local.getItem(SETUP_GUIDE_HIDDEN_KEY)).toBe("1");
+
+    const again = server({ status: 200, body: [] });
+    const reopened = await openWithGuide(again, { local: { [SETUP_GUIDE_HIDDEN_KEY]: "1" } });
+    expect(guide(reopened.root)).toBeNull();
+    expect(again.to("GET", "/api/tokens")).toHaveLength(0);
+  });
+
+  it("Member already set up: the Projects page doesn't show the guide", async () => {
+    const { root } = await openWithGuide(server({ status: 200, body: [unused, reported] }));
+
+    expect(guide(root)).toBeNull();
+  });
+
+  it("storage that throws still shows the guide, and Hide hides it for this page", async () => {
+    const throwing = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    const { root } = await openWithGuide(server({ status: 200, body: [] }), { storage: throwing });
+
+    expect(guide(root)).not.toBeNull();
+    q<HTMLButtonElement>(root, ".setup-guide-hide").click();
+    expect(guide(root)).toBeNull();
+  });
+
+  it("a failed tokens request shows no guide, and the Projects list still shows", async () => {
+    const { root } = await openWithGuide(server({ status: 500, body: { detail: "Boom." } }));
+
+    expect(guide(root)).toBeNull();
+    expect(root.querySelector(".project-empty")).not.toBeNull();
+  });
+});
+
+// Spec projects, "Asking an agent to link a repo" (onboarding-guide D8).
+describe("/projects/:id link hint", () => {
+  it("Link hint: next to the .panopticon.json, it says to ask your agent to link the repo to PAN", async () => {
+    const shell = await startTestShell(
+      `/projects/${PAN_ID}`,
+      signedIn().on("GET", PATH, { status: 200, body: details("viewer") }),
+    );
+    await until(() => shell.root.querySelector(".link-file") !== null);
+
+    const hint = q(shell.root, ".link-repo .link-repo-agent");
+    expect(hint.textContent).toBe(
+      "Or ask your agent to link this repo to PAN: it can look the Project up and write the file.",
+    );
+    expect(hint.previousElementSibling?.classList.contains("copy-row")).toBe(true);
   });
 });

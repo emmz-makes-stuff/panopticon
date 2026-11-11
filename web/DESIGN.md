@@ -116,19 +116,8 @@ To invite someone, open one of your Projects. Its owners can invite people from 
 - **Members:** there's no invite form, since people join through a Project. Instead there's one muted line
   with a link to `/projects`. Remove appears only for initial members (`canRemoveMembers` on the session),
   and its confirmation says the person leaves every Project.
-- **Tokens: Install the CLI.** Below the token list sits a Gabarito subheading, "Install the CLI", and one muted line:
-  "Run this on a machine to install panopticon there, then log it in with panopticon login." Under that:
-    - Two joined, outlined buttons, "macOS and Linux" and "Windows". The pressed one is `--ink`, like a primary action,
-      because teal is for progress. The visitor's OS picks the default: PowerShell for Windows, `sh` for everything
-      else. Switching changes the command in place, so focus stays on the button.
-    - The command in a bordered block, like the link file: `curl -fsSL <server>/install.sh | sh` or
-      `irm <server>/install.ps1 | iex`. A muted prompt sits in front, `$` or `PS>`, drawn by CSS so selecting the command
-      never copies it and screen readers skip it. Then Copy, with the status line "Copied." or "Couldn't copy. Select the text
-      and copy it."
-    - A small muted line, "Installs panopticon 0.2.0."
-    - On a server without CLI builds, there's only the muted note "This server has no CLI builds. Build the CLI from
-      source instead: clone the repo and run make install." If the manifest fails to load, the note says "Couldn't load
-      the install command. Reload the page to try again." The tokens show either way.
+- **Tokens: the setup guide.** Below the token list sits the machine setup guide (see "Setup guide" below). It
+  replaces cli-install's "Install the CLI" panel; the install step keeps that panel's tabs, command block and notes.
 
 - **One left-aligned column**, 38rem wide, under the header. The page heading is Gabarito 700 at 25px, the
   same as the empty state's. Subheadings ("New Project", "Invite someone") are Gabarito at 20px. Lead text is
@@ -152,11 +141,55 @@ To invite someone, open one of your Projects. Its owners can invite people from 
   "Sign in to PANOPTICON?" (the server can't say whose link it is before the confirm). One "Sign in"
   button. A used or expired link explains which, with a "Send me a new link" link.
 
+## Setup guide
+
+"Set up a machine" takes a new member from nothing to a reporting agent, in three steps (spec machine-setup). It's a
+tool, so it keeps the quiet voice of the Tokens page. It has one idea of its own: **each step's number sits in a cell**.
+
+```
+Set up a machine                                         Hide   (Projects only)
+Run these on the machine where your agent works, then its reports show up here.
+[1]  Install the CLI
+ |   [macOS and Linux][Windows]
+ |   $ curl -fsSL https://panopticon.team/install.sh | sh
+ |   [Copy]  Copied.
+ |   Installs panopticon 0.2.0.
+[2]  Log in
+ |   Log the machine in to this server. It opens a page here to approve it, and saves the login.
+ |   $ panopticon login --server https://panopticon.team
+ |   [Copy]
+[✓]  Connect your agent   Done
+     In Claude Code, add the Panopticon plugin, then check the setup. …
+     > /plugin marketplace add emmz-makes-stuff/panopticon-skills     [Copy]
+     > /plugin install panopticon@panopticon-skills                   [Copy]
+     > /panopticon:setup                                              [Copy]
+     ▸ Other agents   (a disclosure: the .mcp.json block, with Copy)
+```
+
+- **Cells, not circles.** A step's mark is a 1.6rem square with a 3px radius, drawn like an unlit progress cell: `--rule`
+  fill, an inset outline, and the number in `--ink-muted`. A done step's cell is solid `--ink` with a check. It isn't
+  `--lit`, because teal belongs to progress bars alone (principle 1). A small muted "Done" follows the title, so state
+  never relies on the cell alone.
+- **A hairline rail** in `--rule` joins the cells, because the steps really are a sequence. The last step has none.
+- **Done steps don't dim.** Their commands stay at full contrast, because setting up a second machine is normal.
+  Dimming is for stalls (principle 3).
+- **Commands** use the bordered block of the link file and the install command, with a CSS-drawn prompt that never
+  copies and that screen readers skip: `$` for the shell and `>` for Claude Code. The `.mcp.json` has no prompt. Each
+  block has its own Copy and status line.
+- **Type:** the title is Gabarito 700 at 20px, as the old panel's was. Step titles are Atkinson 600 at 16px. Body lines
+  are muted.
+- **Hide** (Projects only) is a plain text button at the right of the title row. There's no "show again": the Tokens
+  page always has the guide.
+- **No motion.** Marking a step done is an instant change on load.
+
 ## Projects
 
 A Project's code is the number on its cell's door. The tower has many cells, and the plate says whose is whose.
 That gives the Projects pages their one deliberate thing, the **code plate**. Everything else is in the tools'
 quiet voice, as above.
+
+For a first run, the Projects list page opens with the setup guide (see "Setup guide"), above the list, with Hide. It
+shows until one of your tokens has been used, or until it's hidden in this browser.
 
 ```
 Projects
@@ -190,6 +223,7 @@ Commit this as .panopticon.json at the root of a repo, and its reports go to PAN
 │ { "project": "6f1c2e4a-…" }                  │
 └──────────────────────────────────────────────┘
 [Copy]  Copied.
+Or ask your agent to link this repo to PAN: it can look the Project up and write the file.   (small, muted)
 
 Members
 ──────────────────────────────────────────────

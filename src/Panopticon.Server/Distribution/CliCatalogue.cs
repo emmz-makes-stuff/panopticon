@@ -13,8 +13,8 @@ public sealed class CliDistributionOptions
     public string Directory { get; set; } = Path.Combine(AppContext.BaseDirectory, "cli");
 }
 
-/// <summary>One platform's CLI build on disk, with the size and SHA-256 of the bytes served.</summary>
-public sealed record CliBuild(string Platform, string FileName, string FilePath, long Size, string Sha256);
+/// <summary>One platform's CLI build on disk, with the size and SHA-256 of the bytes served, and when the file was written.</summary>
+public sealed record CliBuild(string Platform, string FileName, string FilePath, long Size, string Sha256, DateTimeOffset LastModified);
 
 /// <summary>
 /// The CLI builds this server serves, read once at start-up (design D1): the <c>version</c> file and a
@@ -76,7 +76,9 @@ public sealed partial class CliCatalogue
             {
                 using var stream = File.OpenRead(path);
                 var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
-                builds[platform] = new CliBuild(platform, fileName, path, stream.Length, sha256);
+                // From the open handle, so the time is the hashed file's, and a file gone by now can't give 1601.
+                var lastModified = File.GetLastWriteTimeUtc(stream.SafeFileHandle);
+                builds[platform] = new CliBuild(platform, fileName, path, stream.Length, sha256, lastModified);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

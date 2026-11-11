@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { until, type FakeServer, q } from "../testing";
 import { signedIn, startTestShell } from "../testShell";
 import type { Token } from "./tokens";
-import type { CliManifest } from "./installCli";
+import { SETUP_GUIDE_HIDDEN_KEY, type CliManifest } from "./setupGuide";
 
 const vm1: Token = {
   id: "t1",
@@ -115,12 +115,15 @@ function choice(root: HTMLElement, label: string): HTMLButtonElement {
   return found;
 }
 
-// Spec cli-distribution: "Install hint on the Tokens page" (design D8).
-describe("/tokens install panel", () => {
+// Spec cli-distribution: "Install hint on the Tokens page", now the setup guide's first step (onboarding-guide D1).
+describe("/tokens setup guide: install step", () => {
   it("shows the sh command to a visitor on macOS, with its version", async () => {
     const { root } = await openInstall({ platform: "macOS" });
 
-    expect(root.querySelector(".install-cli h3")?.textContent).toBe("Install the CLI");
+    expect(root.querySelector(".setup-guide h3")?.textContent).toBe("Set up a machine");
+    expect(root.querySelector(".setup-step .setup-step-title")?.textContent).toContain(
+      "Install the CLI",
+    );
     expect(command(root)).toBe(SH);
     expect(pressed(root)).toEqual(["macOS and Linux"]);
     expect(root.querySelector(".install-cli-version")?.textContent).toBe(
@@ -227,5 +230,21 @@ describe("/tokens install panel", () => {
 
     expect(root.querySelector(".install-cli-note")?.textContent).toContain("Reload");
     expect(machines(root)).toEqual(["vm-1"]);
+  });
+});
+
+// Spec machine-setup: "Hidden" — hiding the guide on the Projects page leaves it on the Tokens page.
+describe("/tokens setup guide: hidden on Projects", () => {
+  it("Hidden: the Tokens page still shows the guide", async () => {
+    const server = signedIn()
+      .on("GET", "/api/tokens", { status: 200, body: [laptop] })
+      .on("GET", "/api/cli", { status: 200, body: manifest });
+    const { root } = await startTestShell("/tokens", server, {
+      local: { [SETUP_GUIDE_HIDDEN_KEY]: "1" },
+    });
+    await until(() => root.querySelector(".install-cli-command") !== null);
+
+    expect(root.querySelector(".setup-guide")).not.toBeNull();
+    expect(root.querySelector(".setup-guide-hide")).toBeNull();
   });
 });

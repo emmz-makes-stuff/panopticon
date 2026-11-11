@@ -32,6 +32,34 @@ export function button(text: string, onClick: () => void, className?: string): H
   return element;
 }
 
+/**
+ * A Copy button and its status line, in a `.copy-row`. `text` is read on each click, so it can change after the row
+ * is made; `clear` empties the status, for when the text does.
+ */
+export function copyRow(
+  copy: (text: string) => Promise<void>,
+  text: () => string,
+): { element: HTMLDivElement; clear(): void } {
+  const status = el("span", "copy-status");
+  status.setAttribute("role", "status");
+  const copyButton = button("Copy", () => {
+    copy(text()).then(
+      () => {
+        status.textContent = "Copied.";
+      },
+      () => {
+        status.textContent = "Couldn't copy. Select the text and copy it.";
+      },
+    );
+  });
+  return {
+    element: el("div", "copy-row", copyButton, status),
+    clear: () => {
+      status.textContent = "";
+    },
+  };
+}
+
 /** An alert line for errors; empty (and hidden from the accessibility tree) until a message is set. */
 export function alertLine(): {
   element: HTMLParagraphElement;
