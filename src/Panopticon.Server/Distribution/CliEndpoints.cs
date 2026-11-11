@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 using Panopticon.Contracts;
 using Panopticon.Server.Auth;
 
@@ -14,13 +15,16 @@ public static class CliEndpoints
     public const string InstallShPath = "/install.sh";
     public const string InstallPs1Path = "/install.ps1";
 
+    private static readonly string[] _getAndHead = [HttpMethods.Get, HttpMethods.Head];
+
     public static WebApplication MapCliDistribution(this WebApplication app)
     {
-        app.MapGet(CliPlatforms.ManifestPath, Manifest);
-        app.MapGet("/cli/{platform}/{file}", Download);
-        app.MapGet(InstallShPath, (HttpContext context, CliCatalogue catalogue, IOptions<PublicUrlOptions> publicUrl, IHostEnvironment environment) =>
+        // HEAD as well as GET, so a HEAD gets these answers and never falls through to the app shell (onboarding-guide D6).
+        app.MapMethods(CliPlatforms.ManifestPath, _getAndHead, Manifest);
+        app.MapMethods("/cli/{platform}/{file}", _getAndHead, Download);
+        app.MapMethods(InstallShPath, _getAndHead, (HttpContext context, CliCatalogue catalogue, IOptions<PublicUrlOptions> publicUrl, IHostEnvironment environment) =>
             InstallScript(context, catalogue, publicUrl, environment, CliInstallScripts.RenderSh));
-        app.MapGet(InstallPs1Path, (HttpContext context, CliCatalogue catalogue, IOptions<PublicUrlOptions> publicUrl, IHostEnvironment environment) =>
+        app.MapMethods(InstallPs1Path, _getAndHead, (HttpContext context, CliCatalogue catalogue, IOptions<PublicUrlOptions> publicUrl, IHostEnvironment environment) =>
             InstallScript(context, catalogue, publicUrl, environment, CliInstallScripts.RenderPs1));
         return app;
     }
@@ -84,9 +88,15 @@ public static class CliEndpoints
         }
 
         // The URL carries no version, so a cache must check back each time: stale bytes would fail the manifest's
-        // checksum. The ETag and Last-Modified that PhysicalFile sends keep that check cheap.
+        // checksum. The ETag is the build's SHA-256, so it changes exactly when the bytes do, and a revalidation of the
+        // same build gets a 304 (onboarding-guide D7).
         context.Response.Headers.CacheControl = "no-cache";
-        return TypedResults.PhysicalFile(build.FilePath, "application/octet-stream", build.FileName);
+        return TypedResults.PhysicalFile(
+            build.FilePath,
+            "application/octet-stream",
+            build.FileName,
+            lastModified: build.LastModified,
+            entityTag: new EntityTagHeaderValue($"\"{build.Sha256}\""));
     }
 
     /// <summary>A build's absolute download URL.</summary>

@@ -107,6 +107,79 @@ public class CliEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.DoesNotContain("<title>shell</title>", await response.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
     }
 
+    // Spec cli-distribution: CLI endpoints answer HEAD (onboarding-guide D6).
+    [Theory]
+    [InlineData("/cli/osx-arm64/panopticon", HttpStatusCode.OK, "application/octet-stream")]
+    [InlineData("/cli/freebsd-x64/panopticon", HttpStatusCode.NotFound, "text/plain")]
+    [InlineData("/install.sh", HttpStatusCode.OK, "text/plain")]
+    [InlineData("/install.ps1", HttpStatusCode.OK, "text/plain")]
+    [InlineData("/api/cli", HttpStatusCode.OK, "application/json")]
+    public async Task Head_answers_like_get_and_never_with_the_app_shell(string path, HttpStatusCode status, string mediaType)
+    {
+        // Over real Kestrel, as in production: it's Kestrel that sends no body for HEAD, which the in-memory test server doesn't.
+        using var builds = CliBuildsDirectory.Create();
+        await using var factory = await FactoryAsync(builds.Path);
+        var port = FreePort.Next();
+        factory.UseKestrel(port);
+        factory.StartServer();
+        using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
+
+        using var response = await http.SendAsync(new HttpRequestMessage(HttpMethod.Head, path), Ct);
+
+        Assert.Equal(status, response.StatusCode);
+        Assert.Equal(mediaType, response.Content.Headers.ContentType?.MediaType);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Head_on_a_build_gives_its_length()
+    {
+        using var builds = CliBuildsDirectory.Create();
+        await using var factory = await FactoryAsync(builds.Path);
+        using var http = factory.CreateClient();
+
+        using var response = await http.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/cli/osx-arm64/panopticon"), Ct);
+
+        Assert.Equal(builds.Bytes(CliPlatforms.OsxArm64).Length, response.Content.Headers.ContentLength);
+    }
+
+    // Spec cli-distribution: Build downloads carry validators (onboarding-guide D7).
+    [Fact]
+    public async Task A_download_carries_its_sha256_as_etag_and_a_matching_revalidation_is_a_304()
+    {
+        using var builds = CliBuildsDirectory.Create();
+        await using var factory = await FactoryAsync(builds.Path);
+        using var http = factory.CreateClient();
+
+        using var first = await http.GetAsync("/cli/linux-x64/panopticon", Ct);
+        Assert.Equal($"\"{builds.Sha256(CliPlatforms.LinuxX64)}\"", first.Headers.ETag?.Tag);
+        Assert.NotNull(first.Content.Headers.LastModified);
+        Assert.True(first.Headers.CacheControl?.NoCache);
+
+        using var again = new HttpRequestMessage(HttpMethod.Get, "/cli/linux-x64/panopticon");
+        again.Headers.IfNoneMatch.Add(first.Headers.ETag!);
+        using var revalidated = await http.SendAsync(again, Ct);
+
+        Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
+        Assert.Empty(await revalidated.Content.ReadAsByteArrayAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_different_build_gets_a_different_etag()
+    {
+        using var before = CliBuildsDirectory.Create();
+        using var after = CliBuildsDirectory.Create();
+        after.WriteBuild(CliPlatforms.LinuxX64, "a rebuilt linux-x64 build\n"u8.ToArray());
+        await using var oldServer = await FactoryAsync(before.Path);
+        await using var newServer = await FactoryAsync(after.Path);
+
+        using var oldResponse = await oldServer.CreateClient().GetAsync("/cli/linux-x64/panopticon", Ct);
+        using var newResponse = await newServer.CreateClient().GetAsync("/cli/linux-x64/panopticon", Ct);
+
+        Assert.NotEqual(oldResponse.Headers.ETag?.Tag, newResponse.Headers.ETag?.Tag);
+        Assert.Equal($"\"{after.Sha256(CliPlatforms.LinuxX64)}\"", newResponse.Headers.ETag?.Tag);
+    }
+
     [Fact]
     public async Task A_missing_platform_is_a_404()
     {

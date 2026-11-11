@@ -2,14 +2,14 @@
 
 ## 1. CLI downloads: HEAD and validators
 
-- [ ] 1.1 Map `/api/cli`, `/install.sh`, `/install.ps1` and `/cli/{platform}/{file}` for GET and HEAD (design D6).
+- [x] 1.1 Map `/api/cli`, `/install.sh`, `/install.ps1` and `/cli/{platform}/{file}` for GET and HEAD (design D6).
   Verify with `CliEndpointTests` cases:
   - HEAD `/cli/osx-arm64/panopticon` gives 200 `application/octet-stream`, the build's `Content-Length`, and an empty
     body;
   - HEAD `/cli/freebsd-x64/panopticon` gives 404, not `text/html`;
   - HEAD `/install.sh` gives 200 `text/plain`;
   - HEAD `/api/cli` gives 200 JSON with no body.
-- [ ] 1.2 Add `LastModified` to `CliBuild`, read at catalogue load. Pass an ETag made from the build's SHA-256, plus
+- [x] 1.2 Add `LastModified` to `CliBuild`, read at catalogue load. Pass an ETag made from the build's SHA-256, plus
   `lastModified`, to the download (design D7), and fix the 9.2 comment on `Download`. Verify with tests:
   - the ETag is `"<sha256>"`;
   - a `Last-Modified` is present;
