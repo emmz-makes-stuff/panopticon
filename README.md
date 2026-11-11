@@ -45,8 +45,10 @@ Those settings match `compose.yaml`, the initial member is `dev@localhost.test`,
 
 ### The first sign-in
 
-Members come from `Panopticon:InitialMembers` at first. Everyone else joins through a Project: a Project's owner
-invites their address, and that lets them sign in (see [Projects](#projects)).
+Members come from `Panopticon:InitialMembers` at first. Everyone else is invited by email address, which lets them
+sign in. A Project's owner can invite people to that Project (see [Projects](#projects)). An initial member can
+also invite people to the server itself from the Members page, in no Project. They get an email that links to the
+sign-in page.
 
 1. On the sign-in page, enter an initial member's address (`dev@localhost.test` locally), and choose **Send me a
    link**.
@@ -95,7 +97,8 @@ found. An archived change's page catches up on its next load. When you join a Pr
 page lists the people who share a Project with you. (In Development,
 a report made with the bootstrap token has no member, so a change it makes in no Project is visible to everyone.)
 
-**Removing someone from the server** is for the initial members (`Panopticon:InitialMembers`) only. It ends their
+**Inviting someone to the server, and removing them,** is for the initial members (`Panopticon:InitialMembers`) only.
+Their Members page lists every member of the server, not just those who share a Project. Removing someone ends their
 sessions, revokes their tokens and takes them out of every Project. Their past reports stay. If they're the last
 owner of a Project, the removal is refused until someone else there is made an owner.
 

@@ -20,9 +20,9 @@ const failureText = (failure: unknown) =>
   failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
- * `/members` (spec team-members): everyone who shares a Project with you, renaming yourself, and (for initial members,
- * `canRemoveMembers`) removing anyone else from the server. People join through a Project, so there is no invite here.
- * Names are always set as text.
+ * `/members` (spec team-members): everyone who shares a Project with you, and renaming yourself. Initial members see
+ * every member of the server, may invite people to it (`canInviteMembers`, server-invites D4), and may remove anyone
+ * else (`canRemoveMembers`). Everyone else invites people through a Project. Names are always set as text.
  */
 export function membersView(env: Env): View {
   return async ({ root }) => {
@@ -115,20 +115,72 @@ export function membersView(env: Env): View {
       return form;
     }
 
+    function inviteForm(): HTMLElement {
+      const { element: emailField, input: email } = field("Email", {
+        type: "email",
+        name: "email",
+        required: true,
+      });
+      const invite = el("button", "primary", "Invite");
+      invite.type = "submit";
+      const error = alertLine();
+      const form = el("form", "invite-form", emailField, invite, error.element);
+      form.noValidate = true;
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const address = email.value.trim();
+        if (!address) {
+          error.show("Enter the email address to invite.");
+          return;
+        }
+
+        error.clear();
+        env.api.send<Member>("POST", "/api/members", { email: address }).then(
+          async (added) => {
+            email.value = "";
+            status.textContent = `Invited ${added.email}. They'll get an email, and can sign in with that address now.`;
+            await load();
+          },
+          (failure: unknown) => error.show(failureText(failure)),
+        );
+      });
+      return el(
+        "section",
+        "members-invite",
+        el("h3", undefined, "Invite someone to the server"),
+        el(
+          "p",
+          undefined,
+          "They get an email inviting them to sign in, and join no Project. To add them to one, invite them from its page.",
+        ),
+        form,
+      );
+    }
+
+    const canInvite = env.member()?.canInviteMembers === true;
     root.replaceChildren(
       page(
         "Members",
-        el("p", undefined, "Everyone who shares a Project with you."),
+        el(
+          "p",
+          undefined,
+          canInvite ? "Everyone on this server." : "Everyone who shares a Project with you.",
+        ),
+        ...(canInvite ? [inviteForm()] : []),
         status,
         listError.element,
         list,
-        el(
-          "p",
-          "members-invite-hint",
-          "To invite someone, open one of your ",
-          routeLink("/projects", "Projects"),
-          ". Its owners can invite people from there.",
-        ),
+        ...(canInvite
+          ? []
+          : [
+              el(
+                "p",
+                "members-invite-hint",
+                "To invite someone, open one of your ",
+                routeLink("/projects", "Projects"),
+                ". Its owners can invite people from there.",
+              ),
+            ]),
       ),
     );
     await load();

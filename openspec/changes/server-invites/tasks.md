@@ -8,8 +8,8 @@
 
 ## 2. Web: the Invite form
 
-- [ ] 2.1 Add the Invite form to `views/members.ts` when `canInviteMembers` is set: an email field and an Invite button, errors (400, 403, 409, 429) shown inline in text, and the new member added to the list on 201. Correct the page comment. Verify with vitest tests: there's no form without `canInviteMembers`, an invite adds a row with a Remove button, a 409 shows "already a member", and the field keeps its value after an error.
-- [ ] 2.2 Stop for Emmz to check it in a real browser against a local server in Development (the logged email): invite an address, see it listed, sign in as it from the logged sign-in link, and remove it again. Verify: her confirmation, recorded in a devlog note.
+- [x] 2.1 Add the Invite form to `views/members.ts` when `canInviteMembers` is set: an email field and an Invite button, errors (400, 403, 409, 429) shown inline in text, and the new member added to the list on 201. Correct the page comment. Verify with vitest tests: there's no form without `canInviteMembers`, an invite adds a row with a Remove button, a 409 shows "already a member", and the field keeps its value after an error.
+- [x] 2.2 Stop for Emmz to check it in a real browser against a local server in Development (the logged email): invite an address, see it listed, sign in as it from the logged sign-in link, and remove it again. Verify: her confirmation, recorded in a devlog note.
 
 ## Workflow follow-up
 

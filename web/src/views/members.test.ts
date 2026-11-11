@@ -72,15 +72,99 @@ describe("/members", () => {
     expect(name.querySelector("b, script")).toBeNull();
   });
 
-  it("has no invite form, and points to Projects for inviting", async () => {
-    const { root } = await open(withMembers([me, sam]));
+  it("Not an initial member: no invite form, and points to Projects for inviting", async () => {
+    const { root } = await open(
+      withMembers([me, sam]).on("GET", "/api/session", {
+        status: 200,
+        body: { ...MEMBER, canRemoveMembers: false, canInviteMembers: false },
+      }),
+    );
 
     expect(root.querySelector(".invite-form")).toBeNull();
+    expect(root.querySelector(".page > p")?.textContent).toBe(
+      "Everyone who shares a Project with you.",
+    );
     const hint = q(root, ".members-invite-hint");
     expect(hint.textContent).toBe(
       "To invite someone, open one of your Projects. Its owners can invite people from there.",
     );
     expect(hint.querySelector("a")?.getAttribute("href")).toBe("/projects");
+  });
+
+  // Spec team-members: "Inviting to the server", "Inviting an existing member", "Invite rate limit".
+  it("An initial member gets the invite form, sees everyone, and no Projects hint", async () => {
+    const { root } = await open(withMembers([me, sam]));
+
+    expect(root.querySelector(".members-invite .invite-form")).not.toBeNull();
+    expect(root.querySelector(".members-invite h3")?.textContent).toBe(
+      "Invite someone to the server",
+    );
+    expect(root.querySelector(".page > p")?.textContent).toBe("Everyone on this server.");
+    expect(root.querySelector(".members-invite-hint")).toBeNull();
+  });
+
+  it("Inviting a friend: sends the trimmed address, says so, and lists them with Remove", async () => {
+    const kit: Member = {
+      id: "m3",
+      email: "kit@example.com",
+      displayName: "kit",
+      joinedAt: "2026-11-11T15:00:00Z",
+    };
+    let members = [me];
+    const server = signedIn()
+      .on("GET", "/api/members", () => ({ status: 200, body: members }))
+      .on("POST", "/api/members", () => {
+        members = [me, kit];
+        return { status: 201, body: kit };
+      });
+    const { root } = await open(server);
+    const email = q<HTMLInputElement>(root, ".invite-form input");
+    email.value = "  kit@example.com ";
+
+    submit(root.querySelector(".invite-form"));
+    await until(() => rows(root).length === 2);
+
+    expect(server.to("POST", "/api/members")[0]?.body).toEqual({ email: "kit@example.com" });
+    expect(rows(root)[1]).toMatchObject({ email: "kit@example.com", remove: true });
+    expect(root.querySelector(".form-status")?.textContent).toBe(
+      "Invited kit@example.com. They'll get an email, and can sign in with that address now.",
+    );
+    expect(email.value).toBe("");
+  });
+
+  it.each([
+    [409, "kit@example.com is already a member."],
+    [429, "You've sent a lot of invites. Try again later."],
+    [403, "Only an initial member can invite people to the server."],
+    [400, "That isn't a valid email address."],
+  ])(
+    "A refused invite (%i) shows the server's reason and keeps the address",
+    async (status, detail) => {
+      const server = withMembers([me]).on("POST", "/api/members", { status, body: { detail } });
+      const { root } = await open(server);
+      const email = q<HTMLInputElement>(root, ".invite-form input");
+      email.value = "kit@example.com";
+
+      submit(root.querySelector(".invite-form"));
+      await until(() => !!root.querySelector(".invite-form .form-error")?.textContent);
+
+      expect(root.querySelector(".invite-form .form-error")?.textContent).toBe(detail);
+      expect(email.value).toBe("kit@example.com");
+      expect(rows(root)).toHaveLength(1);
+    },
+  );
+
+  it("A blank address sends nothing", async () => {
+    const server = withMembers([me]);
+    const { root } = await open(server);
+    q<HTMLInputElement>(root, ".invite-form input").value = "   ";
+
+    submit(root.querySelector(".invite-form"));
+
+    expect(server.to("POST", "/api/members")).toHaveLength(0);
+    expect(root.querySelector(".invite-form .form-error")?.textContent).toBe(
+      "Enter the email address to invite.",
+    );
   });
 
   it("Only initial members remove: without canRemoveMembers, nobody has a Remove button", async () => {
