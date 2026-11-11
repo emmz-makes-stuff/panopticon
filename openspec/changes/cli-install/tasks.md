@@ -39,14 +39,14 @@
 
 ## 4. CLI: `panopticon update`
 
-- [ ] 4.1 Add `panopticon update [--server <url>]` (D6). It resolves the server as `login` does, gets `/api/cli`,
+- [x] 4.1 Add `panopticon update [--server <url>]` (D6). It resolves the server as `login` does, gets `/api/cli`,
   and compares versions for equality. It then downloads this RID's build next to `Environment.ProcessPath`, checks
   the SHA-256 and size, and replaces the binary: an atomic move on Unix, rename-aside on Windows with an undo on
   failure. It prints the old and new versions and "restart your agent". Every `panopticon` start deletes a stale
   `panopticon.exe.old`. Add it to `--help`. Verify with unit tests through the HTTP and file-system seams: already
   current, newer, older, server 404, no build for this platform, checksum mismatch, unwritable directory, no
   server known, and the Windows rename path including its undo. Then `make test` → `TEST_EXIT:0`.
-- [ ] 4.2 Add a CLI end-to-end test that drives the published binary. Copy it to a temp directory, point it at a test
+- [x] 4.2 Add a CLI end-to-end test that drives the published binary. Copy it to a temp directory, point it at a test
   server whose catalogue holds a different "build" (a copy of the binary with a different `version` file), run
   `update`, and check that the file was replaced and that a second run says it's up to date. Then `make test` →
   `TEST_EXIT:0`.

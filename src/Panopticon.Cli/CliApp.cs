@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Panopticon.Cli.Bridge;
 using Panopticon.Cli.Config;
 using Panopticon.Cli.Login;
+using Panopticon.Cli.Update;
 
 namespace Panopticon.Cli;
 
@@ -11,6 +12,14 @@ internal static class CliApp
 {
     public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr)
     {
+        // A Windows update leaves the old binary beside the new one, renamed aside; tidy it on the next start (design D6).
+        // Only for the panopticon binary itself, never a host such as dotnet running the tests.
+        if (Environment.ProcessPath is { } processPath
+            && string.Equals(Path.GetFileNameWithoutExtension(processPath), "panopticon", StringComparison.Ordinal))
+        {
+            BinaryReplacer.CleanUpAfterUpdate(processPath);
+        }
+
         if (args.Length == 0 || args[0] is "-h" or "--help")
         {
             stdout.WriteLine("Usage: panopticon <command>");
@@ -21,6 +30,7 @@ internal static class CliApp
             stdout.WriteLine("  tags                    List the personal tags sent with this machine's reports");
             stdout.WriteLine("  tags add <tag>...       Add personal tags, e.g. dev or \"language: csharp\"");
             stdout.WriteLine("  tags remove <tag>...    Remove personal tags");
+            stdout.WriteLine("  update [--server <url>] Install the CLI build this machine's server serves");
             stdout.WriteLine("  --version               Print the CLI's version");
             stdout.WriteLine();
             stdout.WriteLine("Environment (each overrides the login 'panopticon login' saved):");
@@ -75,6 +85,21 @@ internal static class CliApp
             {
                 Console.CancelKeyPress -= onCancel;
             }
+        }
+
+        if (args[0] == "update")
+        {
+            var update = new UpdateCommand(
+                static () => new HttpClient(),
+                Environment.GetEnvironmentVariable,
+                CliConfigFile.ForCurrentUser(),
+                CliVersion.Current,
+                System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+                Environment.ProcessPath,
+                BinaryReplacer.ForThisMachine(),
+                stdout,
+                stderr);
+            return await update.RunAsync(args[1..], CancellationToken.None);
         }
 
         if (args[0] == "tags")

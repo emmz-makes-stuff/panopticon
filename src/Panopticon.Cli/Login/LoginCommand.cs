@@ -32,7 +32,7 @@ internal sealed class LoginCommand(
             return 1;
         }
 
-        var server = ResolveServer(serverArgument);
+        var server = ServerAddress.Resolve(serverArgument, getEnvironmentVariable, config, stderr);
         if (server is null)
         {
             await stderr.WriteLineAsync(
@@ -40,14 +40,12 @@ internal sealed class LoginCommand(
             return 1;
         }
 
-        if (!Uri.TryCreate(server.Trim(), UriKind.Absolute, out var serverUri)
-            || (serverUri.Scheme != Uri.UriSchemeHttp && serverUri.Scheme != Uri.UriSchemeHttps))
+        if (!ServerAddress.TryRoot(server, out var root))
         {
             await stderr.WriteLineAsync($"The server must be an absolute http or https URL, not '{server}'.");
             return 1;
         }
 
-        var root = new UriBuilder(serverUri) { Path = serverUri.AbsolutePath.TrimEnd('/') + "/", Query = string.Empty, Fragment = string.Empty }.Uri;
         var display = BridgeSettings.Display(root);
         using var http = createHttpClient();
         try
@@ -78,7 +76,7 @@ internal sealed class LoginCommand(
         {
             if (!response.IsSuccessStatusCode)
             {
-                await stderr.WriteLineAsync($"The server at {display} refused to start a login: {await ProblemAsync(response, cancellationToken)}");
+                await stderr.WriteLineAsync($"The server at {display} refused to start a login: {await ServerAddress.ProblemAsync(response, cancellationToken)}");
                 return 1;
             }
 
@@ -128,7 +126,7 @@ internal sealed class LoginCommand(
             using var response = pollResponse;
             if (!response.IsSuccessStatusCode)
             {
-                await stderr.WriteLineAsync($"The server at {display} refused the login: {await ProblemAsync(response, cancellationToken)}");
+                await stderr.WriteLineAsync($"The server at {display} refused the login: {await ServerAddress.ProblemAsync(response, cancellationToken)}");
                 return 1;
             }
 
@@ -176,21 +174,6 @@ internal sealed class LoginCommand(
         exception is HttpRequestException
         || (exception is TaskCanceledException && !cancellationToken.IsCancellationRequested);
 
-    private string? ResolveServer(string? serverArgument)
-    {
-        if (!string.IsNullOrWhiteSpace(serverArgument))
-        {
-            return serverArgument;
-        }
-
-        if (getEnvironmentVariable(BridgeSettings.ServerUrlVariable) is { } fromEnvironment && !string.IsNullOrWhiteSpace(fromEnvironment))
-        {
-            return fromEnvironment;
-        }
-
-        return config.Read(stderr)?.ServerUrl is { } saved && !string.IsNullOrWhiteSpace(saved) ? saved : null;
-    }
-
     private static bool TryParse(IReadOnlyList<string> args, out string? server, out string error)
     {
         server = null;
@@ -224,25 +207,5 @@ internal sealed class LoginCommand(
         using var request = new HttpRequestMessage(HttpMethod.Post, uri) { Content = JsonContent.Create(body, typeInfo) };
         request.Headers.Add(RequestHeader, "1");
         return await http.SendAsync(request, cancellationToken);
-    }
-
-    /// <summary>The problem's <c>detail</c>, or the status when there isn't one.</summary>
-    private static async Task<string> ProblemAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-            if (document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("detail", out var detail)
-                && detail.GetString() is { Length: > 0 } text)
-            {
-                return text;
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return $"{(int)response.StatusCode} {response.StatusCode}.";
     }
 }
