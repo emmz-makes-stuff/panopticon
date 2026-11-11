@@ -188,6 +188,9 @@ A Project's code is the number on its cell's door. The tower has many cells, and
 That gives the Projects pages their one deliberate thing, the **code plate**. Everything else is in the tools'
 quiet voice, as above.
 
+For a first run, the Projects list page opens with the setup guide (see "Setup guide"), above the list, with Hide. It
+shows until one of your tokens has reported, or until it's hidden in this browser.
+
 ```
 Projects
 ──────────────────────────────────────────────
@@ -220,6 +223,7 @@ Commit this as .panopticon.json at the root of a repo, and its reports go to PAN
 │ { "project": "6f1c2e4a-…" }                  │
 └──────────────────────────────────────────────┘
 [Copy]  Copied.
+Or ask your agent to link this repo to PAN: it can look the Project up and write the file.   (small, muted)
 
 Members
 ──────────────────────────────────────────────

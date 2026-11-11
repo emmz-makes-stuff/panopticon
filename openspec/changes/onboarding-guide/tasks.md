@@ -43,7 +43,7 @@
 
 ## 3. Projects page and Project page
 
-- [ ] 3.1 The Projects page fetches `/api/tokens` with `/api/projects`. It shows the guide while no token has reported
+- [x] 3.1 The Projects page fetches `/api/tokens` with `/api/projects`. It shows the guide while no token has reported
   and `panopticon.setupGuide.hidden` isn't set, with a Hide control that sets that key (D4). Verify with
   `projects.test.ts`:
   - a new member sees the guide;
@@ -51,7 +51,7 @@
   - a reporting member doesn't see it;
   - storage that throws still renders the guide, and Hide then hides it for the current page only;
   - a failed tokens request still shows the Projects list.
-- [ ] 3.2 Below the Project page's link file, add the line "Or ask your agent to link this repo to <CODE>: it can look
+- [x] 3.2 Below the Project page's link file, add the line "Or ask your agent to link this repo to <CODE>: it can look
   the Project up and write the file." (spec projects, D8). Verify with a `projects.test.ts` case on `PAN`'s page.
 
 ## 4. Docs
