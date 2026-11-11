@@ -8,7 +8,7 @@ SHELL := /bin/bash
 
 CHANGES := $(notdir $(patsubst %/,%,$(filter-out %/archive/,$(wildcard openspec/changes/*/))))
 
-.PHONY: build test format aot install web-install web-build web-test web-format web-lint validate changes gates deps e2e
+.PHONY: build test format aot install web-install web-build web-test web-format web-lint validate changes gates deps e2e cli-dist-linux
 
 build:
 	@dotnet build Panopticon.slnx -c Release -warnaserror; code=$$?; echo "BUILD_EXIT:$$code"; exit $$code
@@ -68,9 +68,32 @@ validate:
 changes:
 	@echo "$(CHANGES)"
 
+# Not a gate: a Native AOT build of the CLI for Linux on the Docker host's CPU, made inside the SDK image (AOT can't
+# build for another OS), into cli-dist/ so an image built afterwards hands it out (cli-install D2). Only the CLI's
+# sources go into the container, so its Linux restore never touches this machine's obj/ folders. Needs Docker.
+CLI_DIST_VERSION ?= 0.0.0-dev
+CLI_SDK_IMAGE := mcr.microsoft.com/dotnet/sdk:10.0.404
+
+cli-dist-linux:
+	@set -o pipefail; \
+	arch=$$(docker version --format '{{.Server.Arch}}') || { echo "CLI_DIST_EXIT:1"; exit 1; }; \
+	case "$$arch" in amd64) rid=linux-x64;; arm64) rid=linux-arm64;; *) echo "No CLI build for Docker arch $$arch"; echo "CLI_DIST_EXIT:1"; exit 1;; esac; \
+	rm -f cli-dist/linux-x64/panopticon cli-dist/linux-arm64/panopticon cli-dist/version; \
+	COPYFILE_DISABLE=1 tar -cf - --exclude=bin --exclude=obj global.json Directory.Build.props Directory.Packages.props .editorconfig \
+		src/Panopticon.Cli src/Panopticon.Contracts \
+	| docker run --rm -i -v "$(CURDIR)/cli-dist:/out" $(CLI_SDK_IMAGE) sh -ec '\
+		apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends clang zlib1g-dev >/dev/null; \
+		mkdir /src && tar -xf - -C /src && cd /src; \
+		dotnet publish src/Panopticon.Cli/Panopticon.Cli.csproj -c Release -r '"$$rid"' -p:Version=$(CLI_DIST_VERSION) -warnaserror -o /tmp/cli; \
+		install -D -m 755 /tmp/cli/panopticon /out/'"$$rid"'/panopticon'; \
+	code=$$?; \
+	if [ $$code -eq 0 ]; then echo "$(CLI_DIST_VERSION)" > cli-dist/version; echo "Built cli-dist/$$rid/panopticon ($(CLI_DIST_VERSION))"; fi; \
+	echo "CLI_DIST_EXIT:$$code"; exit $$code
+
 # Not a gate: builds the server image from the Dockerfile (minutes), then runs the whole team flow against it
-# (ContainerEndToEndTests). Needs Docker.
-e2e: aot
+# (ContainerEndToEndTests). It builds the Linux CLI into cli-dist/ first, so the image hands it out and the test can
+# install it with install.sh (cli-install 6.2). Needs Docker.
+e2e: aot cli-dist-linux
 	@dotnet test --project tests/Panopticon.Cli.IntegrationTests -c Release --filter-trait "Category=ContainerE2E"; code=$$?; echo "E2E_EXIT:$$code"; exit $$code
 
 gates:

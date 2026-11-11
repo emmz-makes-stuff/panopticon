@@ -87,6 +87,7 @@ case ":$PATH:" in
     *":$dir:"*) ;;
     *)
         printf '\n%s is not on your PATH. Add it, e.g. in ~/.profile:\n' "$dir"
+        # shellcheck disable=SC2016 # the hint prints a literal $PATH, for the reader's shell to expand
         printf '  export PATH="%s:$PATH"\n' "$dir"
         ;;
 esac

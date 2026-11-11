@@ -67,15 +67,15 @@
 
 ## 6. Build and release
 
-- [ ] 6.1 Add `cli-dist/.keep`, `.gitignore` entries `cli-dist/*` and `!cli-dist/.keep`, and
+- [x] 6.1 Add `cli-dist/.keep`, `.gitignore` entries `cli-dist/*` and `!cli-dist/.keep`, and
   `COPY cli-dist/ /app/cli/` in the `Dockerfile`'s runtime stage, in its own layer (D2). Add a
   `make cli-dist-linux` target that runs a Native AOT publish inside the SDK image (adding clang and zlib) for the
   Docker host's Linux arch, into `cli-dist/<rid>/`, and writes `cli-dist/version`. Verify that `docker build` works
   with and without it, and that the image built with it serves `/api/cli`.
-- [ ] 6.2 Extend `make e2e`. It runs `make cli-dist-linux`, builds the image, then in a clean `debian:bookworm-slim`
+- [x] 6.2 Extend `make e2e`. It runs `make cli-dist-linux`, builds the image, then in a clean `debian:bookworm-slim`
   container runs `curl -fsSL <server>/install.sh | sh` and checks `panopticon --version`, before the existing team
   flow. The flow uses that installed CLI where it can. Verify with `make e2e` → `E2E_EXIT:0`.
-- [ ] 6.3 Rework `.github/workflows/deploy.yml` into three jobs (D7). The `cli` matrix builds on `ubuntu-22.04`,
+- [x] 6.3 Rework `.github/workflows/deploy.yml` into three jobs (D7). The `cli` matrix builds on `ubuntu-22.04`,
   `ubuntu-22.04-arm`, `macos-15` and `windows-2025` with `-p:Version=${tag#v}`, using `fail-fast`. `release`
   (`contents: write`) runs `gh release create` with `panopticon-<rid>[.exe]` and `SHA256SUMS`. `deploy` runs from the
   staged context, `git archive` plus `cli-dist/` with the `.gitignore` lines dropped, using `railway up <dir>

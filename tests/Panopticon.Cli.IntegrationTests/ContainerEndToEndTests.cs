@@ -148,6 +148,9 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
             using var cookies = new HttpClientHandler { CookieContainer = new CookieContainer() };
             using var browser = new HttpClient(cookies) { BaseAddress = PublicUrl };
 
+            // 0. The image hands out the CLI (cli-install 6.2): its manifest, and install.sh run on a clean glibc Linux.
+            await InstallOnCleanLinuxAsync(browser);
+
             // 1. Sign in as the initial member, through the link the server logged instead of emailing.
             (await browser.PostApiAsync(SignInEndpoints.SignInPath, new { email = MemberEmail }, Ct)).EnsureSuccessStatusCode().Dispose();
             var secret = await WaitForAsync(async () => SignInLink().Match(await ServerLogsAsync()) is { Success: true } m ? m.Groups[1].Value : null, "the logged sign-in link");
@@ -260,6 +263,7 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
     }
 
     private IContainer ServerContainer() => ServerBase()
+        .WithNetworkAliases("server")
         .WithPortBinding(_hostPort, 8080)
         .WithWaitStrategy(Wait.ForUnixContainer()
             .UntilHttpRequestIsSucceeded(request => request.ForPort(8080).ForPath("/healthz")))
@@ -281,6 +285,46 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
             ["Panopticon__S3__Bucket"] = "panopticon-documents",
             ["Panopticon__S3__ForcePathStyle"] = "true",
         });
+
+    /// <summary>
+    /// Installs the CLI from the server image as a fresh Linux VM would: <c>curl … | sh</c> in a clean Debian
+    /// container with nothing but curl, on the same network. The script's URLs name <see cref="PublicUrl"/>, which is
+    /// the host's localhost and not reachable from in there, so they're pointed at the server's network alias first;
+    /// the checksums, the platform check, the install and its <c>--version</c> run are as served.
+    /// </summary>
+    private async Task InstallOnCleanLinuxAsync(HttpClient browser)
+    {
+        var manifest = (await browser.GetFromJsonAsync<Panopticon.Contracts.CliManifest>(Panopticon.Contracts.CliPlatforms.ManifestPath, Ct))!;
+        Assert.Equal("0.0.0-dev", manifest.Version);
+        Assert.Single(manifest.Platforms.Keys, k => k.StartsWith("linux-", StringComparison.Ordinal));
+
+        var publicUrl = PublicUrl.ToString().TrimEnd('/');
+        var script = $"""
+            set -e
+            curl -fsSL http://server:8080/install.sh | sed 's#{publicUrl}#http://server:8080#g' | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "VERSION:$(panopticon --version)"
+            panopticon update --server http://server:8080 || echo "UPDATE_EXIT:$?"
+            """;
+        await using var vm = new ContainerBuilder("buildpack-deps:bookworm-curl")
+            .WithNetwork(_network)
+            .WithEntrypoint("sh", "-c")
+            .WithCommand(script)
+            .Build();
+        await vm.StartAsync(Ct);
+        var exitCode = await vm.GetExitCodeAsync(Ct);
+        var (stdout, stderr) = await vm.GetLogsAsync(ct: Ct);
+        var output = $"exit {exitCode}\nstdout:\n{stdout}\nstderr:\n{stderr}";
+
+        Assert.True(exitCode == 0, output);
+        Assert.Contains("Installed panopticon 0.0.0-dev to /root/.local/bin/panopticon", stdout, StringComparison.Ordinal);
+        Assert.Contains("panopticon login --server http://server:8080", stdout, StringComparison.Ordinal);
+        Assert.Contains("VERSION:0.0.0-dev", stdout, StringComparison.Ordinal);
+
+        // Plain http to a host that isn't this machine: update refuses before any request (spec: Updates only over HTTPS).
+        Assert.Contains("UPDATE_EXIT:1", stdout, StringComparison.Ordinal);
+        Assert.Contains("needs an https server", stderr, StringComparison.Ordinal);
+    }
 
     // The image's own pre-deploy step (Dockerfile: "Run once with --migrate"), then it exits.
     private async Task MigrateAsync()

@@ -1,6 +1,10 @@
-# Deploys the server to Railway when a version tag (v*) is pushed (ADR-0004).
+# A version tag (v*) releases server and CLI together (ADR-0004, cli-install design D7):
+#   1. cli:     Native AOT builds of the CLI on each OS (AOT can't build for another OS), stamped with the tag's version.
+#   2. release: a GitHub Release for the tag with the four builds and SHA256SUMS, kept as the record.
+#   3. deploy:  the server to Railway, with the same builds bundled in the image (the server hands them out).
+# If any build fails, there's no Release and no deploy.
 # Needs the RAILWAY_TOKEN repository secret: a project token for the panopticon project's production environment.
-name: Deploy to Railway
+name: Release and deploy
 
 on:
   push:
@@ -13,11 +17,107 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  cli:
+    name: CLI (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # Linux builds on 22.04, so the binary needs only glibc 2.35 (Ubuntu 22.04+, Debian 12+).
+          - { runner: ubuntu-22.04, platform: linux-x64, file: panopticon }
+          - { runner: ubuntu-22.04-arm, platform: linux-arm64, file: panopticon }
+          - { runner: macos-15, platform: osx-arm64, file: panopticon }
+          - { runner: windows-2025, platform: win-x64, file: panopticon.exe }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install the AOT link prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev
+
+      - name: Version from the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::$GITHUB_REF_NAME isn't a v<major>.<minor>.<patch> tag"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Publish
+        run: >-
+          dotnet publish src/Panopticon.Cli/Panopticon.Cli.csproj -c Release -r "${{ matrix.platform }}"
+          -p:Version="$VERSION" -warnaserror -o out
+
+      - name: Check the build reports the version
+        run: |
+          reported="$(./out/${{ matrix.file }} --version | tr -d '\r')"
+          if [ "$reported" != "$VERSION" ]; then
+            echo "::error::panopticon --version printed '$reported', expected '$VERSION'"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.platform }}
+          path: out/${{ matrix.file }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: cli
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
+          path: dist
+
+      - name: Name the assets and write SHA256SUMS
+        run: |
+          mkdir release
+          for platform in linux-x64 linux-arm64 osx-arm64 win-x64; do
+            case "$platform" in win-*) ext=.exe ;; *) ext= ;; esac
+            cp "dist/cli-$platform/panopticon$ext" "release/panopticon-$platform$ext"
+          done
+          (cd release && sha256sum -- * > SHA256SUMS)
+          cat release/SHA256SUMS
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" release/*
+          --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+
   deploy:
+    needs: [cli, release]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
+          path: ${{ runner.temp }}/dist
+
+      # railway up skips gitignored files, and cli-dist/* is gitignored, so upload a staged copy of the tag with
+      # the builds in cli-dist/ (design D2).
+      - name: Stage the build context
+        run: |
+          .github/scripts/stage-deploy-context.sh "$RUNNER_TEMP/dist" "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/context"
 
       - uses: actions/setup-node@v4
         with:
@@ -38,4 +138,4 @@ jobs:
       - name: Deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service panopticon --ci --message "${GITHUB_REF_NAME}"
+        run: railway up "$RUNNER_TEMP/context" --path-as-root --service panopticon --ci --message "${GITHUB_REF_NAME}"

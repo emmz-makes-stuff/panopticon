@@ -9,6 +9,10 @@ artifacts/
 web/node_modules/
 web/coverage/
 
+# CLI builds the server image bundles (cli-install D2): filled by CI or `make cli-dist-linux`
+cli-dist/*
+!cli-dist/.keep
+
 # Railway IaC
 .railway/node_modules/
 
