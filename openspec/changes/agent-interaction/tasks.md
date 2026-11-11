@@ -7,8 +7,8 @@
 
 ## 2. Contracts and the data model
 
-- [ ] 2.1 Add the hook-endpoint contracts to `Panopticon.Contracts`, all source-generated in `ContractsJsonContext` (D3): `SessionEventRequest` (session state enum, activity), `PromptRequest` (question or permission payload), `PromptCreated`, `PromptWaitResult` (pending, answered or released, with the answer), and `AwayState`, plus the limits from the "Prompt limits" requirement as constants. Verify with round-trip serialisation tests, including an unknown state value refused.
-- [ ] 2.2 Add `Member.AwaySince` and the `RemoteAnswer` table in one migration with a down migration (D8). Verify with migration tests: it applies and rolls back, and deleting a change deletes its `remote_answers` rows.
+- [x] 2.1 Add the hook-endpoint contracts to `Panopticon.Contracts`, all source-generated in `ContractsJsonContext` (D3): `SessionEventRequest` (session state enum, activity), `PromptRequest` (question or permission payload), `PromptCreated`, `PromptWaitResult` (pending, answered or released, with the answer), and `AwayState`, plus the limits from the "Prompt limits" requirement as constants. Verify with round-trip serialisation tests, including an unknown state value refused.
+- [x] 2.2 Add `Member.AwaySince` and the `RemoteAnswer` table in one migration with a down migration (D8). Verify with migration tests: it applies and rolls back, and deleting a change deletes its `remote_answers` rows.
 
 ## 3. Server: presence
 

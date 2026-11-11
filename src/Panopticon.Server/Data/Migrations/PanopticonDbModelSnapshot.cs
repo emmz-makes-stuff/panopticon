@@ -17,7 +17,7 @@ namespace Panopticon.Server.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.14")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -392,6 +392,10 @@ namespace Panopticon.Server.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("AwaySince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("away_since");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -566,6 +570,67 @@ namespace Panopticon.Server.Data.Migrations
                         .HasDatabaseName("ix_project_tags_project_id_key_key_value_key");
 
                     b.ToTable("project_tags", (string)null);
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.RemoteAnswer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AnsweredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("answered_at");
+
+                    b.Property<Guid>("AnsweredByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("answered_by_member_id");
+
+                    b.Property<Guid>("ChangeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("change_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("QuestionsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("questions_json");
+
+                    b.Property<Guid>("SessionMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_member_id");
+
+                    b.Property<string>("ToolName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("tool_name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_remote_answers");
+
+                    b.HasIndex("AnsweredByMemberId")
+                        .HasDatabaseName("ix_remote_answers_answered_by_member_id");
+
+                    b.HasIndex("SessionMemberId")
+                        .HasDatabaseName("ix_remote_answers_session_member_id");
+
+                    b.HasIndex("ChangeId", "AnsweredAt")
+                        .HasDatabaseName("ix_remote_answers_change_id_answered_at");
+
+                    b.ToTable("remote_answers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_remote_answers_kind", "(kind = 'question' AND questions_json IS NOT NULL AND tool_name IS NULL AND outcome IS NULL) OR (kind = 'permission' AND tool_name IS NOT NULL AND outcome IN ('allow', 'deny') AND questions_json IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.Repo", b =>
@@ -993,6 +1058,30 @@ namespace Panopticon.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_project_tags_projects_project_id");
+                });
+
+            modelBuilder.Entity("Panopticon.Server.Data.RemoteAnswer", b =>
+                {
+                    b.HasOne("Panopticon.Server.Data.Member", null)
+                        .WithMany()
+                        .HasForeignKey("AnsweredByMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_remote_answers_members_answered_by_member_id");
+
+                    b.HasOne("Panopticon.Server.Data.Change", null)
+                        .WithMany()
+                        .HasForeignKey("ChangeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_remote_answers_changes_change_id");
+
+                    b.HasOne("Panopticon.Server.Data.Member", null)
+                        .WithMany()
+                        .HasForeignKey("SessionMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_remote_answers_members_session_member_id");
                 });
 
             modelBuilder.Entity("Panopticon.Server.Data.ReportDocument", b =>

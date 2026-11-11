@@ -230,3 +230,29 @@ public sealed class ProgressSnapshot
     public int CurrentSectionTotal { get; set; }
     public int? ReportedSection { get; set; }
 }
+
+/// <summary>
+/// One answer given from the dashboard to a session's held prompt (agent-interaction D8, spec remote-answers: Answers
+/// are attributed). A question's row has <see cref="QuestionsJson"/>, its question texts and chosen labels; a
+/// permission prompt's has <see cref="ToolName"/> and <see cref="Outcome"/>. Previews and tool input are never stored.
+/// </summary>
+public sealed class RemoteAnswer
+{
+    public const string QuestionKind = "question";
+    public const string PermissionKind = "permission";
+    public const string Allow = "allow";
+    public const string Deny = "deny";
+
+    public Guid Id { get; set; }
+    public Guid ChangeId { get; set; }
+
+    /// <summary>The member whose session held the prompt.</summary>
+    public Guid SessionMemberId { get; set; }
+
+    public Guid AnsweredByMemberId { get; set; }
+    public DateTimeOffset AnsweredAt { get; set; }
+    public required string Kind { get; set; }
+    public string? ToolName { get; set; }
+    public string? Outcome { get; set; }
+    public string? QuestionsJson { get; set; }
+}
