@@ -49,9 +49,22 @@
 - [x] 8.1 Extend the container e2e flow (`make e2e`): post session events and a held prompt through the published CLI with stdin fixtures, answer it through the dashboard API as the owner, and check the CLI's hook output and the `RemoteAnswer` row. Verify: `E2E_EXIT:0`.
 - [x] 8.2 Stop for human verification with a copy-pasteable recipe. Install the updated plugin and CLI in a real Claude Code session. Watch the activity on the card while gates run. Turn away mode on, answer a multiple-choice question and a permission prompt from the dashboard (once as Emmz, once as a Project owner), then turn away mode off with a prompt held, and check the terminal takes over. Verify: Emmz's confirmation, recorded in a devlog note.
 
+## 9. Review fixes: small fixes from the review
+
+- [ ] 9.1 Make the change page's answer list read as the spec words it ("Bob allowed Bash for Emmz", "Bob answered a question for Emmz"), dropping "'s session" in `answerSummary`, with its tests and `web/DESIGN.md` updated. Verify with vitest tests.
+- [ ] 9.2 Make `PresenceStore.WaitAsync` time out with the store's `TimeProvider` (the `WaitAsync(TimeSpan, TimeProvider, CancellationToken)` overload), and move its timeout test onto the fake clock. Verify: the test advances the fake clock rather than waiting in real time.
+- [ ] 9.3 Make `AgentApiClient` turn an `HttpRequestException` or `IOException` while reading a response body into a `BridgeException` (code review F6, F7), so the hook's wait loop retries a connection dropped mid-long-poll for up to `ServerLossLimit`. Verify with a CLI test whose fake server drops the connection after the headers, once, then answers.
+- [ ] 9.4 Stop a report's `change-updated` from putting back sessions the live events have already ended (code review F1). An updated card already shown keeps its own sessions, which session events own, and a card new to the dashboard takes the event's. Verify with a vitest test: `session-ended`, then a newer report still listing that session, leaves no row.
+
+## 10. Review fixes: races in sessions, prompts and the live stream
+
+- [ ] 10.1 Order session events (code review F2). `panopticon hook` stamps each event with the time its process started (a new optional `OccurredAt` in the contract). The server ignores an event older than the last one it applied for that session, including any event after `SessionEnd` that's older than the end. Verify with server tests (`Stop` then a late `PostToolUse` stays waiting; `SessionEnd` then a late `Stop` doesn't bring the session back), and a CLI test that the time is sent.
+- [ ] 10.2 Never lose a dashboard answer (code review F3, F4). The hook releases a held prompt it created when it gives up before the wait loop, through a new best-effort `DELETE /api/agent/prompts/{id}`. The store keeps an answered prompt until the hook's wait reads it, or `WaitGrace` passes, instead of dropping it on the session's next event. Verify with server tests (an event between the answer and the wait still returns the answer; a released prompt can't be answered, giving 409) and a CLI test (a failed preview upload releases the prompt).
+- [ ] 10.3 Resync a live stream that dropped events (code review F8). When a subscriber's queue drops an event, the stream sends `resync`, and the dashboard and change page refetch as they do on reconnect (cards, sessions and the away switch). Verify with a server test that overflows a subscriber and sees `resync`, and vitest tests that `resync` refreshes.
+
 ## Workflow follow-up
 
 - Whole-change review, offer `/code-review`, then `/opsx:archive`.
-- Release the server, then the CLI, then the plugin (design Migration Plan).
+- Release the server, then the CLI, then the plugin (design Migration Plan). Merge `panopticon-skills`' `change/agent-interaction` branch, then reinstall the plugin from GitHub.
 - A follow-up change (Emmz, 2026-11-11): make the dashboard a PWA, so held-prompt notifications reach her from any
   page, or with the tab closed. Today they fire only while the cards page (`/`) is open.
