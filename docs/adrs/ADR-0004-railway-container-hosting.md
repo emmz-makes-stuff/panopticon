@@ -23,12 +23,19 @@ internet, and the repo lives on GitHub.
   Bucket share one region (US East).
 - **CLI binaries** for linux-x64, linux-arm64, osx-arm64 and win-x64 are published as **GitHub
   Releases** assets.
+- *Amended 2026-11-11 (cli-install):* the **server hands out the CLI**. The repo is private, so its Release assets
+  can't be downloaded anonymously. The same `v*` tag builds the four binaries on each OS, and attaches them with
+  `SHA256SUMS` to a GitHub Release, which is kept as the record. The tag also bundles them into the image the tag
+  deploys, so server and CLI share one version. The server serves `/install.sh`, `/install.ps1`, `/cli/<rid>/…` and
+  the `/api/cli` manifest without sign-in, all built on its `PublicUrl`, so a self-hosted server hands out its own
+  release. `panopticon update` follows the server it's logged in to, over https only.
 
 ## Consequences
 
 - Another team can run its own instance by deploying the same image anywhere containers run. Railway is
   the reference deployment, not a lock-in.
-- Release automation (CI matrix for AOT builds per OS) is needed later. It isn't part of the gates.
+- Release automation (CI matrix for AOT builds per OS) is needed later. It isn't part of the gates. *(Built in
+  cli-install: `.github/workflows/deploy.yml`.)*
 
 ## Alternatives rejected
 

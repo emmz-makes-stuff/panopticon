@@ -84,7 +84,7 @@
 
 ## 7. Docs and human verification
 
-- [ ] 7.1 Update `docs/cli.md` with Install (the script for each OS, `PANOPTICON_INSTALL_DIR`, the glibc ≥ 2.35
+- [x] 7.1 Update `docs/cli.md` with Install (the script for each OS, `PANOPTICON_INSTALL_DIR`, the glibc ≥ 2.35
   floor, `make install` for source builds), Update (`panopticon update`, restarting the agent) and `--version`. Update
   `README.md`'s Reporting progress section, and `docs/DISCOVERY.md` where it mentions installing. Add an *Amended
   2026-11-11* bullet to ADR-0004: the server serves the binaries, and GitHub Releases are kept as the record.
