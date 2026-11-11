@@ -120,6 +120,8 @@ public class CliEndpointTests(PostgresFixture postgres, S3Fixture s3)
 
     [Theory]
     [InlineData("/api/cli")]
+    [InlineData("/install.sh")]
+    [InlineData("/install.ps1")]
     [InlineData("/cli/linux-x64/panopticon")]
     public async Task A_server_without_builds_says_so_with_a_404(string path)
     {
@@ -133,6 +135,64 @@ public class CliEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains("no CLI builds", body, StringComparison.Ordinal);
         Assert.Contains("make install", body, StringComparison.Ordinal);
         Assert.DoesNotContain("<title>shell</title>", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_install_script_downloads_only_from_its_own_server()
+    {
+        using var builds = CliBuildsDirectory.Create();
+        await using var factory = await FactoryAsync(builds.Path, "https://panopticon.example.com/");
+        using var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, CliEndpoints.InstallShPath);
+        request.Headers.Host = "evil.example.net";
+
+        using var response = await http.SendAsync(request, Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var script = await response.Content.ReadAsStringAsync(Ct);
+        var urls = System.Text.RegularExpressions.Regex.Matches(script, "https?://[^\\s'\"]+").Select(m => m.Value).ToList();
+        Assert.NotEmpty(urls);
+        Assert.All(urls, url => Assert.StartsWith("https://panopticon.example.com", url, StringComparison.Ordinal));
+        Assert.Contains("server='https://panopticon.example.com'", script, StringComparison.Ordinal);
+        Assert.Contains("    linux-x64) url='https://panopticon.example.com/cli/linux-x64/panopticon'; sha256='" + builds.Sha256(CliPlatforms.LinuxX64) + "' ;;", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("win-x64)", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_windows_script_names_its_server_and_the_win_x64_build()
+    {
+        using var builds = CliBuildsDirectory.Create();
+        await using var factory = await FactoryAsync(builds.Path, "https://panopticon.example.com/");
+        using var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, CliEndpoints.InstallPs1Path);
+        request.Headers.Host = "evil.example.net";
+
+        using var response = await http.SendAsync(request, Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
+        Assert.True(response.Headers.CacheControl?.NoCache);
+        var script = await response.Content.ReadAsStringAsync(Ct);
+        Assert.DoesNotContain("@@", script, StringComparison.Ordinal);
+        Assert.Contains("$server = 'https://panopticon.example.com'", script, StringComparison.Ordinal);
+        Assert.Contains("$url = 'https://panopticon.example.com/cli/win-x64/panopticon.exe'", script, StringComparison.Ordinal);
+        Assert.Contains("$sha256 = '" + builds.Sha256(CliPlatforms.WinX64) + "'", script, StringComparison.Ordinal);
+        Assert.Contains("panopticon login --server $server", script, StringComparison.Ordinal);
+        Assert.Contains("Programs\\panopticon", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("evil.example.net", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_windows_script_without_a_windows_build_says_so_when_run()
+    {
+        using var builds = CliBuildsDirectory.Create("0.2.0", [CliPlatforms.LinuxX64]);
+        await using var factory = await FactoryAsync(builds.Path);
+        using var http = factory.CreateClient();
+
+        var script = await http.GetStringAsync(CliEndpoints.InstallPs1Path, Ct);
+
+        Assert.Contains("$url = ''", script, StringComparison.Ordinal);
+        Assert.Contains("It has CLI builds for: linux-x64.", script, StringComparison.Ordinal);
     }
 
     [Fact]

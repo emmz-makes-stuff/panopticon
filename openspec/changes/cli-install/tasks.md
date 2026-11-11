@@ -23,7 +23,7 @@
 
 ## 3. Server: install scripts
 
-- [ ] 3.1 Add `install.sh` as an embedded template, rendered per request with the version, `PublicUrl`, and each
+- [x] 3.1 Add `install.sh` as an embedded template, rendered per request with the version, `PublicUrl`, and each
   platform's URL and SHA-256 (D3). Serve it at `GET /install.sh`, anonymous, `text/plain`, `no-cache`. It handles
   platform detection (with a test-only `PANOPTICON_UNAME_S`/`_M` override), musl rejection, `curl` or `wget`,
   `sha256sum` or `shasum`, `PANOPTICON_INSTALL_DIR`, an atomic replace, the `PATH` hint, a `--version` check after
@@ -31,7 +31,7 @@
   under `sh` against a test host serving a fake binary: a fresh install, a custom directory, the `PATH` hint, a
   checksum mismatch leaving the old file, an Intel Mac, a musl override, and a self-hosted `PublicUrl` in every URL.
   These skip on Windows. Then `make test` → `TEST_EXIT:0`.
-- [ ] 3.2 Add `install.ps1` the same way, at `GET /install.ps1` (D3). It rejects non-x64, installs to
+- [x] 3.2 Add `install.ps1` the same way, at `GET /install.ps1` (D3). It rejects non-x64, installs to
   `%LOCALAPPDATA%\Programs\panopticon`, checks the SHA-256 with `Get-FileHash`, adds that directory to the user
   `PATH` when it's missing, and prints the login command. Verify with an integration test that the rendered script
   holds this server's URL and the `win-x64` hash, and that an empty catalogue gives 404. The real Windows run is
