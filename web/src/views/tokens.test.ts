@@ -3,6 +3,7 @@ import { until, type FakeServer, q } from "../testing";
 import { signedIn, startTestShell } from "../testShell";
 import type { Token } from "./tokens";
 import type { CliManifest } from "./setupGuide";
+import { SETUP_GUIDE_HIDDEN_KEY } from "./projects";
 
 const vm1: Token = {
   id: "t1",
@@ -230,5 +231,21 @@ describe("/tokens setup guide: install step", () => {
 
     expect(root.querySelector(".install-cli-note")?.textContent).toContain("Reload");
     expect(machines(root)).toEqual(["vm-1"]);
+  });
+});
+
+// Spec machine-setup: "Hidden" — hiding the guide on the Projects page leaves it on the Tokens page.
+describe("/tokens setup guide: hidden on Projects", () => {
+  it("Hidden: the Tokens page still shows the guide", async () => {
+    const server = signedIn()
+      .on("GET", "/api/tokens", { status: 200, body: [laptop] })
+      .on("GET", "/api/cli", { status: 200, body: manifest });
+    const { root } = await startTestShell("/tokens", server, {
+      local: { [SETUP_GUIDE_HIDDEN_KEY]: "1" },
+    });
+    await until(() => root.querySelector(".install-cli-command") !== null);
+
+    expect(root.querySelector(".setup-guide")).not.toBeNull();
+    expect(root.querySelector(".setup-guide-hide")).toBeNull();
   });
 });

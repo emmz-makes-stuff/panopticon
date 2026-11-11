@@ -72,12 +72,37 @@
   - the Project page shows the link hint.
 
   Verify with Emmz's PASS, recorded in a devlog note.
-- [ ] 5.2 After the next release is deployed, check against `https://panopticon.team`:
+- [x] 5.2 (Deferred to the next release by Emmz, 2026-11-11; see the change-done note.) After the next release is
+  deployed, check against `https://panopticon.team`:
   - HEAD `/cli/linux-x64/panopticon` gives 200 `application/octet-stream`;
   - a GET has an ETag that equals `"<sha256>"` from `/api/cli`;
   - repeating it with `If-None-Match` gives 304.
 
   Verify with the commands' output recorded in a devlog note, or a recorded decision to defer it to the release.
+
+## 6. Review fixes: the Hidden scenario on the Tokens page
+
+- [x] 6.1 Add a `tokens.test.ts` case for the second half of machine-setup's "Hidden" scenario. With
+  `SETUP_GUIDE_HIDDEN_KEY` set to `"1"` in `local`, the Tokens page still shows `.setup-guide`. Verify with
+  `make web-test`.
+
+## 7. Review fixes: code-review cleanups
+
+- [ ] 7.1 Connect's done-ness stays on `lastUsedAt`, as D3 has it. The token being used by any call counts, not only
+  a report (Emmz, 2026-11-11). Reword machine-setup's "Steps marked done" and "Guide on the Projects page"
+  requirements and scenarios from "has reported" to "has been used", and note in D3 that this is a stand-in. Verify
+  with `make validate`.
+- [ ] 7.2 Move `SETUP_GUIDE_HIDDEN_KEY` from `projects.ts` to `setupGuide.ts`, and import it from there in
+  `projects.ts` and both test files. Verify with `make web-test`.
+- [ ] 7.3 `serverUrl` returns `new URL("/", manifest.installSh)`'s origin instead of regex-replacing `/install.sh`,
+  and the fallback takes `env.location.origin` as it is, without the trailing-slash strip. Fix D2's wording to
+  match, and update its unit test, adding a case for an `installSh` with a query string. Verify with
+  `make web-test`.
+- [ ] 7.4 Add one `copyButton(env, text: () => string)` helper that returns the Copy button and its status line.
+  Use it in `copyable()`, in the install step and in `projects.ts`'s `linkBlock`. Rename the `mark` local in
+  `step()` so it no longer shadows `mark()`. Verify with `make web-test` (the existing copy tests still pass).
+- [ ] 7.5 `CliCatalogue` takes Last-Modified from a `FileInfo` read alongside the hash, so a missing file throws
+  instead of recording 1601. Verify with `make test`.
 
 ## Workflow follow-up
 
