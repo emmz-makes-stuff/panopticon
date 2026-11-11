@@ -4,21 +4,25 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
+using Microsoft.EntityFrameworkCore;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Panopticon.Cli.Bridge;
 using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Cli.Tests.Infrastructure;
+using Panopticon.Contracts;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Changes;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
 using Testcontainers.PostgreSql;
@@ -39,6 +43,8 @@ namespace Panopticon.Cli.IntegrationTests;
 /// <item>add a Project tag and put it on the change, and see the card carry it beside the personal tag the report
 /// brought from <c>panopticon tags</c> (tags 10.2);</item>
 /// <item>read the change page's documents (change-documents-and-history 6.1);</item>
+/// <item>send session events through the published <c>panopticon hook</c>, then, away, have a question held, answer it
+/// from the dashboard and see the hook print the answer and the answer recorded (agent-interaction 8.1);</item>
 /// <item>archive the folder and see the running bridge's watcher move the change to the history.</item>
 /// </list>
 /// Building the image takes minutes, so this is opt-in: <c>make test</c> skips the trait, and <c>make e2e</c> runs it.
@@ -234,6 +240,92 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
             var proposal = (await browser.GetFromJsonAsync<RenderedDocument>(ChangeEndpoints.DocumentPath(card.ChangeId, "proposal.md"), Ct))!;
             Assert.Contains("Why we sign in.", proposal.Html, StringComparison.Ordinal);
 
+            // 6a. Agent interaction (agent-interaction 8.1): the session hooks through the published CLI, with each event
+            //     on stdin as Claude Code sends it. A working event shows on the card at once.
+            var working = await RunHookAsync(repo.Root, HookEvent("PreToolUse", repo.Root, "Bash", new JsonObject
+            {
+                ["command"] = "make gates",
+                ["description"] = "Run make gates",
+            }));
+            Assert.True(working is { ExitCode: 0, Stdout: "" }, $"panopticon hook exited {working.ExitCode}.\nstdout:\n{working.Stdout}\nstderr:\n{working.Stderr}");
+            var session = await WaitForAsync(
+                async () => (await CardAsync(browser)).Sessions.SingleOrDefault(s => s.State == SessionState.Working),
+                "the working session on the card");
+            Assert.Equal(("Run make gates", member.DisplayName, member.Id), (session.Activity, session.MemberName, session.MemberId));
+
+            // 6b. Away, a question is held for the dashboard: the hook blocks until it's answered there.
+            using (var away = await browser.SendApiAsync(HttpMethod.Put, AwayEndpoints.MePath, new { away = true }, Ct))
+            {
+                Assert.Equal(HttpStatusCode.OK, away.StatusCode);
+            }
+
+            var asking = RunHookAsync(repo.Root, HookEvent("PreToolUse", repo.Root, "AskUserQuestion", new JsonObject
+            {
+                ["questions"] = new JsonArray(new JsonObject
+                {
+                    ["question"] = "Which store?",
+                    ["header"] = "Store",
+                    ["multiSelect"] = false,
+                    ["options"] = new JsonArray(
+                        new JsonObject { ["label"] = "Memory" },
+                        new JsonObject { ["label"] = "Postgres", ["preview"] = "**durable**" }),
+                }),
+            }));
+            var held = await WaitForAsync(
+                async () => asking.IsCompleted
+                    ? throw new InvalidOperationException($"The hook returned before an answer: {await asking}")
+                    : (await CardAsync(browser)).Sessions.Select(s => s.PromptDetail).FirstOrDefault(d => d is { Held: true }),
+                "the held question on the card");
+            Assert.Equal(["Memory", "Postgres"], held.Questions!.Single().Options.Select(o => o.Label));
+            Assert.Contains("<strong>durable</strong>", held.Questions!.Single().Options[1].PreviewHtml, StringComparison.Ordinal);
+
+            // 6c. The member, who owns the Project, answers from the dashboard. The hook prints the answer for Claude
+            //     Code, attributed, and exits.
+            using (var answer = await browser.PostApiAsync(
+                PromptAnswerEndpoints.AnswerPath(held.Id),
+                new { answers = new Dictionary<string, string> { ["Which store?"] = "Postgres" } },
+                Ct))
+            {
+                Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+            }
+
+            var answered = await asking;
+            Assert.True(answered.ExitCode == 0, $"panopticon hook exited {answered.ExitCode}.\nstderr:\n{answered.Stderr}");
+            var output = JsonNode.Parse(answered.Stdout)!["hookSpecificOutput"]!;
+            Assert.Equal(
+                ("PreToolUse", "allow", "Postgres", $"Answered by {member.DisplayName} via Panopticon."),
+                (
+                    output["hookEventName"]!.GetValue<string>(),
+                    output["permissionDecision"]!.GetValue<string>(),
+                    output["updatedInput"]!["answers"]!["Which store?"]!.GetValue<string>(),
+                    output["additionalContext"]!.GetValue<string>()));
+
+            // 6d. The answer is recorded against the change, with who answered, and never the preview.
+            await using (var db = PostgresFixture.CreateDb(_postgres!.GetConnectionString()))
+            {
+                var row = Assert.Single(await db.RemoteAnswers.AsNoTracking().ToListAsync(Ct));
+                Assert.Equal(
+                    (card.ChangeId, member.Id, member.Id, RemoteAnswer.QuestionKind, (string?)null, (string?)null),
+                    (row.ChangeId, row.SessionMemberId, row.AnsweredByMemberId, row.Kind, row.ToolName, row.Outcome));
+                Assert.Contains("Postgres", row.QuestionsJson, StringComparison.Ordinal);
+                Assert.DoesNotContain("durable", row.QuestionsJson, StringComparison.Ordinal);
+            }
+
+            var answers = (await browser.GetFromJsonAsync<ChangePage>(ChangeEndpoints.ChangePath(card.ChangeId), Ct))!.Answers;
+            Assert.Equal([(member.DisplayName, member.DisplayName)], answers.Select(a => (a.SessionMember, a.AnsweredBy)));
+
+            // 6e. Away off, and the session ends: it leaves the card.
+            using (var back = await browser.SendApiAsync(HttpMethod.Put, AwayEndpoints.MePath, new { away = false }, Ct))
+            {
+                Assert.Equal(HttpStatusCode.OK, back.StatusCode);
+            }
+
+            var ended = await RunHookAsync(repo.Root, HookEvent("SessionEnd", repo.Root));
+            Assert.True(ended is { ExitCode: 0, Stdout: "" }, $"panopticon hook exited {ended.ExitCode}.\nstderr:\n{ended.Stderr}");
+            await WaitForAsync(
+                async () => (await CardAsync(browser)).Sessions.Count == 0 ? "gone" : null,
+                "the ended session to leave the card");
+
             // 7. Archive the folder as /opsx:archive would: the running bridge's watcher reports it, and the change
             //    moves from the dashboard to the history.
             var archiveFolder = $"2026-11-08-{Change}";
@@ -426,6 +518,61 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
         timeout.CancelAfter(_stepTimeout);
         await process.WaitForExitAsync(timeout.Token);
         return new Run(process.ExitCode, await stdout, await stderr);
+    }
+
+    /// <summary>The one active card, as the dashboard reads it.</summary>
+    private static async Task<ChangeCard> CardAsync(HttpClient browser) =>
+        Assert.Single((await browser.GetFromJsonAsync<List<ChangeCard>>(DashboardEndpoints.ChangesPath, Ct))!);
+
+    /// <summary>A Claude Code hook event, as it arrives on stdin (agent-interaction §1).</summary>
+    private static string HookEvent(string name, string cwd, string? tool = null, JsonObject? input = null)
+    {
+        var json = new JsonObject { ["hook_event_name"] = name, ["session_id"] = "e2e-session", ["cwd"] = cwd };
+        if (tool is not null)
+        {
+            json["tool_name"] = tool;
+            json["tool_input"] = input ?? [];
+        }
+
+        return json.ToJsonString();
+    }
+
+    /// <summary>Runs the published <c>panopticon hook</c> in <paramref name="cwd"/> with <paramref name="stdin"/>, against this test's config.</summary>
+    private async Task<Run> RunHookAsync(string cwd, string stdin)
+    {
+        var startInfo = new ProcessStartInfo(PublishedCli.Path)
+        {
+            ArgumentList = { "hook" },
+            WorkingDirectory = cwd,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        startInfo.Environment[Bridge.BridgeSettings.ServerUrlVariable] = null;
+        startInfo.Environment[Bridge.BridgeSettings.TokenVariable] = null;
+        IsolateConfig(startInfo.Environment);
+
+        using var process = Process.Start(startInfo)!;
+        await process.StandardInput.WriteAsync(stdin);
+        process.StandardInput.Close();
+        var stdout = process.StandardOutput.ReadToEndAsync(Ct);
+        var stderr = process.StandardError.ReadToEndAsync(Ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(_stepTimeout);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+            }
+        }
+
+        return new Run(process.ExitCode, (await stdout).Trim(), await stderr);
     }
 
     /// <summary>A running <c>panopticon mcp</c>, kept up so its archive watcher runs between reports.</summary>

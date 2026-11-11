@@ -46,8 +46,8 @@
 
 ## 8. End to end
 
-- [ ] 8.1 Extend the container e2e flow (`make e2e`): post session events and a held prompt through the published CLI with stdin fixtures, answer it through the dashboard API as the owner, and check the CLI's hook output and the `RemoteAnswer` row. Verify: `E2E_EXIT:0`.
-- [ ] 8.2 Stop for human verification with a copy-pasteable recipe. Install the updated plugin and CLI in a real Claude Code session. Watch the activity on the card while gates run. Turn away mode on, answer a multiple-choice question and a permission prompt from the dashboard (once as Emmz, once as a Project owner), then turn away mode off with a prompt held, and check the terminal takes over. Verify: Emmz's confirmation, recorded in a devlog note.
+- [x] 8.1 Extend the container e2e flow (`make e2e`): post session events and a held prompt through the published CLI with stdin fixtures, answer it through the dashboard API as the owner, and check the CLI's hook output and the `RemoteAnswer` row. Verify: `E2E_EXIT:0`.
+- [x] 8.2 Stop for human verification with a copy-pasteable recipe. Install the updated plugin and CLI in a real Claude Code session. Watch the activity on the card while gates run. Turn away mode on, answer a multiple-choice question and a permission prompt from the dashboard (once as Emmz, once as a Project owner), then turn away mode off with a prompt held, and check the terminal takes over. Verify: Emmz's confirmation, recorded in a devlog note.
 
 ## Workflow follow-up
 
