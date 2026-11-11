@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { until, type FakeServer, q } from "../testing";
 import { signedIn, startTestShell } from "../testShell";
 import type { Token } from "./tokens";
-import type { CliManifest } from "./setupGuide";
-import { SETUP_GUIDE_HIDDEN_KEY } from "./projects";
+import { SETUP_GUIDE_HIDDEN_KEY, type CliManifest } from "./setupGuide";
 
 const vm1: Token = {
   id: "t1",

@@ -1,5 +1,5 @@
 import { ApiError } from "../api";
-import { button, el } from "../dom";
+import { button, copyRow, el } from "../dom";
 import type { Env } from "../shell";
 import type { Token } from "./tokens";
 
@@ -29,6 +29,9 @@ export const PLUGIN_COMMANDS = [
   "/panopticon:setup",
 ] as const;
 
+/** Set when a member hides the setup guide on the Projects page; per browser (onboarding-guide D4). */
+export const SETUP_GUIDE_HIDDEN_KEY = "panopticon.setupGuide.hidden";
+
 /** The bridge as any MCP client starts it, as `.mcp.json` (the same as docs/cli.md and the plugin's own). */
 export const MCP_JSON = `{
   "mcpServers": {
@@ -52,9 +55,12 @@ export function defaultOs(platform: string): Os {
   return /^win/i.test(platform.trim()) ? "windows" : "unix";
 }
 
-/** The server as `panopticon login --server` takes it: the manifest's public URL, so it matches install.sh, or this page's origin without CLI builds (D2). */
-export function serverUrl(manifest: CliManifest | null, fallback: string): string {
-  return manifest ? manifest.installSh.replace(/\/install\.sh$/, "") : fallback.replace(/\/$/, "");
+/**
+ * The server as `panopticon login --server` takes it (D2): the URL install.sh sits in, so it matches the script and
+ * keeps a public URL's path; without CLI builds, this page's origin.
+ */
+export function serverUrl(manifest: CliManifest | null, origin: string): string {
+  return manifest ? new URL(".", manifest.installSh).href.replace(/\/$/, "") : origin;
 }
 
 /** Which steps a member's own active tokens show as done (spec machine-setup, "Steps marked done"; D3). */
@@ -78,19 +84,7 @@ function copyable(env: Env, text: string, prompt?: string): HTMLElement {
   if (prompt) {
     block.dataset.prompt = prompt;
   }
-  const copied = el("span", "copy-status");
-  copied.setAttribute("role", "status");
-  const copy = button("Copy", () => {
-    env.copy(text).then(
-      () => {
-        copied.textContent = "Copied.";
-      },
-      () => {
-        copied.textContent = "Couldn't copy. Select the text and copy it.";
-      },
-    );
-  });
-  return el("div", "setup-copyable", block, el("div", "copy-row", copy, copied));
+  return el("div", "setup-copyable", block, copyRow(env.copy, () => text).element);
 }
 
 export interface SetupGuide {
@@ -136,14 +130,14 @@ export function setupGuide(env: Env, options: { onHide?: () => void } = {}): Set
   renderLogin(null);
 
   function step(number: number, title: string, body: HTMLElement): HTMLLIElement {
-    const mark = el("span", "setup-step-mark", String(number));
-    mark.setAttribute("aria-hidden", "true");
-    const done = el("span", "setup-step-done", "Done");
-    done.hidden = true;
+    const numberMark = el("span", "setup-step-mark", String(number));
+    numberMark.setAttribute("aria-hidden", "true");
+    const doneLabel = el("span", "setup-step-done", "Done");
+    doneLabel.hidden = true;
     const item = el(
       "li",
       "setup-step",
-      el("h4", "setup-step-title", mark, el("span", undefined, title), done),
+      el("h4", "setup-step-title", numberMark, el("span", undefined, title), doneLabel),
       body,
     );
     item.dataset.number = String(number);
@@ -225,8 +219,7 @@ export function setupGuide(env: Env, options: { onHide?: () => void } = {}): Set
     let os = defaultOs(env.platform());
     const code = el("code");
     const command = el("pre", "install-cli-command", code);
-    const copied = el("span", "copy-status");
-    copied.setAttribute("role", "status");
+    const copy = copyRow(env.copy, () => installCommand(manifest, os));
     const choices = el("div", "install-cli-os");
     choices.setAttribute("role", "group");
     choices.setAttribute("aria-label", "Operating system");
@@ -243,27 +236,17 @@ export function setupGuide(env: Env, options: { onHide?: () => void } = {}): Set
       code.textContent = installCommand(manifest, os);
       // The prompt is drawn by CSS from this, so selecting the command never copies it.
       command.dataset.prompt = os === "windows" ? "PS>" : "$";
-      copied.textContent = "";
+      copy.clear();
       for (const choice of buttons) {
         choice.setAttribute("aria-pressed", String(choice.dataset.os === os));
       }
     }
 
-    const copy = button("Copy", () => {
-      env.copy(installCommand(manifest, os)).then(
-        () => {
-          copied.textContent = "Copied.";
-        },
-        () => {
-          copied.textContent = "Couldn't copy. Select the text and copy it.";
-        },
-      );
-    });
     show(os);
     installBody.replaceChildren(
       choices,
       command,
-      el("div", "copy-row", copy, copied),
+      copy.element,
       el("p", "install-cli-version", `Installs panopticon ${manifest.version}.`),
     );
   }

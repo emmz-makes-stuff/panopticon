@@ -45,9 +45,10 @@ The guide takes the token list from its host page:
 
 ### D2. The log-in step's server URL comes from the manifest
 
-`panopticon login --server <url>` uses the server's public URL. The source is the origin of the manifest's
-`installSh`, which the server builds on `Panopticon:PublicUrl` (cli-distribution). With no CLI builds (a 404) it falls
-back to `location.origin`.
+`panopticon login --server <url>` uses the server's public URL. It is the URL that the manifest's `installSh` sits in
+(`new URL(".", installSh)`, without its trailing slash). The server builds `installSh` on `Panopticon:PublicUrl`
+(cli-distribution), so a public URL with a path keeps that path, and a query string is dropped. With no CLI builds
+(a 404) it falls back to `location.origin`.
 
 - *Why:* the command matches the install script's own "Next, log this machine in" line exactly, even behind a proxy
   whose host differs from the public URL.
@@ -59,6 +60,11 @@ back to `location.origin`.
 can't be observed separately, but a login implies an installed CLI. A done step gets a check mark and a muted
 "Done" label, and keeps its commands (spec: "Steps marked done"). It isn't collapsed, because setting up a second
 machine is a normal thing to do.
+
+`lastUsedAt` stands in for "connected". `ApiTokenHandler` sets it on any authenticated call, so `/panopticon:setup`'s
+`list_projects` marks Connect done before any report has been made. Emmz accepted that after the code review
+(2026-11-11), because a token an agent has used means a connected agent. The spec says "has been used" to match. A
+`LastReportedAt` column was the alternative, and it was declined as scope growth.
 
 ### D4. Hiding on the Projects page is per browser
 

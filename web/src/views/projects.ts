@@ -1,11 +1,11 @@
 import { ApiError, type Api } from "../api";
-import { alertLine, button, el, field, page, routeLink, selectField } from "../dom";
+import { alertLine, button, copyRow, el, field, page, routeLink, selectField } from "../dom";
 import { PROJECT_TAGS_CHANGED, parseProjectTagsChange, type EventSourceLike } from "../live";
 import { codePlate } from "../projectLabel";
 import { tagChip, tagText } from "../tagChips";
 import type { View } from "../router";
 import type { Env } from "../shell";
-import { setupGuide, stepsDone } from "./setupGuide";
+import { SETUP_GUIDE_HIDDEN_KEY, setupGuide, stepsDone } from "./setupGuide";
 import type { Token } from "./tokens";
 
 export type ProjectRole = "owner" | "editor" | "viewer";
@@ -83,9 +83,6 @@ function nameIsValid(name: string): boolean {
 
 const NAME_RULE = `A name is 1 to ${PROJECT_NAME_MAX} characters.`;
 
-/** Set when a member hides the setup guide on the Projects page; per browser (onboarding-guide D4). */
-export const SETUP_GUIDE_HIDDEN_KEY = "panopticon.setupGuide.hidden";
-
 /** `/projects` (spec projects, "Projects list", "Creating a Project"): your Projects, and a form to make one. */
 export function projectsView(env: Env): View {
   return async ({ root, navigate }) => {
@@ -118,7 +115,7 @@ export function projectsView(env: Env): View {
       }
     }
 
-    // Spec machine-setup, "Guide on the Projects page": until one of your tokens has reported, unless hidden here.
+    // Spec machine-setup, "Guide on the Projects page": until one of your tokens has been used, unless hidden here.
     async function loadGuide(): Promise<void> {
       if (env.local.getItem(SETUP_GUIDE_HIDDEN_KEY) === "1") {
         return;
@@ -685,18 +682,6 @@ export function projectView(env: Env): View {
     function linkBlock(project: ProjectDetails): HTMLElement {
       const text = linkFile(project.id);
       const block = el("pre", "link-file", text);
-      const copied = el("span", "copy-status");
-      copied.setAttribute("role", "status");
-      const copy = button("Copy", () => {
-        env.copy(text).then(
-          () => {
-            copied.textContent = "Copied.";
-          },
-          () => {
-            copied.textContent = "Couldn't copy. Select the text and copy it.";
-          },
-        );
-      });
       return el(
         "section",
         "link-repo",
@@ -707,7 +692,7 @@ export function projectView(env: Env): View {
           `Commit this as .panopticon.json at the root of a repo, and its reports go to ${project.code}.`,
         ),
         block,
-        el("div", "copy-row", copy, copied),
+        copyRow(env.copy, () => text).element,
         el(
           "p",
           "link-repo-agent",

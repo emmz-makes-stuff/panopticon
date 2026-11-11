@@ -4,8 +4,8 @@ import { PROJECT_TAGS_CHANGED } from "../live";
 import { FakeEventSource, MEMBER, fakeServer, q, settle, until, type FakeServer } from "../testing";
 import { signedIn, startTestShell, type TestShellOptions } from "../testShell";
 import { codePlate } from "../projectLabel";
+import { SETUP_GUIDE_HIDDEN_KEY } from "./setupGuide";
 import {
-  SETUP_GUIDE_HIDDEN_KEY,
   linkFile,
   projectTagSection,
   type Project,
@@ -1169,7 +1169,7 @@ describe("/projects setup guide", () => {
     expect(root.querySelector(".projects-setup .setup-guide-hide")?.textContent).toBe("Hide");
   });
 
-  it("a member logged in but not yet reported still sees it, with install and log in done", async () => {
+  it("a member logged in but not yet used still sees it, with install and log in done", async () => {
     const { root } = await openWithGuide(server({ status: 200, body: [unused] }));
 
     expect(
@@ -1193,7 +1193,7 @@ describe("/projects setup guide", () => {
     expect(again.to("GET", "/api/tokens")).toHaveLength(0);
   });
 
-  it("Reporting member: the Projects page doesn't show the guide", async () => {
+  it("Member already set up: the Projects page doesn't show the guide", async () => {
     const { root } = await openWithGuide(server({ status: 200, body: [unused, reported] }));
 
     expect(guide(root)).toBeNull();

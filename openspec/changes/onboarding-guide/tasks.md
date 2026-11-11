@@ -88,20 +88,21 @@
 
 ## 7. Review fixes: code-review cleanups
 
-- [ ] 7.1 Connect's done-ness stays on `lastUsedAt`, as D3 has it. The token being used by any call counts, not only
+- [x] 7.1 Connect's done-ness stays on `lastUsedAt`, as D3 has it. The token being used by any call counts, not only
   a report (Emmz, 2026-11-11). Reword machine-setup's "Steps marked done" and "Guide on the Projects page"
   requirements and scenarios from "has reported" to "has been used", and note in D3 that this is a stand-in. Verify
   with `make validate`.
-- [ ] 7.2 Move `SETUP_GUIDE_HIDDEN_KEY` from `projects.ts` to `setupGuide.ts`, and import it from there in
+- [x] 7.2 Move `SETUP_GUIDE_HIDDEN_KEY` from `projects.ts` to `setupGuide.ts`, and import it from there in
   `projects.ts` and both test files. Verify with `make web-test`.
-- [ ] 7.3 `serverUrl` returns `new URL("/", manifest.installSh)`'s origin instead of regex-replacing `/install.sh`,
-  and the fallback takes `env.location.origin` as it is, without the trailing-slash strip. Fix D2's wording to
-  match, and update its unit test, adding a case for an `installSh` with a query string. Verify with
-  `make web-test`.
-- [ ] 7.4 Add one `copyButton(env, text: () => string)` helper that returns the Copy button and its status line.
+- [x] 7.3 `serverUrl` returns `new URL(".", manifest.installSh)` without its trailing slash, instead of
+  regex-replacing `/install.sh`, so a public URL's path is kept and a query string is dropped. (Not the origin: the
+  server builds `installSh` on a `PublicUrl` that may carry a path.) The fallback takes `env.location.origin` as it
+  is, without the trailing-slash strip. Fix D2's wording to match, and update its unit test, adding cases for a
+  query string and a path base. Verify with `make web-test`.
+- [x] 7.4 Add one `copyButton(env, text: () => string)` helper that returns the Copy button and its status line.
   Use it in `copyable()`, in the install step and in `projects.ts`'s `linkBlock`. Rename the `mark` local in
   `step()` so it no longer shadows `mark()`. Verify with `make web-test` (the existing copy tests still pass).
-- [ ] 7.5 `CliCatalogue` takes Last-Modified from a `FileInfo` read alongside the hash, so a missing file throws
+- [x] 7.5 `CliCatalogue` takes Last-Modified from a `FileInfo` read alongside the hash, so a missing file throws
   instead of recording 1601. Verify with `make test`.
 
 ## Workflow follow-up

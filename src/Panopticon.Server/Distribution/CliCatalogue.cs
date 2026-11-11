@@ -76,7 +76,9 @@ public sealed partial class CliCatalogue
             {
                 using var stream = File.OpenRead(path);
                 var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
-                builds[platform] = new CliBuild(platform, fileName, path, stream.Length, sha256, File.GetLastWriteTimeUtc(path));
+                // From the open handle, so the time is the hashed file's, and a file gone by now can't give 1601.
+                var lastModified = File.GetLastWriteTimeUtc(stream.SafeFileHandle);
+                builds[platform] = new CliBuild(platform, fileName, path, stream.Length, sha256, lastModified);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

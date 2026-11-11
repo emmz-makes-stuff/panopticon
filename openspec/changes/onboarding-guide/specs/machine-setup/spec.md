@@ -56,7 +56,8 @@ The connect step SHALL also offer, behind one click, the settings for any MCP cl
 ### Requirement: Steps marked done
 The guide SHALL mark steps done from the member's own active tokens:
 - once they have any token, the install and log-in steps;
-- once any of their tokens has reported, the connect step too.
+- once any of their tokens has been used by an agent (a report, or any other call to the server, as its "last used"
+  time shows), the connect step too.
 
 A step marked done SHALL stay readable, so another machine can be set up from it.
 
@@ -64,24 +65,24 @@ A step marked done SHALL stay readable, so another machine can be set up from it
 - **WHEN** a member with no tokens opens the guide
 - **THEN** no step is marked done
 
-#### Scenario: Logged in, not yet reported
-- **WHEN** a member's only token has never been used to report
+#### Scenario: Logged in, not yet used
+- **WHEN** a member's only token has never been used
 - **THEN** install and log-in are marked done, and connect is not
 
-#### Scenario: Reported
-- **WHEN** one of a member's tokens has reported
+#### Scenario: Used
+- **WHEN** one of a member's tokens has been used
 - **THEN** all three steps are marked done, and each one's commands still show
 
 ### Requirement: Guide on the Tokens page
 The Tokens page SHALL always show the setup guide, whatever the member's tokens.
 
-#### Scenario: Member with reporting machines
-- **WHEN** a member whose tokens have all reported opens the Tokens page
+#### Scenario: Member with used tokens
+- **WHEN** a member whose tokens have all been used opens the Tokens page
 - **THEN** the guide shows there, with every step marked done
 
 ### Requirement: Guide on the Projects page
-The Projects page SHALL show the setup guide while none of the member's tokens has reported. It SHALL offer a way to
-hide it, which this browser remembers, and SHALL NOT show the guide once a token has reported.
+The Projects page SHALL show the setup guide while none of the member's tokens has been used. It SHALL offer a way to
+hide it, which this browser remembers, and SHALL NOT show the guide once a token has been used.
 
 #### Scenario: New member
 - **WHEN** a member with no tokens opens the Projects page
@@ -91,6 +92,6 @@ hide it, which this browser remembers, and SHALL NOT show the guide once a token
 - **WHEN** a member hides the guide on the Projects page and later opens it again in the same browser
 - **THEN** the guide doesn't show there, and still shows on the Tokens page
 
-#### Scenario: Reporting member
-- **WHEN** one of a member's tokens has reported
+#### Scenario: Member already set up
+- **WHEN** one of a member's tokens has been used
 - **THEN** the Projects page doesn't show the guide

@@ -189,7 +189,7 @@ That gives the Projects pages their one deliberate thing, the **code plate**. Ev
 quiet voice, as above.
 
 For a first run, the Projects list page opens with the setup guide (see "Setup guide"), above the list, with Hide. It
-shows until one of your tokens has reported, or until it's hidden in this browser.
+shows until one of your tokens has been used, or until it's hidden in this browser.
 
 ```
 Projects

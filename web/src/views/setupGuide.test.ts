@@ -170,7 +170,7 @@ describe("setup guide", () => {
     ]);
   });
 
-  it("Logged in, not yet reported: install and log in are done, connect isn't", async () => {
+  it("Logged in, not yet used: install and log in are done, connect isn't", async () => {
     const { root } = await openTokens(() => [fresh]);
 
     expect(done(root)).toEqual([true, true, false]);
@@ -179,7 +179,7 @@ describe("setup guide", () => {
     ).toEqual([false, false, true]);
   });
 
-  it("Reported: all three are done, and their commands still show (Guide on the Tokens page)", async () => {
+  it("Used: all three are done, and their commands still show (Member with used tokens)", async () => {
     const { root } = await openTokens(() => [reported]);
 
     expect(done(root)).toEqual([true, true, true]);
@@ -202,10 +202,18 @@ describe("setup guide", () => {
     expect(done(root)).toEqual([true, true, false]);
   });
 
-  it("serverUrl drops install.sh, and a trailing slash from the fallback", () => {
+  it("serverUrl is the URL install.sh sits in, keeping a path base and dropping a query", () => {
+    expect(serverUrl(manifestFor("https://x.example"), "https://ignored")).toBe(
+      "https://x.example",
+    );
     expect(serverUrl(manifestFor("https://x.example/base"), "https://ignored")).toBe(
       "https://x.example/base",
     );
-    expect(serverUrl(null, "https://panopticon.test/")).toBe("https://panopticon.test");
+    const withQuery = {
+      ...manifestFor("https://x.example/base"),
+      installSh: "https://x.example/base/install.sh?v=2",
+    };
+    expect(serverUrl(withQuery, "https://ignored")).toBe("https://x.example/base");
+    expect(serverUrl(null, "https://panopticon.test")).toBe("https://panopticon.test");
   });
 });

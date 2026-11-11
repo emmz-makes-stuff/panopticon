@@ -153,7 +153,8 @@ public class CliEndpointTests(PostgresFixture postgres, S3Fixture s3)
 
         using var first = await http.GetAsync("/cli/linux-x64/panopticon", Ct);
         Assert.Equal($"\"{builds.Sha256(CliPlatforms.LinuxX64)}\"", first.Headers.ETag?.Tag);
-        Assert.NotNull(first.Content.Headers.LastModified);
+        // The build file's own write time, never File.GetLastWriteTimeUtc's 1601 for a file it can't find.
+        Assert.True(first.Content.Headers.LastModified > new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero));
         Assert.True(first.Headers.CacheControl?.NoCache);
 
         using var again = new HttpRequestMessage(HttpMethod.Get, "/cli/linux-x64/panopticon");
