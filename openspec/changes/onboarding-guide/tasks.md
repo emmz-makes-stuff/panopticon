@@ -56,7 +56,7 @@
 
 ## 4. Docs
 
-- [ ] 4.1 `docs/cli.md` gets the plugin route in its "Claude Code" section: the marketplace add, the install and
+- [x] 4.1 `docs/cli.md` gets the plugin route in its "Claude Code" section: the marketplace add, the install and
   `/panopticon:setup`, ahead of the `.mcp.json` and `claude mcp add` alternatives. Its "Install" section mentions the
   guide on the Tokens page. `README.md`'s Reporting progress section gets the three steps. Verify by reading both
   against the spec delta, and check that every command matches a constant in `setupGuide.ts`.
