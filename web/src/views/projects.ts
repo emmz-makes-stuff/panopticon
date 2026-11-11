@@ -1,5 +1,6 @@
 import { ApiError, type Api } from "../api";
 import { alertLine, button, el, field, page, routeLink, selectField } from "../dom";
+import { PROJECT_TAGS_CHANGED, parseProjectTagsChange, type EventSourceLike } from "../live";
 import { codePlate } from "../projectLabel";
 import { tagChip, tagText } from "../tagChips";
 import type { View } from "../router";
@@ -474,28 +475,105 @@ export function projectView(env: Env): View {
     const body = el("div", "project-body");
     const plate = el("p", "project-plate");
     const heading = el("h2", undefined, "Project");
-    async function load(): Promise<void> {
+    // The Tags section as last rendered: a live update redraws just its rows (project-page-live-tags D2).
+    let tags: TagSection | undefined;
+    let stream: EventSourceLike | undefined;
+    let left = false;
+    // D3: every fetch of the page takes a ticket, and a live refresh applies only if no newer one has started.
+    let ticket = 0;
+
+    /** Not a member (any more): the page says so, as a reload would, and stops following the stream. */
+    function notFound(): void {
+      stopFollowing();
+      root.replaceChildren(
+        page(
+          "There's no such Project",
+          back,
+          el("p", undefined, "It may have been removed, or you're not one of its members."),
+        ),
+      );
+    }
+
+    /** Loads and renders the whole page; true when it rendered. */
+    async function load(): Promise<boolean> {
+      ++ticket;
       let details: ProjectDetails;
       try {
         details = await env.api.get<ProjectDetails>(path);
       } catch (failure) {
+        if (left) {
+          return false;
+        }
+
         if (failure instanceof ApiError && failure.status === 404) {
-          root.replaceChildren(
-            page(
-              "There's no such Project",
-              back,
-              el("p", undefined, "It may have been removed, or you're not one of its members."),
-            ),
-          );
-          return;
+          notFound();
+          return false;
         }
 
         loadError.show(failureText(failure));
-        return;
+        return false;
+      }
+
+      if (left) {
+        return false;
       }
 
       loadError.clear();
       render(details);
+      return true;
+    }
+
+    // D1: the event has no counts, so the Project is fetched again, and only its tags are used.
+    function refreshTags(): void {
+      const mine = ++ticket;
+      env.api.get<ProjectDetails>(path).then(
+        (details) => {
+          if (mine === ticket && !left) {
+            tags?.redraw(details);
+          }
+        },
+        (failure: unknown) => {
+          if (mine !== ticket || left) {
+            return;
+          }
+
+          if (failure instanceof ApiError && failure.status === 404) {
+            notFound();
+          }
+
+          // Otherwise the rows stay as they are; the next event or reconnect tries again.
+        },
+      );
+    }
+
+    // D4: opened once the first load has rendered, and closed when the page is left.
+    function follow(): void {
+      const create = env.createEventSource ?? ((url: string) => new EventSource(url));
+      const source = create("/api/events");
+      stream = source;
+      let opened = false;
+      // A reconnect may have missed events, so it catches up; the first open needs nothing.
+      source.onopen = () => {
+        if (opened) {
+          refreshTags();
+        }
+
+        opened = true;
+      };
+      source.onerror = () => {
+        // The browser retries by itself; the page keeps its rows meanwhile.
+      };
+      source.addEventListener(PROJECT_TAGS_CHANGED, (event) => {
+        const change = parseProjectTagsChange(event.data);
+        if (change?.projectId.toLowerCase() === projectId.toLowerCase()) {
+          refreshTags();
+        }
+      });
+    }
+
+    function stopFollowing(): void {
+      stream?.close();
+      stream = undefined;
     }
 
     function render(project: ProjectDetails): void {
@@ -511,8 +589,16 @@ export function projectView(env: Env): View {
         children.push(renameForm(project));
       }
 
-      const tags = projectTagSection(
-        { api: env.api, path, confirm: env.confirm, status, reload: load },
+      tags = projectTagSection(
+        {
+          api: env.api,
+          path,
+          confirm: env.confirm,
+          status,
+          reload: async () => {
+            await load();
+          },
+        },
         project,
       );
       children.push(
@@ -760,6 +846,13 @@ export function projectView(env: Env): View {
     root.replaceChildren(
       el("section", "page project-page", back, plate, heading, status, loadError.element, body),
     );
-    await load();
+    if (await load()) {
+      follow();
+    }
+
+    return () => {
+      left = true;
+      stopFollowing();
+    };
   };
 }

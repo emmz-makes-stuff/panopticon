@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApi } from "../api";
-import { MEMBER, fakeServer, q, until, type FakeServer } from "../testing";
+import { PROJECT_TAGS_CHANGED } from "../live";
+import { FakeEventSource, MEMBER, fakeServer, q, settle, until, type FakeServer } from "../testing";
 import { signedIn, startTestShell, type TestShellOptions } from "../testShell";
 import { codePlate } from "../projectLabel";
 import {
@@ -858,6 +859,260 @@ describe("projectTagSection redraw", () => {
 
     redraw([BUG]);
     expect(help()).toBe("A key, or a key and a value: bug, or area: onboarding.");
+  });
+});
+
+// Spec tags, "The Project page's tags are live" and "The Project page catches up after a reconnect"
+// (project-page-live-tags D1, D3, D4).
+describe("/projects/{id} live tags", () => {
+  const AREA = projectTag("t1", "area", "onboarding", 3);
+  const BUG = projectTag("t2", "bug", null, 12);
+  const tagsEvent = (tags: ProjectTag[], projectId = PAN_ID) =>
+    JSON.stringify({
+      projectId,
+      tags: tags.map(({ id, key, value }) => ({ id, key, value })),
+    });
+
+  beforeEach(() => {
+    FakeEventSource.instances.length = 0;
+  });
+
+  const openStreams = () =>
+    FakeEventSource.instances.filter((s) => s.url === "/api/events" && !s.closed);
+
+  const rows = (root: HTMLElement) =>
+    [...root.querySelectorAll(".project-tag")].map(
+      (row) =>
+        `${row.querySelector(".tag-chip")?.textContent} (${row.querySelector(".project-tag-count")?.textContent})`,
+    );
+
+  /**
+   * A server whose Project page reflects `state`, as the server would after another member's edit. `hold()` makes
+   * the next page fetch answer only on `release()`, with the state it had when asked.
+   */
+  function liveServer(role: Project["role"], state: { tags: ProjectTag[]; gone?: boolean }) {
+    const server = signedIn().on("GET", PATH, () =>
+      state.gone
+        ? { status: 404, body: { detail: "Not found." } }
+        : { status: 200, body: details(role, [emmz, sam], state.tags) },
+    );
+    let holdNext = false;
+    const held: (() => void)[] = [];
+    const fetch = Object.assign(
+      (input: string, init?: RequestInit) => {
+        const answer = server(input, init);
+        if (holdNext && (init?.method ?? "GET") === "GET" && input === PATH) {
+          holdNext = false;
+          return new Promise<Response>((resolve) => held.push(() => resolve(answer)));
+        }
+
+        return answer;
+      },
+      { calls: server.calls, on: server.on, to: server.to },
+    ) as FakeServer;
+    return {
+      fetch,
+      pageFetches: () => server.to("GET", PATH).length,
+      hold: () => {
+        holdNext = true;
+      },
+      release: () => held.shift()?.(),
+    };
+  }
+
+  async function open(server: ReturnType<typeof liveServer>) {
+    const shell = await startTestShell(`/projects/${PAN_ID}`, server.fetch);
+    await until(() => shell.root.querySelector(".project-tags") !== null);
+    const source = FakeEventSource.latest();
+    source.open();
+    return { ...shell, source };
+  }
+
+  it("A rename by someone else shows in its sorted place, with its count, without a reload", async () => {
+    const state = { tags: [AREA, BUG] };
+    const server = liveServer("viewer", state);
+    const { root, source } = await open(server);
+
+    state.tags = [BUG, projectTag("t1", "zone", null, 3)];
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent(state.tags));
+    await until(() => rows(root)[0] === "PAN/bug (12 changes)");
+
+    expect(rows(root)).toEqual(["PAN/bug (12 changes)", "PAN/zone (3 changes)"]);
+  });
+
+  it("An add from a change's page shows with its count, for a viewer", async () => {
+    const state = { tags: [BUG] };
+    const server = liveServer("viewer", state);
+    const { root, source } = await open(server);
+
+    state.tags = [projectTag("t9", "area", "billing", 1), BUG];
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent(state.tags));
+    await until(() => rows(root).length === 2);
+
+    expect(rows(root)[0]).toBe("PAN/area: billing (1 change)");
+  });
+
+  it("A delete: the tag leaves the list", async () => {
+    const state = { tags: [AREA, BUG] };
+    const server = liveServer("editor", state);
+    const { root, source } = await open(server);
+
+    state.tags = [AREA];
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent(state.tags));
+    await until(() => rows(root).length === 1);
+
+    expect(rows(root)).toEqual(["PAN/area: onboarding (3 changes)"]);
+  });
+
+  it("Another Project's tags: nothing is fetched, and the page doesn't change", async () => {
+    const server = liveServer("viewer", { tags: [BUG] });
+    const { root, source } = await open(server);
+    const before = server.pageFetches();
+
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent([], "acme-id"));
+    await settle();
+
+    expect(server.pageFetches()).toBe(before);
+    expect(rows(root)).toEqual(["PAN/bug (12 changes)"]);
+  });
+
+  it("the Project's id matches without regard to case", async () => {
+    const state = { tags: [BUG] };
+    const server = liveServer("viewer", state);
+    const { root, source } = await open(server);
+
+    state.tags = [];
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent(state.tags, PAN_ID.toUpperCase()));
+    await until(() => rows(root).length === 0);
+
+    expect(rows(root)).toEqual([]);
+  });
+
+  it("a malformed event is ignored", async () => {
+    const server = liveServer("viewer", { tags: [BUG] });
+    const { source } = await open(server);
+    const before = server.pageFetches();
+
+    source.emit(PROJECT_TAGS_CHANGED, "not json");
+    source.emit(PROJECT_TAGS_CHANGED, JSON.stringify({ projectId: PAN_ID }));
+    await settle();
+
+    expect(server.pageFetches()).toBe(before);
+  });
+
+  it("The rest of the page stays put: typed invite and add-tag text survive a live update", async () => {
+    const state = { tags: [BUG] };
+    const server = liveServer("owner", state);
+    const { root, source } = await open(server);
+    const email = q<HTMLInputElement>(root, ".invite-form input[type=email]");
+    const add = q<HTMLInputElement>(root, ".tag-add-form input");
+    email.value = "lee@exa";
+    add.value = "area: bil";
+
+    state.tags = [projectTag("t9", "area", "billing", 1), BUG];
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent(state.tags));
+    await until(() => rows(root).length === 2);
+
+    expect(q(root, ".invite-form input[type=email]")).toBe(email);
+    expect(email.value).toBe("lee@exa");
+    expect(q(root, ".tag-add-form input")).toBe(add);
+    expect(add.value).toBe("area: bil");
+  });
+
+  it("an older answer arriving after a newer one doesn't overwrite it", async () => {
+    const state = { tags: [BUG] };
+    const server = liveServer("viewer", state);
+    const { root, source } = await open(server);
+
+    server.hold();
+    state.tags = [projectTag("t1", "area", "one", 0), BUG];
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent(state.tags));
+    state.tags = [projectTag("t1", "area", "two", 0), BUG];
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent(state.tags));
+    await until(() => rows(root)[0] === "PAN/area: two (No changes)");
+
+    server.release();
+    await settle();
+
+    expect(rows(root)[0]).toBe("PAN/area: two (No changes)");
+  });
+
+  it("a refresh that fails keeps the rows as they are", async () => {
+    const server = liveServer("viewer", { tags: [BUG] });
+    const { root, source } = await open(server);
+    server.fetch.on("GET", PATH, { status: 500, body: { detail: "Boom." } });
+    const before = server.pageFetches();
+
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent([]));
+    await settle();
+
+    expect(server.pageFetches()).toBe(before + 1);
+    expect(rows(root)).toEqual(["PAN/bug (12 changes)"]);
+    expect(source.closed).toBe(false);
+  });
+
+  it("removed from the Project meanwhile: a refresh's 404 says it's not found, and the stream closes", async () => {
+    const state: { tags: ProjectTag[]; gone?: boolean } = { tags: [BUG] };
+    const server = liveServer("viewer", state);
+    const { heading, source } = await open(server);
+
+    state.gone = true;
+    source.emit(PROJECT_TAGS_CHANGED, tagsEvent([]));
+    await until(() => heading() === "There's no such Project");
+
+    expect(source.closed).toBe(true);
+  });
+
+  it("a first load that 404s opens no stream", async () => {
+    const server = liveServer("viewer", { tags: [], gone: true });
+    const { heading } = await startTestShell(`/projects/${PAN_ID}`, server.fetch);
+    await until(() => heading() === "There's no such Project");
+
+    expect(openStreams()).toHaveLength(0);
+  });
+
+  it("the first open fetches nothing more", async () => {
+    const server = liveServer("viewer", { tags: [BUG] });
+    await open(server);
+    await settle();
+
+    expect(server.pageFetches()).toBe(1);
+  });
+
+  it("Missed while offline: a reconnect refetches once and shows a tag added meanwhile", async () => {
+    const state = { tags: [BUG] };
+    const server = liveServer("viewer", state);
+    const { root, source } = await open(server);
+
+    source.fail(0);
+    state.tags = [projectTag("t9", "area", "billing", 0), BUG];
+    source.open();
+    await until(() => rows(root).length === 2);
+
+    expect(rows(root)[0]).toBe("PAN/area: billing (No changes)");
+    expect(server.pageFetches()).toBe(2);
+  });
+
+  it("a stream error changes nothing on the page, and opens no new stream", async () => {
+    const server = liveServer("viewer", { tags: [BUG] });
+    const { root, source } = await open(server);
+
+    source.fail(2);
+    await settle();
+
+    expect(rows(root)).toEqual(["PAN/bug (12 changes)"]);
+    expect(root.querySelector("[role=alert]")?.textContent ?? "").toBe("");
+    expect(FakeEventSource.instances.filter((s) => s.url === "/api/events")).toHaveLength(1);
+    expect(server.pageFetches()).toBe(1);
+  });
+
+  it("leaving the page closes its stream", async () => {
+    const server = liveServer("viewer", { tags: [BUG] });
+    const { shell, source } = await open(server);
+
+    await shell.router?.navigate("/projects");
+
+    expect(source.closed).toBe(true);
   });
 });
 
