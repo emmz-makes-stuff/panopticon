@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { until, type FakeServer, q } from "../testing";
 import { signedIn, startTestShell } from "../testShell";
 import type { Token } from "./tokens";
-import type { CliManifest } from "./installCli";
+import type { CliManifest } from "./setupGuide";
 
 const vm1: Token = {
   id: "t1",
@@ -115,12 +115,15 @@ function choice(root: HTMLElement, label: string): HTMLButtonElement {
   return found;
 }
 
-// Spec cli-distribution: "Install hint on the Tokens page" (design D8).
-describe("/tokens install panel", () => {
+// Spec cli-distribution: "Install hint on the Tokens page", now the setup guide's first step (onboarding-guide D1).
+describe("/tokens setup guide: install step", () => {
   it("shows the sh command to a visitor on macOS, with its version", async () => {
     const { root } = await openInstall({ platform: "macOS" });
 
-    expect(root.querySelector(".install-cli h3")?.textContent).toBe("Install the CLI");
+    expect(root.querySelector(".setup-guide h3")?.textContent).toBe("Set up a machine");
+    expect(root.querySelector(".setup-step .setup-step-title")?.textContent).toContain(
+      "Install the CLI",
+    );
     expect(command(root)).toBe(SH);
     expect(pressed(root)).toEqual(["macOS and Linux"]);
     expect(root.querySelector(".install-cli-version")?.textContent).toBe(

@@ -18,7 +18,7 @@
 
 ## 2. Setup guide on the Tokens page
 
-- [ ] 2.1 Create `web/src/views/setupGuide.ts` from `installCli.ts`, and delete `installCli.ts`. It has three numbered
+- [x] 2.1 Create `web/src/views/setupGuide.ts` from `installCli.ts`, and delete `installCli.ts`. It has three numbered
   steps (spec machine-setup):
   - Install: the existing tabs, copy and no-builds note.
   - Log in: `panopticon login --server <url>`, with the server from the manifest's `installSh` origin, or
@@ -32,12 +32,12 @@
   - the no-builds install step, with the other two steps still shown;
   - each command copies exactly its constant;
   - done marks for no tokens, a token never used, and a token that has reported.
-- [ ] 2.2 The Tokens page shows the guide in place of the old panel, passes it the loaded tokens, and re-renders it
+- [x] 2.2 The Tokens page shows the guide in place of the old panel, passes it the loaded tokens, and re-renders it
   after a revoke. Verify with `tokens.test.ts`:
   - the guide shows with every step done when all tokens have reported;
   - revoking the only reported token un-marks connect;
   - the existing install-panel tests still pass, moved to the guide.
-- [ ] 2.3 Run the `frontend-design` pass on the guide (D9). Update `web/DESIGN.md` with a "Setup guide" section that
+- [x] 2.3 Run the `frontend-design` pass on the guide (D9). Update `web/DESIGN.md` with a "Setup guide" section that
   replaces the "Tokens: Install the CLI" bullet, and add the styles to `styles.css`. Verify with `make web-build`,
   `make web-lint` and `make web-format` green, and that the section matches what renders.
 
