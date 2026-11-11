@@ -175,12 +175,16 @@ Not built: the Project page's Tags list doesn't update live (deferred by Emmz, 2
 
 ## Open questions & ambiguities
 
-- **Which metrics?** Metrics are in v1, but not defined yet. Candidates: velocity (tasks/day), time
-  per section, time to archive, per-person or per-repo throughput, trends over history. Where do they
-  live: on cards, in the drill-down, or on a separate view?
+- ~~**Which metrics?**~~ _Resolved by the `change-metrics` change (2026-11-09): Emmz chose time per
+  section and time to archive. They show in a panel on the change page, and team-wide on a `/metrics`
+  page (counts, medians, a weekly chart and the slowest sections)._
 - ~~**How does the server learn of an archive?**~~ _Resolved by ADR-0001: the CLI's local MCP bridge
   notices when the change moves to `archive/` and reports it._
-- **"Or whatever"**: other filters wanted, e.g. by person, by agent type, by machine, by status
-  (active/idle)?
-- **How long is "quiet"?** What threshold marks a card idle/stale?
-- **"That sort of thing"**: what else does the CLI do beyond setup and sync?
+- ~~**"Or whatever"**: other filters wanted?~~ _Resolved by the `filters-and-idle-cards` change
+  (2026-11-09): repo, owner/org, person, machine, agent type and (dashboard only) status, plus Tags
+  since the `tags` change. Filters combine and go in the URL._
+- ~~**How long is "quiet"?**~~ _Resolved by the `filters-and-idle-cards` change: idle after 30
+  minutes, stale after 4 hours by default, set by `Panopticon:Activity` on the server._
+- ~~**"That sort of thing"**: what else does the CLI do beyond setup and sync?~~ _Closed by Emmz
+  (2026-11-11): what was built answers it. That's login, linking a repo to a Project, personal tags,
+  the MCP bridge and archive reporting. See `docs/cli.md`._
