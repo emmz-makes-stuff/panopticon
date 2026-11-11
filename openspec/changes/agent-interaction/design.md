@@ -51,13 +51,23 @@ run from one wrapper script in the plugin. The wrapper exits 0 when `panopticon`
 | --- | --- | --- | --- | --- |
 | `PreToolUse` | everything but `AskUserQuestion` | async | 10s | working + activity |
 | `PreToolUse` | `AskUserQuestion` | sync | 30000s | waiting on a question; holds it when away (D6) |
-| `PermissionRequest` | all | sync | 30000s | waiting on a permission; holds it when away (D6) |
+| `PermissionRequest` | all but `AskUserQuestion` | sync | 30000s | waiting on a permission; holds it when away (D6) |
 | `PostToolUse` | all | async | 10s | working (clears a wait) |
 | `Stop` | | async | 10s | waiting on the user |
 | `UserPromptSubmit` | | async | 10s | working |
 | `SessionEnd` | | async | 10s | session removed |
 
 The existing `tasks-changed.sh` `PostToolUse` hook stays as it is.
+
+**Found in §1 (Claude Code 2.1.322):**
+
+- Claude Code raises a `PermissionRequest` for every `AskUserQuestion` that a `PreToolUse` hook doesn't answer, at
+  the same moment as the `PreToolUse`. The permission entry excludes it, and `panopticon hook` also ignores a
+  `PermissionRequest` whose `tool_name` is `AskUserQuestion`, in case the matcher misses. Otherwise every question
+  would be posted twice.
+- A question that the `PreToolUse` hook answers raises no `PermissionRequest`.
+- Bash commands that the sandbox auto-approves raise no `PermissionRequest` at all, so they never reach the
+  dashboard.
 
 **Alternative:** MCP tools that the agent calls (`set_activity`, `ask`). Rejected: an agent that's waiting can't
 call a tool to say so, and asking it to report activity costs tokens and gets forgotten. **Alternative:** one
@@ -139,6 +149,10 @@ loops on `wait`:
 - `answered`: write the hook output (D7) and exit 0.
 - `released`, a 404, an 8-hour total, or no successful `wait` for 60s: exit 0 with no output, and the terminal asks.
 
+A denied tool gets no `PostToolUse` (seen in §1). So when the server records a web answer, it clears the session's
+wait itself, setting it to working. A deny in the terminal is cleared by the session's next `PreToolUse`, `Stop` or
+`UserPromptSubmit`.
+
 On the server, a held prompt is released when the member turns away off (all their held prompts at once), after 8
 hours, or when no `wait` call has come for 90s (the hook is gone). Answering is a compare-and-set on the prompt's
 state under a lock, so exactly one answer wins (spec: Two answers at once). The hook's 30000s timeout is longer than
@@ -153,8 +167,14 @@ the 8 hours, so the CLI always gives up before Claude Code kills it.
   with no `updatedPermissions`, so nothing is remembered.
 - **Permission denied:** `decision: {behavior: "deny", message: "Denied by <name> via Panopticon: <message>"}`.
 
-§1 confirms these shapes against a real Claude Code before §5 builds them. If they differ, §1's devlog note records
-the real ones, and this decision gets amended there.
+**Confirmed in §1** against Claude Code 2.1.322, exactly as above:
+
+- The agent received the injected answers (`{"[auto] Pick one":"Red","[auto] Pick some":"Hooks, Web"}`) and the
+  `additionalContext`, and the terminal asked nothing. The terminal's own multiple-choice answers use the same
+  `", "` join.
+- A permission allow ran the tool once and saved no permission rule.
+- A deny stopped the tool, and the agent got the message as the tool's error.
+- A sync hook with `timeout: 30000` held for 900s without being killed. The full 8 hours wasn't tested.
 
 ### D8. Away flag and the answer record
 
@@ -221,4 +241,6 @@ share an entry. That is accepted (see Risks).
 
 ## Open Questions
 
-- The minimum Claude Code version to name in the plugin's README. §1 finds it.
+- Whether a sync hook can hold for the full 8 hours. §1 showed 15 minutes. The CLI gives up at 8 hours whatever
+  happens, so a lower cap in Claude Code would only send the prompt back to the terminal sooner. The plugin's README
+  names 2.1.322, the version tested in §1, as the minimum.
