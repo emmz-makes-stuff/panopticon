@@ -1,5 +1,6 @@
-import { ApiError } from "../api";
+import { ApiError, type Api } from "../api";
 import { alertLine, button, el, field, page, routeLink, selectField } from "../dom";
+import { PROJECT_TAGS_CHANGED, parseProjectTagsChange, type EventSourceLike } from "../live";
 import { codePlate } from "../projectLabel";
 import { tagChip, tagText } from "../tagChips";
 import type { View } from "../router";
@@ -177,6 +178,288 @@ export function projectsView(env: Env): View {
   };
 }
 
+/** What the Project page's Tags section needs from the page around it. */
+export interface TagSectionDeps {
+  api: Api;
+  /** The Project's API path, `/api/projects/{id}`. */
+  path: string;
+  confirm: (message: string) => boolean;
+  /** The page's status line, for "Added …", "Renamed …", "Deleted …" and "… was deleted." */
+  status: HTMLElement;
+  /** Reloads the whole page, after the section's own writes. */
+  reload: () => Promise<void>;
+}
+
+/** The Project page's Tags section (web/DESIGN.md "Tags"). */
+export interface TagSection {
+  element: HTMLElement;
+  /**
+   * Shows `project`'s tags in place (project-page-live-tags D2): the rest of the section stays, and so does a row
+   * being renamed whose tag is still there. The role is the one the section was built with.
+   */
+  redraw(project: ProjectDetails): void;
+}
+
+interface TagRow {
+  item: HTMLLIElement;
+  /** True while the row shows its rename form. */
+  renaming(): boolean;
+  /** Gives the row the tag as it is now; a row being renamed keeps its form. */
+  update(tag: ProjectTag): void;
+  /** Its tag with the code, e.g. "PAN/bug". */
+  text(): string;
+}
+
+/**
+ * Puts `children` in `parent` in order, moving as few nodes as it can, so a row being edited usually isn't moved at
+ * all. Moving a node blurs whatever has focus inside it, so focus (and an input's selection) is put back after.
+ */
+function arrange(parent: HTMLElement, children: readonly HTMLElement[]): void {
+  const active = document.activeElement;
+  const focused = active instanceof HTMLElement && parent.contains(active) ? active : null;
+  const selection =
+    focused instanceof HTMLInputElement
+      ? { start: focused.selectionStart, end: focused.selectionEnd }
+      : null;
+
+  let cursor = parent.firstChild;
+  for (const child of children) {
+    if (child === cursor) {
+      cursor = cursor.nextSibling;
+    } else {
+      parent.insertBefore(child, cursor);
+    }
+  }
+
+  while (cursor) {
+    const next = cursor.nextSibling;
+    cursor.remove();
+    cursor = next;
+  }
+
+  if (focused?.isConnected && document.activeElement !== focused) {
+    focused.focus();
+    if (selection && focused instanceof HTMLInputElement) {
+      focused.setSelectionRange(selection.start, selection.end);
+    }
+  }
+}
+
+// web/DESIGN.md "Tags": everyone sees the list and counts; owners and editors add, rename and delete.
+export function projectTagSection(deps: TagSectionDeps, initial: ProjectDetails): TagSection {
+  const { code } = initial;
+  const canManage = initial.role === "owner" || initial.role === "editor";
+  const section = el("section", "project-tags");
+  const heading = el("h3", undefined, "Tags");
+  const empty = el(
+    "p",
+    "project-tags-empty",
+    canManage
+      ? `${code} has no tags yet. Add one here, or from a change's page.`
+      : `${code} has no tags yet.`,
+  );
+  const error = alertLine();
+  const list = el("ul", "member-list project-tag-list");
+  list.setAttribute("aria-label", `${code}'s tags`);
+  const hint = el("p", "project-tags-hint", "Owners and editors manage these tags.");
+  const add = canManage ? addTagForm() : undefined;
+  let rows = new Map<string, TagRow>();
+
+  function redraw(project: ProjectDetails): void {
+    const next = new Map<string, TagRow>();
+    for (const tag of project.tags) {
+      const id = tag.id.toLowerCase();
+      const kept = rows.get(id);
+      if (kept?.renaming()) {
+        kept.update(tag);
+        next.set(id, kept);
+      } else {
+        next.set(id, tagRow(tag));
+      }
+    }
+
+    // D2: a tag deleted while its rename form was open goes, and the page says so.
+    for (const [id, row] of rows) {
+      if (row.renaming() && !next.has(id)) {
+        deps.status.textContent = `${row.text()} was deleted.`;
+      }
+    }
+
+    rows = next;
+    arrange(
+      list,
+      [...next.values()].map((row) => row.item),
+    );
+    const parts: HTMLElement[] = [heading];
+    if (project.tags.length === 0) {
+      error.clear();
+      parts.push(empty);
+    } else {
+      parts.push(list, error.element);
+      if (!canManage) {
+        parts.push(hint);
+      }
+    }
+
+    if (add) {
+      add.update(project.tags.length);
+      parts.push(add.form);
+    }
+
+    arrange(section, parts);
+  }
+
+  function tagRow(initialTag: ProjectTag): TagRow {
+    let tag = initialTag;
+    let renaming = false;
+    const name = () => tagText(tag, code);
+    const item = el("li", "member project-tag");
+    const show = () => {
+      renaming = false;
+      item.replaceChildren(
+        tagChip(tag, code, false),
+        el("span", "project-tag-count", changeCount(tag.changeCount)),
+      );
+      if (canManage) {
+        item.append(
+          el(
+            "span",
+            "project-tag-actions",
+            button("Rename", rename, "danger-button"),
+            button("Delete", remove, "danger-button"),
+          ),
+        );
+      }
+    };
+
+    function rename(): void {
+      const before = name();
+      const { element, input } = field(`Rename ${before}`, { name: "tag", value: tag.text });
+      input.autocomplete = "off";
+      const save = el("button", "primary", "Save");
+      save.type = "submit";
+      const cancel = button("Cancel", () => {
+        show();
+        item.querySelector("button")?.focus();
+      });
+      const renameError = alertLine();
+      const form = el(
+        "form",
+        "rename-form tag-rename-form",
+        element,
+        save,
+        cancel,
+        renameError.element,
+      );
+      form.noValidate = true;
+      form.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancel.click();
+        }
+      });
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const text = input.value.trim();
+        if (!text) {
+          renameError.show("Enter the tag's new text.");
+          return;
+        }
+
+        renameError.clear();
+        const from = name();
+        deps.api
+          .send<ProjectTag>("PATCH", `${deps.path}/tags/${encodeURIComponent(tag.id)}`, {
+            tag: text,
+          })
+          .then(
+            async (renamed) => {
+              deps.status.textContent = `Renamed ${from} to ${tagText(renamed, code)}.`;
+              await deps.reload();
+            },
+            (failure: unknown) => renameError.show(failureText(failure)),
+          );
+      });
+      renaming = true;
+      item.replaceChildren(form);
+      input.focus();
+      input.select();
+    }
+
+    function remove(): void {
+      const current = name();
+      const question =
+        tag.changeCount === 0
+          ? `Delete ${current}? No changes carry it.`
+          : `${current} is on ${changeCount(tag.changeCount).toLowerCase()}. Delete it?`;
+      if (!deps.confirm(question)) {
+        return;
+      }
+
+      error.clear();
+      deps.api.send("DELETE", `${deps.path}/tags/${encodeURIComponent(tag.id)}`).then(
+        async () => {
+          deps.status.textContent = `Deleted ${current}.`;
+          await deps.reload();
+        },
+        (failure: unknown) => error.show(failureText(failure)),
+      );
+    }
+
+    function update(next: ProjectTag): void {
+      tag = next;
+      if (!renaming) {
+        show();
+      }
+    }
+
+    update(tag);
+    return { item, renaming: () => renaming, update, text: name };
+  }
+
+  function addTagForm(): { form: HTMLFormElement; update(count: number): void } {
+    const { element, input } = field("Tag", { name: "tag", autocomplete: "off" });
+    const help = el("span", "field-help");
+    help.id = "project-tag-help";
+    input.setAttribute("aria-describedby", help.id);
+    element.append(help);
+    const submit = el("button", "primary", "Add tag");
+    submit.type = "submit";
+    const formError = alertLine();
+    const form = el("form", "project-form tag-add-form", element, submit, formError.element);
+    form.noValidate = true;
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) {
+        formError.show("Enter a tag to add.");
+        return;
+      }
+
+      formError.clear();
+      deps.api.send<ProjectTag>("POST", `${deps.path}/tags`, { tag: text }).then(
+        async (added) => {
+          deps.status.textContent = `Added ${tagText(added, code)}.`;
+          await deps.reload();
+        },
+        (failure: unknown) => formError.show(failureText(failure)),
+      );
+    });
+    return {
+      form,
+      update(count) {
+        help.textContent =
+          count >= PROJECT_TAG_MAX
+            ? `${code} has ${PROJECT_TAG_MAX} tags, the most it can have.`
+            : "A key, or a key and a value: bug, or area: onboarding.";
+      },
+    };
+  }
+
+  redraw(initial);
+  return { element: section, redraw };
+}
+
 /**
  * `/projects/{id}` (spec projects, "Project page", "Inviting to a Project", "Changing roles and removing"): the
  * Project, its link file and its members. Owners rename it and manage members; anyone can leave.
@@ -192,29 +475,105 @@ export function projectView(env: Env): View {
     const body = el("div", "project-body");
     const plate = el("p", "project-plate");
     const heading = el("h2", undefined, "Project");
+    // The Tags section as last rendered: a live update redraws just its rows (project-page-live-tags D2).
+    let tags: TagSection | undefined;
+    let stream: EventSourceLike | undefined;
+    let left = false;
+    // D3: every fetch of the page takes a ticket, and a live refresh applies only if no newer one has started.
+    let ticket = 0;
 
-    async function load(): Promise<void> {
+    /** Not a member (any more): the page says so, as a reload would, and stops following the stream. */
+    function notFound(): void {
+      stopFollowing();
+      root.replaceChildren(
+        page(
+          "There's no such Project",
+          back,
+          el("p", undefined, "It may have been removed, or you're not one of its members."),
+        ),
+      );
+    }
+
+    /** Loads and renders the whole page; true when it rendered. */
+    async function load(): Promise<boolean> {
+      ++ticket;
       let details: ProjectDetails;
       try {
         details = await env.api.get<ProjectDetails>(path);
       } catch (failure) {
+        if (left) {
+          return false;
+        }
+
         if (failure instanceof ApiError && failure.status === 404) {
-          root.replaceChildren(
-            page(
-              "There's no such Project",
-              back,
-              el("p", undefined, "It may have been removed, or you're not one of its members."),
-            ),
-          );
-          return;
+          notFound();
+          return false;
         }
 
         loadError.show(failureText(failure));
-        return;
+        return false;
+      }
+
+      if (left) {
+        return false;
       }
 
       loadError.clear();
       render(details);
+      return true;
+    }
+
+    // D1: the event has no counts, so the Project is fetched again, and only its tags are used.
+    function refreshTags(): void {
+      const mine = ++ticket;
+      env.api.get<ProjectDetails>(path).then(
+        (details) => {
+          if (mine === ticket && !left) {
+            tags?.redraw(details);
+          }
+        },
+        (failure: unknown) => {
+          if (mine !== ticket || left) {
+            return;
+          }
+
+          if (failure instanceof ApiError && failure.status === 404) {
+            notFound();
+          }
+
+          // Otherwise the rows stay as they are; the next event or reconnect tries again.
+        },
+      );
+    }
+
+    // D4: opened once the first load has rendered, and closed when the page is left.
+    function follow(): void {
+      const create = env.createEventSource ?? ((url: string) => new EventSource(url));
+      const source = create("/api/events");
+      stream = source;
+      let opened = false;
+      // A reconnect may have missed events, so it catches up; the first open needs nothing.
+      source.onopen = () => {
+        if (opened) {
+          refreshTags();
+        }
+
+        opened = true;
+      };
+      source.onerror = () => {
+        // The browser retries by itself; the page keeps its rows meanwhile.
+      };
+      source.addEventListener(PROJECT_TAGS_CHANGED, (event) => {
+        const change = parseProjectTagsChange(event.data);
+        if (change?.projectId.toLowerCase() === projectId.toLowerCase()) {
+          refreshTags();
+        }
+      });
+    }
+
+    function stopFollowing(): void {
+      stream?.close();
+      stream = undefined;
     }
 
     function render(project: ProjectDetails): void {
@@ -230,9 +589,21 @@ export function projectView(env: Env): View {
         children.push(renameForm(project));
       }
 
+      tags = projectTagSection(
+        {
+          api: env.api,
+          path,
+          confirm: env.confirm,
+          status,
+          reload: async () => {
+            await load();
+          },
+        },
+        project,
+      );
       children.push(
         linkBlock(project),
-        tagSection(project),
+        tags.element,
         el("h3", undefined, "Members"),
         memberList(project, isOwner, me),
       );
@@ -302,175 +673,6 @@ export function projectView(env: Env): View {
         block,
         el("div", "copy-row", copy, copied),
       );
-    }
-
-    // web/DESIGN.md "Tags": everyone sees the list and counts; owners and editors add, rename and delete.
-    function tagSection(project: ProjectDetails): HTMLElement {
-      const canManage = project.role === "owner" || project.role === "editor";
-      const section = el("section", "project-tags", el("h3", undefined, "Tags"));
-      if (project.tags.length === 0) {
-        section.append(
-          el(
-            "p",
-            "project-tags-empty",
-            canManage
-              ? `${project.code} has no tags yet. Add one here, or from a change's page.`
-              : `${project.code} has no tags yet.`,
-          ),
-        );
-      } else {
-        const error = alertLine();
-        const list = el("ul", "member-list project-tag-list");
-        list.setAttribute("aria-label", `${project.code}'s tags`);
-        for (const tag of project.tags) {
-          list.append(tagRow(project, tag, canManage, error));
-        }
-
-        section.append(list, error.element);
-        if (!canManage) {
-          section.append(el("p", "project-tags-hint", "Owners and editors manage these tags."));
-        }
-      }
-
-      if (canManage) {
-        section.append(addTagForm(project));
-      }
-
-      return section;
-    }
-
-    function tagRow(
-      project: ProjectDetails,
-      tag: ProjectTag,
-      canManage: boolean,
-      error: ReturnType<typeof alertLine>,
-    ): HTMLLIElement {
-      const name = tagText(tag, project.code);
-      const item = el("li", "member project-tag");
-      const show = () => {
-        item.replaceChildren(
-          tagChip(tag, project.code, false),
-          el("span", "project-tag-count", changeCount(tag.changeCount)),
-        );
-        if (canManage) {
-          item.append(
-            el(
-              "span",
-              "project-tag-actions",
-              button("Rename", rename, "danger-button"),
-              button("Delete", remove, "danger-button"),
-            ),
-          );
-        }
-      };
-
-      function rename(): void {
-        const { element, input } = field(`Rename ${name}`, { name: "tag", value: tag.text });
-        input.autocomplete = "off";
-        const save = el("button", "primary", "Save");
-        save.type = "submit";
-        const cancel = button("Cancel", () => {
-          show();
-          item.querySelector("button")?.focus();
-        });
-        const renameError = alertLine();
-        const form = el(
-          "form",
-          "rename-form tag-rename-form",
-          element,
-          save,
-          cancel,
-          renameError.element,
-        );
-        form.noValidate = true;
-        form.addEventListener("keydown", (event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            cancel.click();
-          }
-        });
-        form.addEventListener("submit", (event) => {
-          event.preventDefault();
-          const text = input.value.trim();
-          if (!text) {
-            renameError.show("Enter the tag's new text.");
-            return;
-          }
-
-          renameError.clear();
-          env.api
-            .send<ProjectTag>("PATCH", `${path}/tags/${encodeURIComponent(tag.id)}`, { tag: text })
-            .then(
-              async (renamed) => {
-                status.textContent = `Renamed ${name} to ${tagText(renamed, project.code)}.`;
-                await load();
-              },
-              (failure: unknown) => renameError.show(failureText(failure)),
-            );
-        });
-        item.replaceChildren(form);
-        input.focus();
-        input.select();
-      }
-
-      function remove(): void {
-        const question =
-          tag.changeCount === 0
-            ? `Delete ${name}? No changes carry it.`
-            : `${name} is on ${changeCount(tag.changeCount).toLowerCase()}. Delete it?`;
-        if (!env.confirm(question)) {
-          return;
-        }
-
-        error.clear();
-        env.api.send("DELETE", `${path}/tags/${encodeURIComponent(tag.id)}`).then(
-          async () => {
-            status.textContent = `Deleted ${name}.`;
-            await load();
-          },
-          (failure: unknown) => error.show(failureText(failure)),
-        );
-      }
-
-      show();
-      return item;
-    }
-
-    function addTagForm(project: ProjectDetails): HTMLFormElement {
-      const { element, input } = field("Tag", { name: "tag", autocomplete: "off" });
-      const help = el(
-        "span",
-        "field-help",
-        project.tags.length >= PROJECT_TAG_MAX
-          ? `${project.code} has ${PROJECT_TAG_MAX} tags, the most it can have.`
-          : "A key, or a key and a value: bug, or area: onboarding.",
-      );
-      help.id = "project-tag-help";
-      input.setAttribute("aria-describedby", help.id);
-      element.append(help);
-      const add = el("button", "primary", "Add tag");
-      add.type = "submit";
-      const error = alertLine();
-      const form = el("form", "project-form tag-add-form", element, add, error.element);
-      form.noValidate = true;
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const text = input.value.trim();
-        if (!text) {
-          error.show("Enter a tag to add.");
-          return;
-        }
-
-        error.clear();
-        env.api.send<ProjectTag>("POST", `${path}/tags`, { tag: text }).then(
-          async (added) => {
-            status.textContent = `Added ${tagText(added, project.code)}.`;
-            await load();
-          },
-          (failure: unknown) => error.show(failureText(failure)),
-        );
-      });
-      return form;
     }
 
     function memberList(
@@ -644,6 +846,13 @@ export function projectView(env: Env): View {
     root.replaceChildren(
       el("section", "page project-page", back, plate, heading, status, loadError.element, body),
     );
-    await load();
+    if (await load()) {
+      follow();
+    }
+
+    return () => {
+      left = true;
+      stopFollowing();
+    };
   };
 }

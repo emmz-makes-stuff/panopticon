@@ -117,7 +117,9 @@ Project page, and they put them on changes from the change page, or agents do it
 using existing tags only. Personal tags are kept per machine with `panopticon tags`, carried by reports, and seen
 only by their owner. Chips show on cards, change pages and history rows, and edits show live. A multi-select Tags
 filter on the dashboard, history and metrics matches every chosen tag, or a key alone, and goes in the address.
-Not built: the Project page's Tags list doesn't update live (deferred by Emmz, 2026-11-10).
+The Project page's Tags list is live too, since the `project-page-live-tags` change (2026-11-11). It shows tags as
+others add, rename or delete them, keeping an open rename. Only the tags update live: counts are as of the last list
+change, and members, roles and the name need a reload (Emmz, 2026-11-11).
 
 - **What a tag is:** an arbitrary dimension to filter on. A tag has an optional value, so there could be a `dev` tag
   and a `language: csharp` tag.
@@ -175,12 +177,16 @@ Not built: the Project page's Tags list doesn't update live (deferred by Emmz, 2
 
 ## Open questions & ambiguities
 
-- **Which metrics?** Metrics are in v1, but not defined yet. Candidates: velocity (tasks/day), time
-  per section, time to archive, per-person or per-repo throughput, trends over history. Where do they
-  live: on cards, in the drill-down, or on a separate view?
+- ~~**Which metrics?**~~ _Resolved by the `change-metrics` change (2026-11-09): Emmz chose time per
+  section and time to archive. They show in a panel on the change page, and team-wide on a `/metrics`
+  page (counts, medians, a weekly chart and the slowest sections)._
 - ~~**How does the server learn of an archive?**~~ _Resolved by ADR-0001: the CLI's local MCP bridge
   notices when the change moves to `archive/` and reports it._
-- **"Or whatever"**: other filters wanted, e.g. by person, by agent type, by machine, by status
-  (active/idle)?
-- **How long is "quiet"?** What threshold marks a card idle/stale?
-- **"That sort of thing"**: what else does the CLI do beyond setup and sync?
+- ~~**"Or whatever"**: other filters wanted?~~ _Resolved by the `filters-and-idle-cards` change
+  (2026-11-09): repo, owner/org, person, machine, agent type and (dashboard only) status, plus Tags
+  since the `tags` change. Filters combine and go in the URL._
+- ~~**How long is "quiet"?**~~ _Resolved by the `filters-and-idle-cards` change: idle after 30
+  minutes, stale after 4 hours by default, set by `Panopticon:Activity` on the server._
+- ~~**"That sort of thing"**: what else does the CLI do beyond setup and sync?~~ _Closed by Emmz
+  (2026-11-11): what was built answers it. That's login, linking a repo to a Project, personal tags,
+  the MCP bridge and archive reporting. See `docs/cli.md`._
