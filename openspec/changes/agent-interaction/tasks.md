@@ -62,6 +62,19 @@
 - [x] 10.2 Never lose a dashboard answer (code review F3, F4). The hook releases a held prompt it created when it gives up before the wait loop, through a new best-effort `DELETE /api/agent/prompts/{id}`. The store keeps an answered prompt until the hook's wait reads it, or `WaitGrace` passes, instead of dropping it on the session's next event. Verify with server tests (an event between the answer and the wait still returns the answer; a released prompt can't be answered, giving 409) and a CLI test (a failed preview upload releases the prompt).
 - [x] 10.3 Resync a live stream that dropped events (code review F8). When a subscriber's queue drops an event, the stream sends `resync`, and the dashboard and change page refetch as they do on reconnect (cards, sessions and the away switch). Verify with a server test that overflows a subscriber and sees `resync`, and vitest tests that `resync` refreshes.
 
+## 11. Review fixes: presence and prompts, from the second review
+
+- [ ] 11.1 Make `PresenceStore.Find` give null (404) for a detached prompt, or one whose session the store no longer holds, instead of throwing (second review #1). Drop the redundant `Newest()` (#9). Verify with a server test: answer, `SessionEnd` before the wait reads it, a second answer gets 404, and the wait still gets the answer.
+- [ ] 11.2 Order prompts with session events (#2). `PromptRequest` carries an optional `OccurredAt`, the hook stamps it, and `Ask` applies `IsStale` and moves the stamp, so a late event from before the prompt doesn't clear it or move the card to Working. Verify with server tests (a prompt that isn't held, then a late, older `PreToolUse`, stays waiting on permission), and a CLI test that the time is sent.
+- [ ] 11.3 Release a held prompt when the hook's wait is cancelled too (#3), with the same best-effort `ReleaseAsync` and its own timeout. Flatten the preview step's nested try (#10). Verify with a CLI test: cancelling the run during the wait sends the `DELETE`.
+- [ ] 11.4 Keep a stamped `SessionEnd`'s tombstone for a short window (#6), a new `PresenceOptions`-style setting of about 1 minute swept with the rest, not `StaleAfter`, so a clock that's behind can't hide a resumed session for long. Verify with a store test: after the window, an older-stamped event applies.
+
+## 12. Review fixes: live catch-up, from the second review
+
+- [ ] 12.1 When the stream sends `resync`, run the viewer recheck at once, before the queued events go out (#5), so a dropped membership change or member removal takes effect then. Verify with a server test: a dropped `MembershipChanged` for a joined Project is recognised right after `resync`, with no keep-alive wait.
+- [ ] 12.2 Make the newest `refresh` win (#4): a refresh that resolves after a later one has started is ignored, on the dashboard and the change page. Verify with vitest tests: two refreshes whose responses arrive in reverse order render the second.
+- [ ] 12.3 Stop an away reload from overwriting a newer state (#8): a `load` that started before a `set` (a toggle, or `away-changed`) is ignored when it resolves. Verify with a vitest test.
+
 ## Workflow follow-up
 
 - Whole-change review, offer `/code-review`, then `/opsx:archive`.
