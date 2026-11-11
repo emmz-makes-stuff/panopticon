@@ -95,7 +95,7 @@ public static class ServerSetup
         // How long prompts are held and waited on (agent-interaction D6). Settable for tests.
         services.AddOptions<PromptOptions>()
             .Bind(configuration.GetSection(PromptOptions.Section))
-            .Validate(o => o.HoldLimit > TimeSpan.Zero && o.WaitGrace > o.WaitTimeout && o.WaitTimeout > TimeSpan.Zero, "Panopticon:Prompts needs positive times, with WaitGrace longer than WaitTimeout.")
+            .Validate(o => o.HoldLimit > TimeSpan.Zero && o.WaitGrace > o.WaitTimeout && o.WaitTimeout > TimeSpan.Zero && o.LateEventWindow > TimeSpan.Zero, "Panopticon:Prompts needs positive times, with WaitGrace longer than WaitTimeout.")
             .ValidateOnStart();
 
         // Storage.

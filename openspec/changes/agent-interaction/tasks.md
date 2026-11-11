@@ -64,10 +64,10 @@
 
 ## 11. Review fixes: presence and prompts, from the second review
 
-- [ ] 11.1 Make `PresenceStore.Find` give null (404) for a detached prompt, or one whose session the store no longer holds, instead of throwing (second review #1). Drop the redundant `Newest()` (#9). Verify with a server test: answer, `SessionEnd` before the wait reads it, a second answer gets 404, and the wait still gets the answer.
-- [ ] 11.2 Order prompts with session events (#2). `PromptRequest` carries an optional `OccurredAt`, the hook stamps it, and `Ask` applies `IsStale` and moves the stamp, so a late event from before the prompt doesn't clear it or move the card to Working. Verify with server tests (a prompt that isn't held, then a late, older `PreToolUse`, stays waiting on permission), and a CLI test that the time is sent.
-- [ ] 11.3 Release a held prompt when the hook's wait is cancelled too (#3), with the same best-effort `ReleaseAsync` and its own timeout. Flatten the preview step's nested try (#10). Verify with a CLI test: cancelling the run during the wait sends the `DELETE`.
-- [ ] 11.4 Keep a stamped `SessionEnd`'s tombstone for a short window (#6), a new `PresenceOptions`-style setting of about 1 minute swept with the rest, not `StaleAfter`, so a clock that's behind can't hide a resumed session for long. Verify with a store test: after the window, an older-stamped event applies.
+- [x] 11.1 Make `PresenceStore.Find` give null (404) for a detached prompt, or one whose session the store no longer holds, instead of throwing (second review #1). Drop the redundant `Newest()` (#9). Verify with a server test: answer, `SessionEnd` before the wait reads it, a second answer gets 404, and the wait still gets the answer.
+- [x] 11.2 Order prompts with session events (#2). `PromptRequest` carries an optional `OccurredAt`, the hook stamps it, and `Ask` applies `IsStale` and moves the stamp, so a late event from before the prompt doesn't clear it or move the card to Working. Verify with server tests (a prompt that isn't held, then a late, older `PreToolUse`, stays waiting on permission), and a CLI test that the time is sent.
+- [x] 11.3 Release a held prompt when the hook's wait is cancelled too (#3), with the same best-effort `ReleaseAsync` and its own timeout. Flatten the preview step's nested try (#10). Verify with a CLI test: cancelling the run during the wait sends the `DELETE`.
+- [x] 11.4 Keep a stamped `SessionEnd`'s tombstone for a short window (#6), a new `PresenceOptions`-style setting of about 1 minute swept with the rest, not `StaleAfter`, so a clock that's behind can't hide a resumed session for long. Verify with a store test: after the window, an older-stamped event applies.
 
 ## 12. Review fixes: live catch-up, from the second review
 

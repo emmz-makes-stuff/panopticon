@@ -111,8 +111,10 @@ tool list of any MCP client that connects to the online endpoint, and each call 
   to the terminal and can't be answered from the dashboard. It gives 204, and 404 for a prompt the server doesn't
   know. The hook calls it as a best effort.
 - Session events carry an optional `occurredAt`, the time the hook's process started (review fix 10.1). The server
-  ignores an event older than the last one it applied for the session, and one no newer than a stamped
-  `SessionEnd`. Events from an older CLI carry no time, and are applied as they arrive.
+  ignores an event older than the last one it applied for the session, and, for `LateEventWindow` (1 minute), one no
+  newer than a stamped `SessionEnd`. Events from an older CLI carry no time, and are applied as they arrive. A prompt
+  carries the same stamp: it's never ignored (the terminal is waiting on it), but a late event from before it is
+  (review fix 11.2).
 - The live stream sends `resync`, with no data, when its queue has dropped events (review fix 10.3). The dashboard
   and the change page then load their state again, the away switch included, as they do on a reconnect.
 - `GET` / `PUT /api/agent/away` for `panopticon away`, and `GET` / `PUT /api/me/away` for the dashboard (the

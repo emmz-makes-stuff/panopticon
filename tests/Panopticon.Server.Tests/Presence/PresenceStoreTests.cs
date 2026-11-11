@@ -227,6 +227,27 @@ public sealed class PresenceStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_late_PreToolUse_from_before_a_prompt_leaves_the_session_waiting_on_it()
+    {
+        var request = new PromptRequest(new RepoRef("github.com", "emmz", "panopticon"), "team-auth", "vm-1", "s-1", PromptKind.Permission, Tool: "Bash", OccurredAt: _t0.AddSeconds(2));
+        Assert.False(_store.Ask(_emmz, "Emmz", _teamAuth, request, away: false).Held);
+
+        Assert.False(At(_t0.AddSeconds(1), SessionState.Working, "Run make gates"));
+
+        Assert.Equal(SessionState.WaitingOnPermission, Assert.Single(_store.For(_teamAuth.ChangeId)).State);
+    }
+
+    [Fact]
+    public void An_older_prompt_never_moves_the_stamp_back()
+    {
+        At(_t0.AddSeconds(3), SessionState.Working, "Run make gates");
+        var request = new PromptRequest(new RepoRef("github.com", "emmz", "panopticon"), "team-auth", "vm-1", "s-1", PromptKind.Permission, Tool: "Bash", OccurredAt: _t0.AddSeconds(1));
+        _store.Ask(_emmz, "Emmz", _teamAuth, request, away: false);
+
+        Assert.False(At(_t0.AddSeconds(2), SessionState.WaitingOnUser));
+    }
+
+    [Fact]
     public void Events_with_no_time_from_an_older_CLI_apply_in_the_order_they_arrive()
     {
         At(_t0.AddSeconds(2), SessionState.WaitingOnUser);
@@ -237,10 +258,24 @@ public sealed class PresenceStoreTests : IDisposable
     }
 
     [Fact]
-    public void The_sweep_forgets_an_end_after_the_stale_threshold()
+    public void An_end_turns_older_events_away_only_for_the_late_event_window()
+    {
+        var window = new PromptOptions().LateEventWindow;
+        At(_t0.AddSeconds(2), SessionState.Ended);
+
+        _clock.Advance(window - TimeSpan.FromSeconds(1));
+        Assert.False(At(_t0.AddSeconds(1), SessionState.WaitingOnUser));
+
+        // A resume on a machine whose clock is behind shows up once the window has passed, before any sweep.
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.True(At(_t0.AddSeconds(1), SessionState.Working, "Resumed"));
+    }
+
+    [Fact]
+    public void The_sweep_forgets_an_end_after_the_late_event_window()
     {
         At(_t0.AddSeconds(2), SessionState.Ended);
-        _clock.Advance(new ActivityOptions().StaleAfter);
+        _clock.Advance(new PromptOptions().LateEventWindow);
         _store.Sweep();
 
         Assert.True(At(_t0.AddSeconds(1), SessionState.WaitingOnUser));
@@ -269,6 +304,19 @@ public sealed class PresenceStoreTests : IDisposable
 
         // Read once, it has done its job.
         Assert.Null(await _store.WaitAsync(_emmz, promptId, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task An_answer_kept_after_its_session_ended_is_gone_to_a_second_answer_but_not_to_the_wait()
+    {
+        var promptId = AnsweredPrompt();
+
+        _store.Record(_emmz, "Emmz", "s-1", _teamAuth, "vm-1", SessionState.Ended, null);
+
+        Assert.Null(_store.Find(promptId));
+        Assert.False(_store.TryClaim(promptId));
+        var result = await _store.WaitAsync(_emmz, promptId, TestContext.Current.CancellationToken);
+        Assert.Equal(PromptWaitState.Answered, result!.State);
     }
 
     [Fact]

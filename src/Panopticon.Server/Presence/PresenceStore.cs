@@ -5,7 +5,10 @@ using Panopticon.Server.Live;
 
 namespace Panopticon.Server.Presence;
 
-/// <summary>How long prompts are held and waited on (agent-interaction D6). Settings under <see cref="Section"/>.</summary>
+/// <summary>
+/// How long prompts are held and waited on (agent-interaction D6), and how long the store looks out for a hook's late
+/// events. Settings under <see cref="Section"/>.
+/// </summary>
 public sealed class PromptOptions
 {
     public const string Section = "Panopticon:Prompts";
@@ -18,6 +21,12 @@ public sealed class PromptOptions
 
     /// <summary>How long one <c>wait</c> long-poll waits before answering "pending".</summary>
     public TimeSpan WaitTimeout { get; set; } = TimeSpan.FromSeconds(25);
+
+    /// <summary>
+    /// How long a stamped <c>SessionEnd</c> turns away older events: 1 minute. A late async hook arrives within seconds,
+    /// and a short window means a clock that's behind can't hide a resumed session for long (second review #6).
+    /// </summary>
+    public TimeSpan LateEventWindow { get; set; } = TimeSpan.FromMinutes(1);
 }
 
 /// <summary>What setting a held permission prompt's preview came to.</summary>
@@ -54,7 +63,7 @@ public sealed class PresenceStore(
 
     /// <summary>
     /// Sessions that ended with a stamped <c>SessionEnd</c>: its time, and when the store saw it. A late event from
-    /// before the end can't bring the session back. Swept with the stale threshold.
+    /// before the end can't bring the session back, for <see cref="PromptOptions.LateEventWindow"/>.
     /// </summary>
     private readonly Dictionary<(Guid MemberId, string SessionId), (DateTimeOffset OccurredAt, DateTimeOffset SeenAt)> _ended = [];
 
@@ -142,7 +151,8 @@ public sealed class PresenceStore(
             }
 
             _ended.Remove(key);
-            var stamp = Newest(existing?.OccurredAt, occurredAt);
+            // Not stale, so a stamp here is never older than the one before it.
+            var stamp = occurredAt ?? existing?.OccurredAt;
             if (existing?.PromptId is { } pendingId && _prompts[pendingId].IsPending)
             {
                 Put(key, existing with { View = existing.View with { LastEventAt = now }, OccurredAt = stamp });
@@ -191,14 +201,15 @@ public sealed class PresenceStore(
         }
     }
 
-    /// <summary>Whether a stamped event is older than the session's last applied one, or no newer than its end.</summary>
+    /// <summary>
+    /// Whether a stamped event is older than the session's last applied one, or no newer than an end seen within the
+    /// late-event window.
+    /// </summary>
     private bool IsStale((Guid MemberId, string SessionId) key, Entry? existing, DateTimeOffset? occurredAt) =>
         occurredAt is { } at
         && ((existing?.OccurredAt is { } last && at < last)
-            || (_ended.TryGetValue(key, out var ended) && at <= ended.OccurredAt));
-
-    private static DateTimeOffset? Newest(DateTimeOffset? a, DateTimeOffset? b) =>
-        a is { } x && b is { } y ? (x > y ? x : y) : a ?? b;
+            || (_ended.TryGetValue(key, out var ended) && at <= ended.OccurredAt
+                && clock.GetUtcNow() - ended.SeenAt < prompts.Value.LateEventWindow));
 
     /// <summary>
     /// A session asks (D3, D6): it waits on the prompt, which is held for the dashboard when <paramref name="away"/>
@@ -245,7 +256,11 @@ public sealed class PresenceStore(
                     now,
                     request.Kind == PromptKind.Question && request.Questions is { } questions ? [.. questions.Select(PromptQuestionView.For)] : null),
             };
-            Put(key, new Entry(placement, view, existing?.Order ?? ++_sequence, promptId, existing?.OccurredAt), existing);
+            // Never ignored: a prompt comes from a sync hook, so the terminal is waiting on it now. It moves the stamp
+            // on, so a late event from before it can't clear it (second review #2), and a new prompt forgets an end.
+            _ended.Remove(key);
+            var stamp = request.OccurredAt is { } at && !(existing?.OccurredAt > at) ? at : existing?.OccurredAt;
+            Put(key, new Entry(placement, view, existing?.Order ?? ++_sequence, promptId, stamp), existing);
             return new PromptCreated(promptId.ToString(), held);
         }
     }
@@ -377,12 +392,14 @@ public sealed class PresenceStore(
     {
         lock (_gate)
         {
-            if (!_prompts.TryGetValue(promptId, out var prompt))
+            // A detached answer is only the hook's to collect: to anyone answering, it's gone (404).
+            if (!_prompts.TryGetValue(promptId, out var prompt) || prompt.Detached
+                || !_sessions.TryGetValue(prompt.Session, out var entry))
             {
                 return null;
             }
 
-            var placement = _sessions[prompt.Session].Placement;
+            var placement = entry.Placement;
             return new PromptSnapshot(
                 promptId,
                 prompt.Session.MemberId,
@@ -562,8 +579,8 @@ public sealed class PresenceStore(
                 _prompts.Remove(id);
             }
 
-            // By the stale threshold, any late event from before the end has long arrived.
-            foreach (var key in _ended.Where(e => e.Value.SeenAt <= cutoff).Select(e => e.Key).ToList())
+            // Past the late-event window, an end no longer turns events away.
+            foreach (var key in _ended.Where(e => now - e.Value.SeenAt >= limits.LateEventWindow).Select(e => e.Key).ToList())
             {
                 _ended.Remove(key);
             }

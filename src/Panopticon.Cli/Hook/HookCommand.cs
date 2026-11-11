@@ -215,7 +215,7 @@ internal sealed class HookCommand(
         var waiting = kind == PromptKind.Question ? SessionState.WaitingOnQuestion : SessionState.WaitingOnPermission;
         var questions = kind == PromptKind.Question ? PromptHookOutput.Questions(hookEvent.ToolInput) : null;
         var request = new PromptRequest(
-            target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, kind, questions, kind == PromptKind.Permission ? hookEvent.ToolName : null, target.Project);
+            target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, kind, questions, kind == PromptKind.Permission ? hookEvent.ToolName : null, target.Project, _startedAt);
         var problem = kind == PromptKind.Question && questions is null
             ? "its questions can't be read"
             : PromptLimits.Problem(request);
@@ -232,30 +232,26 @@ internal sealed class HookCommand(
             return;
         }
 
+        PromptAnswer? answer;
         try
         {
             if (kind == PromptKind.Permission)
             {
-                try
-                {
-                    await target.Client.SetPreviewAsync(promptId, PromptHookOutput.Preview(hookEvent.ToolName!, hookEvent.ToolInput), budget.Token);
-                }
-                catch (BridgeException exception)
-                {
-                    // The prompt is still held: the dashboard can deny it, just not allow it.
-                    log.Write($"hook {hookEvent.EventName}: the preview didn't reach the server, so the dashboard can only deny: {exception.Message}");
-                }
+                await SendPreviewAsync(hookEvent, target.Client, promptId, budget.Token);
             }
+
+            answer = await WaitAsync(target.Client, promptId, hookEvent.EventName, cancellationToken);
         }
         catch
         {
-            // Giving up before the wait (the budget ran out, say): the terminal asks, so no one may answer it in vain.
-            await ReleaseAsync(target.Client, promptId, hookEvent.EventName, cancellationToken);
+            // Giving up on a held prompt (the budget ran out, or the run was cancelled): the terminal asks, so no one
+            // may answer it in vain. The wait's own exits need nothing: the server releases at the hold limit, and
+            // after a lost server it can't be told.
+            await ReleaseAsync(target.Client, promptId, hookEvent.EventName);
             throw;
         }
 
-        if (await WaitAsync(target.Client, promptId, hookEvent.EventName, cancellationToken) is { } answer
-            && PromptHookOutput.For(kind, hookEvent.ToolInput, answer) is { } output)
+        if (answer is not null && PromptHookOutput.For(kind, hookEvent.ToolInput, answer) is { } output)
         {
             await stdout.WriteAsync(output);
             await stdout.FlushAsync(cancellationToken);
@@ -265,11 +261,26 @@ internal sealed class HookCommand(
     /// <summary>How long the best-effort release of a prompt may take, once the event's budget is spent.</summary>
     internal static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(2);
 
-    /// <summary>Gives a held prompt back to the terminal on the server (code review F3); a failure is only logged.</summary>
-    private async Task ReleaseAsync(AgentApiClient client, Guid promptId, string eventName, CancellationToken cancellationToken)
+    /// <summary>Uploads a held permission prompt's preview; one that doesn't arrive leaves the dashboard only Deny.</summary>
+    private async Task SendPreviewAsync(HookEvent hookEvent, AgentApiClient client, Guid promptId, CancellationToken cancellationToken)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(ReleaseTimeout);
+        try
+        {
+            await client.SetPreviewAsync(promptId, PromptHookOutput.Preview(hookEvent.ToolName!, hookEvent.ToolInput), cancellationToken);
+        }
+        catch (BridgeException exception)
+        {
+            log.Write($"hook {hookEvent.EventName}: the preview didn't reach the server, so the dashboard can only deny: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gives a held prompt back to the terminal on the server (code review F3); a failure is only logged. It has its
+    /// own timeout, as the run's token may be what was cancelled.
+    /// </summary>
+    private async Task ReleaseAsync(AgentApiClient client, Guid promptId, string eventName)
+    {
+        using var timeout = new CancellationTokenSource(ReleaseTimeout, clock);
         try
         {
             await client.ReleaseAsync(promptId, timeout.Token);

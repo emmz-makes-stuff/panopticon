@@ -39,9 +39,9 @@ public sealed class PromptHookCommandTests : IDisposable
         Directory.Delete(_configRoot, recursive: true);
     }
 
-    private Task<int> RunAsync(StubServer server, string stdin) =>
+    private Task<int> RunAsync(StubServer server, string stdin, CancellationToken? cancellationToken = null) =>
         new HookCommand(() => new HttpClient(server), new BridgeSettings("https://panopticon.example/", "pnp_token", "/", "vm-1"), WorktreeLinksFile.NextTo(Config), Log, _stdout, TimeProvider.System, FastWait)
-            .RunAsync(new StringReader(stdin), Ct);
+            .RunAsync(new StringReader(stdin), cancellationToken ?? Ct);
 
     private static JsonObject Question(string text, string header, bool multiSelect, params (string Label, string? Preview)[] options) => new()
     {
@@ -82,12 +82,14 @@ public sealed class PromptHookCommandTests : IDisposable
     public async Task A_question_while_not_away_is_posted_and_the_terminal_asks()
     {
         var server = Server(held: false);
+        var before = DateTimeOffset.UtcNow;
 
         Assert.Equal(0, await RunAsync(server, AskEvent(Question("Which store?", "Store", false, ("Memory", null), ("Postgres", null)))));
 
         Assert.Equal("", _stdout.ToString());
         var posted = JsonSerializer.Deserialize(Assert.Single(server.Requests).Body, ContractsJsonContext.Default.PromptRequest)!;
         Assert.Equal((PromptKind.Question, "team-auth", "session-1"), (posted.Kind, posted.Change, posted.SessionId));
+        Assert.InRange(posted.OccurredAt!.Value, before, DateTimeOffset.UtcNow);
         var question = Assert.Single(posted.Questions!);
         Assert.Equal(("Which store?", "Store", false), (question.Question, question.Header, question.MultiSelect));
         Assert.Equal([new PromptOption("Memory", "Memory it is"), new PromptOption("Postgres", "Postgres it is")], question.Options);
@@ -272,6 +274,32 @@ public sealed class PromptHookCommandTests : IDisposable
         Assert.Equal((HttpMethod.Delete, $"https://panopticon.example/api/agent/prompts/{_promptId}"), (released.Method, released.Url));
         Assert.Equal("1", released.RequestHeader);
         Assert.DoesNotContain(server.Requests, r => r.Url.EndsWith("/wait", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_run_cancelled_during_the_wait_releases_the_held_prompt()
+    {
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var server = new StubServer(HttpStatusCode.NoContent)
+        {
+            Respond = request => request switch
+            {
+                { Method.Method: "POST", Url: var url } when url.EndsWith("/api/agent/prompts", StringComparison.Ordinal) => (HttpStatusCode.OK, Created(held: true)),
+                { Method.Method: "GET" } => Cancelled(),
+                _ => null,
+            },
+        };
+
+        (HttpStatusCode, string) Cancelled()
+        {
+            cancel.Cancel();
+            return (HttpStatusCode.OK, Waited("pending"));
+        }
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => RunAsync(server, AskEvent(Question("Q", "H", false, ("A", null))), cancel.Token));
+
+        var released = server.Requests.Last();
+        Assert.Equal((HttpMethod.Delete, $"https://panopticon.example/api/agent/prompts/{_promptId}"), (released.Method, released.Url));
     }
 
     [Fact]

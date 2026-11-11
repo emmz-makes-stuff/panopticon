@@ -33,6 +33,8 @@ public sealed record PromptQuestion(
 /// Body of <c>POST /api/agent/prompts</c>: the session fields, plus <see cref="Questions"/> for a question or
 /// <see cref="Tool"/> for a permission prompt. A permission prompt never carries its input here (D2): that goes to
 /// <c>PUT /api/agent/prompts/{id}/preview</c>, and only once the server has held the prompt.
+/// <see cref="OccurredAt"/> is when the hook's process started, as on a session event: a late event from before the
+/// prompt is then ignored, rather than clearing it.
 /// </summary>
 public sealed record PromptRequest(
     RepoRef Repo,
@@ -42,7 +44,8 @@ public sealed record PromptRequest(
     PromptKind Kind,
     IReadOnlyList<PromptQuestion>? Questions = null,
     string? Tool = null,
-    string? Project = null);
+    string? Project = null,
+    DateTimeOffset? OccurredAt = null);
 
 /// <summary>
 /// Answer to <c>POST /api/agent/prompts</c>. The server decides <see cref="Held"/> from the member's away flag in this
