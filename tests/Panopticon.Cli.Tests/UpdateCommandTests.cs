@@ -49,7 +49,9 @@ public sealed class UpdateCommandTests : IDisposable
         string currentVersion = "0.1.1",
         string[]? args = null,
         Dictionary<string, string>? environment = null,
-        BinaryReplacer? replacer = null)
+        BinaryReplacer? replacer = null,
+        string? binaryPath = null,
+        CancellationToken? cancellationToken = null)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
@@ -59,11 +61,12 @@ public sealed class UpdateCommandTests : IDisposable
             Config,
             currentVersion,
             Platform,
-            _binary,
+            binaryPath ?? _binary,
             replacer ?? new BinaryReplacer(windows: false),
             stdout,
-            stderr);
-        var exit = await command.RunAsync(args ?? ["--server", Server], Ct);
+            stderr,
+            TimeSpan.FromMilliseconds(200));
+        var exit = await command.RunAsync(args ?? ["--server", Server], cancellationToken ?? Ct);
         return new Run(exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -129,13 +132,98 @@ public sealed class UpdateCommandTests : IDisposable
     [Fact]
     public async Task A_short_download_keeps_the_old_binary()
     {
-        _server.Serve("0.2.0", "new build", size: 999);
+        // No Content-Length, so only the body itself shows it's short.
+        _server.Serve("0.2.0", "new build", size: 999, buildContent: bytes => new StreamContent(new TestBody(bytes)));
 
         var run = await RunAsync();
 
         Assert.Equal(1, run.Exit);
         Assert.Contains("Checksum mismatch", run.Stderr, StringComparison.Ordinal);
         Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+        Assert.Empty(LeftoverTempFiles());
+    }
+
+    [Fact]
+    public async Task A_content_length_that_disagrees_with_the_manifest_is_not_downloaded()
+    {
+        _server.Serve("0.2.0", "new build", size: 999);
+
+        var run = await RunAsync();
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains("is sending 9 bytes", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains("its manifest says 999", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+        Assert.Empty(LeftoverTempFiles());
+    }
+
+    [Fact]
+    public async Task A_body_longer_than_the_manifest_says_is_stopped_early()
+    {
+        // The manifest says 9 bytes; the body (with no Content-Length) would go on for a megabyte.
+        var body = new TestBody(new byte[1024 * 1024]);
+        _server.Serve("0.2.0", "new build", buildContent: _ => new StreamContent(body, bufferSize: 4096));
+
+        var run = await RunAsync();
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains("ran past the 9 bytes the manifest says", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+        Assert.Empty(LeftoverTempFiles());
+        Assert.True(body.Position < 1024 * 1024, $"the download read {body.Position} bytes: it should stop well before the end");
+    }
+
+    [Fact]
+    public async Task A_download_that_breaks_off_is_a_download_failure_not_a_replace_failure()
+    {
+        _server.Serve("0.2.0", "new build", buildContent: bytes => new StreamContent(new TestBody(bytes[..4], fail: true)));
+
+        var run = await RunAsync();
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains("broke off", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Can't replace", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+        Assert.Empty(LeftoverTempFiles());
+    }
+
+    [Fact]
+    public async Task A_server_that_times_out_is_reported_as_a_timeout()
+    {
+        _server.TimesOut();
+
+        var run = await RunAsync();
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains("stopped answering, so the update timed out", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+    }
+
+    [Fact]
+    public async Task A_body_that_stalls_times_out_and_leaves_no_temp_file()
+    {
+        _server.Serve("0.2.0", "new build", buildContent: bytes => new StreamContent(new TestBody(bytes[..4], stall: true)));
+
+        var run = await RunAsync();
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains("stopped answering, so the update timed out", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+        Assert.Empty(LeftoverTempFiles());
+    }
+
+    [Fact]
+    public async Task Ctrl_c_during_the_download_exits_130_and_leaves_no_temp_file()
+    {
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        _server.Serve("0.2.0", "new build", buildContent: bytes => new StreamContent(new TestBody(bytes[..4], stall: true, onStall: cancel.Cancel)));
+
+        var run = await RunAsync(cancellationToken: cancel.Token);
+
+        Assert.Equal(UpdateCommand.CancelledExitCode, run.Exit);
+        Assert.Contains("Update cancelled. Nothing was changed.", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal("old build", await File.ReadAllTextAsync(_binary, Ct));
+        Assert.Empty(LeftoverTempFiles());
     }
 
     [Fact]
@@ -299,6 +387,35 @@ public sealed class UpdateCommandTests : IDisposable
         Assert.Equal("new build", await File.ReadAllTextAsync(_binary, Ct));
     }
 
+    [Theory]
+    [InlineData("dotnet")]
+    [InlineData("dotnet.exe")]
+    [InlineData("testhost")]
+    [InlineData("panopticon.dll")]
+    public async Task A_host_running_the_cli_is_never_replaced(string host)
+    {
+        _server.Serve("0.2.0", "new build");
+        var hostPath = Path.Combine(Path.GetDirectoryName(_binary)!, host);
+        await File.WriteAllTextAsync(hostPath, "the host", Ct);
+
+        var run = await RunAsync(binaryPath: hostPath);
+
+        Assert.Equal(1, run.Exit);
+        Assert.Contains($"running inside {hostPath}, not as the panopticon binary", run.Stderr, StringComparison.Ordinal);
+        Assert.Empty(_server.Paths);
+        Assert.Equal("the host", await File.ReadAllTextAsync(hostPath, Ct));
+        Assert.Empty(LeftoverTempFiles());
+    }
+
+    [Theory]
+    [InlineData("/usr/local/bin/panopticon", true)]
+    [InlineData("/AppData/Local/Programs/panopticon/panopticon.exe", true)]
+    [InlineData("/home/e/.dotnet/dotnet", false)]
+    [InlineData("/src/bin/panopticon.dll", false)]
+    [InlineData(null, false)]
+    public void Only_the_panopticon_binary_counts_as_the_cli(string? path, bool expected) =>
+        Assert.Equal(expected, BinaryReplacer.IsCliBinary(path));
+
     [Fact]
     public async Task An_unknown_option_is_a_usage_error()
     {
@@ -319,7 +436,7 @@ public sealed class UpdateCommandTests : IDisposable
 
         public IEnumerable<string> Paths => Requests.Select(r => r.RequestUri!.AbsolutePath);
 
-        public void Serve(string version, string content, string platform = Platform, string? sha256 = null, long? size = null, string buildUrlBase = Server)
+        public void Serve(string version, string content, string platform = Platform, string? sha256 = null, long? size = null, string buildUrlBase = Server, Func<byte[], HttpContent>? buildContent = null)
         {
             var bytes = Encoding.UTF8.GetBytes(content);
             var file = CliPlatforms.FileName(platform);
@@ -335,7 +452,7 @@ public sealed class UpdateCommandTests : IDisposable
             _respond = request => request.RequestUri!.AbsolutePath switch
             {
                 "/api/cli" => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") },
-                var path when path == $"/cli/{platform}/{file}" => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) },
+                var path when path == $"/cli/{platform}/{file}" => new HttpResponseMessage(HttpStatusCode.OK) { Content = buildContent?.Invoke(bytes) ?? new ByteArrayContent(bytes) },
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound),
             };
         }
@@ -351,10 +468,69 @@ public sealed class UpdateCommandTests : IDisposable
 
         public void Unreachable() => _respond = _ => throw new HttpRequestException("Connection refused.");
 
+        /// <summary>What HttpClient throws when its Timeout passes before the headers arrive.</summary>
+        public void TimesOut() =>
+            _respond = _ => throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException());
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
             return Task.FromResult(_respond(request));
         }
+    }
+
+    /// <summary>
+    /// A response body with no length (it can't seek), which hands out <c>content</c> and then ends, breaks off as a
+    /// dropped connection does, or stalls until it's cancelled.
+    /// </summary>
+    private sealed class TestBody(byte[] content, bool fail = false, bool stall = false, Action? onStall = null) : Stream
+    {
+        private int _position;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => _position;
+            set => throw new NotSupportedException();
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_position < content.Length)
+            {
+                var count = Math.Min(buffer.Length, content.Length - _position);
+                content.AsMemory(_position, count).CopyTo(buffer);
+                _position += count;
+                return count;
+            }
+
+            if (fail)
+            {
+                throw new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely.");
+            }
+
+            if (stall)
+            {
+                onStall?.Invoke();
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            return 0;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

@@ -25,6 +25,34 @@ internal static class ServerAddress
         return config.Read(stderr)?.ServerUrl is { } saved && !string.IsNullOrWhiteSpace(saved) ? saved : null;
     }
 
+    /// <summary>
+    /// Parses a command's only option, <c>--server &lt;url&gt;</c>. <paramref name="command"/> names the command in the usage
+    /// text, e.g. <c>login</c>.
+    /// </summary>
+    public static bool TryParseArguments(string command, IReadOnlyList<string> args, out string? server, out string error)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        server = null;
+        error = string.Empty;
+        for (var i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--server" when i + 1 < args.Count:
+                    server = args[++i];
+                    break;
+                case "--server":
+                    error = $"--server needs a URL: 'panopticon {command} --server <url>'.";
+                    return false;
+                default:
+                    error = $"Unknown option '{args[i]}'. Usage: panopticon {command} [--server <url>]";
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>The server's base URL with a trailing slash, so relative paths resolve under it.</summary>
     public static bool TryRoot(string server, out Uri root)
     {

@@ -18,7 +18,8 @@ public class CliAppTests
         Assert.Contains("  tags add <tag>...", help, StringComparison.Ordinal);
         Assert.Contains("  tags remove <tag>...", help, StringComparison.Ordinal);
         Assert.Contains("config.json", help, StringComparison.Ordinal);
-        Assert.Contains("  --version ", help, StringComparison.Ordinal);
+        Assert.Contains("  --version, version ", help, StringComparison.Ordinal);
+        Assert.Contains("  update [--server <url>]", help, StringComparison.Ordinal);
     }
 
     // Spec cli-distribution: Version command. A local build is 0.0.0-dev (design D5).

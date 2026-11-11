@@ -13,6 +13,16 @@ internal sealed class BinaryReplacer(bool windows, Action<string, string, bool>?
 
     public static string OldPath(string binaryPath) => binaryPath + ".old";
 
+    /// <summary>
+    /// Whether <paramref name="processPath"/> is the panopticon binary itself (<c>panopticon</c> or
+    /// <c>panopticon.exe</c>), and not a host running the CLI, such as <c>dotnet …/panopticon.dll</c> or a test host.
+    /// Only that binary is ever replaced or tidied after.
+    /// </summary>
+    public static bool IsCliBinary(string? processPath) =>
+        Path.GetFileName(processPath) is { } name
+        && (string.Equals(name, "panopticon", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "panopticon.exe", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Replaces <paramref name="binaryPath"/> with <paramref name="newFile"/>; on failure the old binary is still in place.</summary>
     public void Replace(string newFile, string binaryPath)
     {
@@ -48,7 +58,8 @@ internal sealed class BinaryReplacer(bool windows, Action<string, string, bool>?
         }
     }
 
-    private static void DeleteQuietly(string path)
+    /// <summary>Deletes a file if it can: one still in use, or not ours to delete, is left for next time.</summary>
+    public static void DeleteQuietly(string path)
     {
         try
         {
@@ -56,7 +67,6 @@ internal sealed class BinaryReplacer(bool windows, Action<string, string, bool>?
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Still in use, or not ours to delete: the next start tries again.
         }
     }
 }

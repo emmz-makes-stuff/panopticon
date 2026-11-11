@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Server.Auth;
@@ -84,7 +82,7 @@ public sealed class PublishedCliUpdateTests(PostgresFixture postgres, S3Fixture 
 
     private async Task<(string Server, PanopticonFactory Factory)> StartServerAsync(string cliDirectory)
     {
-        var port = FreePort();
+        var port = FreePort.Next();
         var server = $"http://127.0.0.1:{port}";
         var factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(Ct), await s3.CreateBucketAsync(Ct))
         {
@@ -118,13 +116,6 @@ public sealed class PublishedCliUpdateTests(PostgresFixture postgres, S3Fixture 
         var stderr = process.StandardError.ReadToEndAsync(Ct);
         await process.WaitForExitAsync(Ct);
         return new ProcessRun(process.ExitCode, await stdout, await stderr);
-    }
-
-    private static int FreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private sealed record ProcessRun(int Exit, string Stdout, string Stderr)

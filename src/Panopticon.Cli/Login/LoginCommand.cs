@@ -26,7 +26,7 @@ internal sealed class LoginCommand(
     public async Task<int> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(args);
-        if (!TryParse(args, out var serverArgument, out var usageError))
+        if (!ServerAddress.TryParseArguments("login", args, out var serverArgument, out var usageError))
         {
             await stderr.WriteLineAsync(usageError);
             return 1;
@@ -173,29 +173,6 @@ internal sealed class LoginCommand(
     private static bool IsTransient(Exception exception, CancellationToken cancellationToken) =>
         exception is HttpRequestException
         || (exception is TaskCanceledException && !cancellationToken.IsCancellationRequested);
-
-    private static bool TryParse(IReadOnlyList<string> args, out string? server, out string error)
-    {
-        server = null;
-        error = string.Empty;
-        for (var i = 0; i < args.Count; i++)
-        {
-            switch (args[i])
-            {
-                case "--server" when i + 1 < args.Count:
-                    server = args[++i];
-                    break;
-                case "--server":
-                    error = "--server needs a URL: 'panopticon login --server <url>'.";
-                    return false;
-                default:
-                    error = $"Unknown option '{args[i]}'. Usage: panopticon login [--server <url>]";
-                    return false;
-            }
-        }
-
-        return true;
-    }
 
     private static async Task<HttpResponseMessage> PostAsync<T>(
         HttpClient http,

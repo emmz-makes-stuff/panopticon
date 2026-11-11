@@ -104,19 +104,19 @@
 From the whole-change review and `code-review` (devlog `20261111-1920-whole-change-review.md`), agreed with Emmz.
 7.2 and 7.3 stay open. They run after these sections, on the real release.
 
-- [ ] 8.1 `update` refuses to replace a binary whose name isn't `panopticon` (or `panopticon.exe` on Windows). This is
+- [x] 8.1 `update` refuses to replace a binary whose name isn't `panopticon` (or `panopticon.exe` on Windows). This is
   the same check the `.old` clean-up in `CliApp` uses, so `dotnet …/panopticon.dll update` can't overwrite the
   `dotnet` host. Move the check into one helper that both use. Verify with a unit test: a binary path such as
   `…/dotnet` exits non-zero, sends no request, and changes nothing.
-- [ ] 8.2 A timeout (`TaskCanceledException` that isn't the caller's cancellation) is reported as "couldn't reach",
+- [x] 8.2 A timeout (`TaskCanceledException` that isn't the caller's cancellation) is reported as "couldn't reach",
   as `login` does. A stalled body is also bounded, by a read timeout on the body stream. Ctrl+C cancels through a real
   token, and the temp file is still deleted. Verify with unit tests: a hung manifest, a body that stalls, and a
   cancelled run each exit non-zero with a message, leave no `.panopticon-update-*` file, and keep the binary.
-- [ ] 8.3 The download stops as soon as more bytes than the manifest's `size` have arrived, or when `Content-Length`
+- [x] 8.3 The download stops as soon as more bytes than the manifest's `size` have arrived, or when `Content-Length`
   disagrees with it. A download that fails part-way is reported as a download failure, not as "Can't replace". The
   download and the replace get separate catches. Verify with unit tests: an oversized body, a lying `Content-Length`,
   and a body that throws `HttpIOException` part-way.
-- [ ] 8.4 Tidying. `--server` parsing moves into `ServerAddress`, shared by `login` and `update`, with each command
+- [x] 8.4 Tidying. `--server` parsing moves into `ServerAddress`, shared by `login` and `update`, with each command
   keeping its own usage text. `UpdateCommand.TryDelete` goes, in favour of `BinaryReplacer`'s helper. There is one
   `FreePort` per test project, in `Infrastructure/`. `panopticon version` is listed in `--help` next to `--version`.
   Verify with the existing `login`/`update` tests green, and a `--help` test.

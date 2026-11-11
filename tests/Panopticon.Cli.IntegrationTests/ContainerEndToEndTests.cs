@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -58,7 +57,7 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
     private static readonly TimeSpan _stepTimeout = TimeSpan.FromSeconds(60);
 
     private readonly string _configHome = Directory.CreateTempSubdirectory("panopticon-e2e-config-").FullName;
-    private readonly int _hostPort = FreeTcpPort();
+    private readonly int _hostPort = FreePort.Next();
     private readonly INetwork _network = new NetworkBuilder().Build();
     private IFutureDockerImage? _image;
     private PostgreSqlContainer? _postgres;
@@ -511,12 +510,5 @@ public sealed partial class ContainerEndToEndTests : IAsyncLifetime
         }
 
         throw new TimeoutException($"Waited {_stepTimeout.TotalSeconds:0} s for {what}.");
-    }
-
-    private static int FreeTcpPort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 }

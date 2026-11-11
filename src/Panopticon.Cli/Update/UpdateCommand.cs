@@ -22,12 +22,22 @@ internal sealed class UpdateCommand(
     string? binaryPath,
     BinaryReplacer replacer,
     TextWriter stdout,
-    TextWriter stderr)
+    TextWriter stderr,
+    TimeSpan? stallTimeout = null)
 {
+    /// <summary>
+    /// How long a download may go without a byte before it's given up. <c>HttpClient.Timeout</c> stops at the headers
+    /// once a body is streamed, so the body needs its own limit.
+    /// </summary>
+    private readonly TimeSpan _stallTimeout = stallTimeout ?? TimeSpan.FromSeconds(30);
+
+    /// <summary>The exit code for Ctrl+C, as for <c>panopticon login</c>.</summary>
+    public const int CancelledExitCode = 130;
+
     public async Task<int> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(args);
-        if (!TryParse(args, out var serverArgument, out var usageError))
+        if (!ServerAddress.TryParseArguments("update", args, out var serverArgument, out var usageError))
         {
             await stderr.WriteLineAsync(usageError);
             return 1;
@@ -60,6 +70,14 @@ internal sealed class UpdateCommand(
             return 1;
         }
 
+        // Run as `dotnet panopticon.dll update`, the process is the dotnet host: replacing it would break .NET itself.
+        if (!BinaryReplacer.IsCliBinary(binaryPath))
+        {
+            await stderr.WriteLineAsync(
+                $"This CLI is running inside {binaryPath}, not as the panopticon binary, so update won't replace it. Run update from an installed panopticon, or rebuild from source. Nothing was changed.");
+            return 1;
+        }
+
         var display = BridgeSettings.Display(root);
         using var http = createHttpClient();
         try
@@ -74,6 +92,17 @@ internal sealed class UpdateCommand(
         catch (JsonException)
         {
             await stderr.WriteLineAsync($"The server at {display} didn't answer like a Panopticon server. Check the URL. Nothing was changed.");
+            return 1;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await stderr.WriteLineAsync("Update cancelled. Nothing was changed.");
+            return CancelledExitCode;
+        }
+        catch (OperationCanceledException)
+        {
+            // HttpClient's timeout on the headers, or the stall timeout on the body.
+            await stderr.WriteLineAsync($"The server at {display} stopped answering, so the update timed out. Nothing was changed.");
             return 1;
         }
     }
@@ -147,7 +176,7 @@ internal sealed class UpdateCommand(
         }
         finally
         {
-            TryDelete(temp);
+            BinaryReplacer.DeleteQuietly(temp);
         }
 
         await stdout.WriteLineAsync($"Updated panopticon from {currentVersion} to {manifest.Version}.");
@@ -155,13 +184,24 @@ internal sealed class UpdateCommand(
         return 0;
     }
 
-    /// <summary>Streams the build to <paramref name="temp"/>, checking its size and SHA-256 as it goes.</summary>
+    /// <summary>
+    /// Streams the build to <paramref name="temp"/>, hashing it as it goes. It stops as soon as the body is longer than
+    /// the manifest says, and gives up on a body that stalls. A failure on the network side is reported here; one
+    /// writing the file comes out as an exception, for the caller to report as a file problem.
+    /// </summary>
     private async Task<bool> DownloadAsync(HttpClient http, Uri url, string temp, CliPlatformBuild build, string display, CancellationToken cancellationToken)
     {
         using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             await stderr.WriteLineAsync($"Couldn't download {url} from {display}: {(int)response.StatusCode} {response.StatusCode}. Nothing was changed.");
+            return false;
+        }
+
+        if (response.Content.Headers.ContentLength is { } length && length != build.Size)
+        {
+            await stderr.WriteLineAsync(
+                $"The server at {display} is sending {length} bytes for {url}, but its manifest says {build.Size}, so it wasn't downloaded. Nothing was changed.");
             return false;
         }
 
@@ -173,12 +213,34 @@ internal sealed class UpdateCommand(
             using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = new byte[81920];
             size = 0;
-            int read;
-            while ((read = await body.ReadAsync(buffer, cancellationToken)) > 0)
+            while (true)
             {
+                int read;
+                try
+                {
+                    read = await ReadWithinStallTimeoutAsync(body, buffer, cancellationToken);
+                }
+                catch (IOException ex)
+                {
+                    await stderr.WriteLineAsync($"The download of {url} from {display} broke off: {ex.Message} Nothing was changed.");
+                    return false;
+                }
+
+                if (read == 0)
+                {
+                    break;
+                }
+
+                size += read;
+                if (size > build.Size)
+                {
+                    await stderr.WriteLineAsync(
+                        $"The download of {url} ran past the {build.Size} bytes the manifest says, so it was stopped. Nothing was changed.");
+                    return false;
+                }
+
                 sha256.AppendData(buffer, 0, read);
                 await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-                size += read;
             }
 
             hash = sha256.GetHashAndReset();
@@ -195,40 +257,15 @@ internal sealed class UpdateCommand(
         return true;
     }
 
+    /// <summary>One read of the body, given up (as a cancellation the caller didn't ask for) after the stall timeout.</summary>
+    private async Task<int> ReadWithinStallTimeoutAsync(Stream body, byte[] buffer, CancellationToken cancellationToken)
+    {
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        stall.CancelAfter(_stallTimeout);
+        return await body.ReadAsync(buffer, stall.Token);
+    }
+
     /// <summary>https, or http to this machine only (spec: Updates only over HTTPS).</summary>
     internal static bool IsSecure(Uri url) => url.Scheme == Uri.UriSchemeHttps || url.IsLoopback;
 
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-        }
-    }
-
-    private static bool TryParse(IReadOnlyList<string> args, out string? server, out string error)
-    {
-        server = null;
-        error = string.Empty;
-        for (var i = 0; i < args.Count; i++)
-        {
-            switch (args[i])
-            {
-                case "--server" when i + 1 < args.Count:
-                    server = args[++i];
-                    break;
-                case "--server":
-                    error = "--server needs a URL: 'panopticon update --server <url>'.";
-                    return false;
-                default:
-                    error = $"Unknown option '{args[i]}'. Usage: panopticon update [--server <url>]";
-                    return false;
-            }
-        }
-
-        return true;
-    }
 }

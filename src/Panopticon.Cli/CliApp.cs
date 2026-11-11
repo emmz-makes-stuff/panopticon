@@ -14,10 +14,9 @@ internal static class CliApp
     {
         // A Windows update leaves the old binary beside the new one, renamed aside; tidy it on the next start (design D6).
         // Only for the panopticon binary itself, never a host such as dotnet running the tests.
-        if (Environment.ProcessPath is { } processPath
-            && string.Equals(Path.GetFileNameWithoutExtension(processPath), "panopticon", StringComparison.Ordinal))
+        if (BinaryReplacer.IsCliBinary(Environment.ProcessPath))
         {
-            BinaryReplacer.CleanUpAfterUpdate(processPath);
+            BinaryReplacer.CleanUpAfterUpdate(Environment.ProcessPath);
         }
 
         if (args.Length == 0 || args[0] is "-h" or "--help")
@@ -31,7 +30,7 @@ internal static class CliApp
             stdout.WriteLine("  tags add <tag>...       Add personal tags, e.g. dev or \"language: csharp\"");
             stdout.WriteLine("  tags remove <tag>...    Remove personal tags");
             stdout.WriteLine("  update [--server <url>] Install the CLI build this machine's server serves");
-            stdout.WriteLine("  --version               Print the CLI's version");
+            stdout.WriteLine("  --version, version      Print the CLI's version");
             stdout.WriteLine();
             stdout.WriteLine("Environment (each overrides the login 'panopticon login' saved):");
             stdout.WriteLine($"  {BridgeSettings.ServerUrlVariable}  The Panopticon server's base URL");
@@ -61,30 +60,15 @@ internal static class CliApp
 
         if (args[0] == "login")
         {
-            using var cancel = new CancellationTokenSource();
-            ConsoleCancelEventHandler onCancel = (_, e) =>
-            {
-                // Ctrl+C ends the wait cleanly, with exit code 130, rather than killing the process.
-                e.Cancel = true;
-                cancel.Cancel();
-            };
-            Console.CancelKeyPress += onCancel;
-            try
-            {
-                var login = new LoginCommand(
-                    static () => new HttpClient(),
-                    Environment.GetEnvironmentVariable,
-                    CliConfigFile.ForCurrentUser(),
-                    Environment.MachineName,
-                    Task.Delay,
-                    stdout,
-                    stderr);
-                return await login.RunAsync(args[1..], cancel.Token);
-            }
-            finally
-            {
-                Console.CancelKeyPress -= onCancel;
-            }
+            var login = new LoginCommand(
+                static () => new HttpClient(),
+                Environment.GetEnvironmentVariable,
+                CliConfigFile.ForCurrentUser(),
+                Environment.MachineName,
+                Task.Delay,
+                stdout,
+                stderr);
+            return await UntilCtrlCAsync(cancellationToken => login.RunAsync(args[1..], cancellationToken));
         }
 
         if (args[0] == "update")
@@ -99,7 +83,7 @@ internal static class CliApp
                 BinaryReplacer.ForThisMachine(),
                 stdout,
                 stderr);
-            return await update.RunAsync(args[1..], CancellationToken.None);
+            return await UntilCtrlCAsync(cancellationToken => update.RunAsync(args[1..], cancellationToken));
         }
 
         if (args[0] == "tags")
@@ -109,5 +93,28 @@ internal static class CliApp
 
         await stderr.WriteLineAsync($"Unknown command '{args[0]}'. Run 'panopticon --help'.");
         return 1;
+    }
+
+    /// <summary>
+    /// Runs a command with a token that Ctrl+C cancels, so the command ends cleanly (exit code 130, temp files gone)
+    /// rather than the process being killed part-way.
+    /// </summary>
+    private static async Task<int> UntilCtrlCAsync(Func<CancellationToken, Task<int>> command)
+    {
+        using var cancel = new CancellationTokenSource();
+        ConsoleCancelEventHandler onCancel = (_, e) =>
+        {
+            e.Cancel = true;
+            cancel.Cancel();
+        };
+        Console.CancelKeyPress += onCancel;
+        try
+        {
+            return await command(cancel.Token);
+        }
+        finally
+        {
+            Console.CancelKeyPress -= onCancel;
+        }
     }
 }

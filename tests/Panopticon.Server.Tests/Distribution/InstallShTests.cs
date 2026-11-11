@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using Panopticon.Contracts;
 using Panopticon.Server.Auth;
@@ -36,7 +35,7 @@ public sealed class InstallShTests(PostgresFixture postgres, S3Fixture s3) : IAs
             return;
         }
 
-        var port = FreePort();
+        var port = FreePort.Next();
         _server = $"http://127.0.0.1:{port}";
         _factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(Ct), await s3.CreateBucketAsync(Ct))
         {
@@ -242,7 +241,7 @@ public sealed class InstallShTests(PostgresFixture postgres, S3Fixture s3) : IAs
     private async Task RestartWithFreshCatalogueAsync()
     {
         await _factory!.DisposeAsync();
-        var port = FreePort();
+        var port = FreePort.Next();
         _server = $"http://127.0.0.1:{port}";
         _factory = new PanopticonFactory(await postgres.CreateDatabaseAsync(Ct), await s3.CreateBucketAsync(Ct))
         {
@@ -267,13 +266,6 @@ public sealed class InstallShTests(PostgresFixture postgres, S3Fixture s3) : IAs
 
     private static string[] LeftoverTempFiles(string dir) =>
         Directory.Exists(dir) ? Directory.GetFiles(dir, ".panopticon-install-*") : [];
-
-    private static int FreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
-    }
 
     private static void SkipOnWindows() =>
         Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh runs under sh, on Unix only.");
