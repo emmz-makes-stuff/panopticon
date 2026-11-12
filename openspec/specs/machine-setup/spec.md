@@ -13,8 +13,8 @@ The setup guide SHALL show three numbered steps in order. First, install the CLI
 say that the steps run on the machine where the agent works, and it SHALL NOT cover linking a repo to a Project.
 
 #### Scenario: Steps on the public server
-- **WHEN** a member opens the guide on `https://panopticon.team`
-- **THEN** it shows Install the CLI, Log in with `panopticon login --server https://panopticon.team`, and Connect your
+- **WHEN** a member opens the guide on `https://panopticon.example.com`
+- **THEN** it shows Install the CLI, Log in with `panopticon login --server https://panopticon.example.com`, and Connect your
   agent, in that order
 
 #### Scenario: Self-hosted server
