@@ -6,11 +6,11 @@ is a stop (CLAUDE.md "Stop and ask"): leave a `stopped-…` devlog note and wait
 
 ## 1. Pre-publication audit (read-only)
 
-- [ ] 1.1 Sweep the working tree and the full history (`git log -p --all`) for credentials and tokens (key-shaped
+- [x] 1.1 Sweep the working tree and the full history (`git log -p --all`) for credentials and tokens (key-shaped
   strings, Resend `re_` keys, AWS keys, Railway tokens, private keys), personal email addresses and names other than
   the copyright holder, private URLs and hostnames, and large or binary files committed by mistake (design D8). Verify:
   every check's command and hit count are recorded, and `git status` shows no change outside the change folder.
-- [ ] 1.2 Write the findings as an `audit` devlog note: each hit with file or commit, what it is, and a suggested
+- [x] 1.2 Write the findings as an `audit` devlog note: each hit with file or commit, what it is, and a suggested
   action (fine / rotate / rewrite history), with the known public local-only values listed as expected. Verify: the
   note exists and names every check from 1.1, including those with no hits.
 
