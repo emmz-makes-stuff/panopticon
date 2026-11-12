@@ -1,3 +1,7 @@
+> **Contributing, and not the maintainer? Follow [`AGENTS.md`](AGENTS.md) instead of this file.** Everything below
+> is the maintainer's own workflow. It relies on tools and plugins you won't have, and it doesn't cover how outside
+> contributions are made. In particular, no pull request without an open issue labelled `ready`.
+
 # Panopticon
 
 A live dashboard of agents working through OpenSpec changes: a server (web UI plus an online MCP

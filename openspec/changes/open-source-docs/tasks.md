@@ -52,11 +52,11 @@ is a stop (CLAUDE.md "Stop and ask"): leave a `stopped-…` devlog note and wait
 
 ## 5. Contribution rules
 
-- [ ] 5.1 Add `CONTRIBUTING.md` per design D5. Verify: each scenario of the `contribution-policy` spec's Pull requests
+- [x] 5.1 Add `CONTRIBUTING.md` per design D5. Verify: each scenario of the `contribution-policy` spec's Pull requests
   only for ready issues and Agent-generated contributions requirements is answered by a named paragraph.
-- [ ] 5.2 Add `AGENTS.md` per design D1, with gate commands copied from the `Makefile`. Verify: the `ready` stop is the
+- [x] 5.2 Add `AGENTS.md` per design D1, with gate commands copied from the `Makefile`. Verify: the `ready` stop is the
   first rule, and every command it names exists as a `Makefile` target or an installed tool in `docs/dependencies.md`.
-- [ ] 5.3 Add the contributor note at the very top of `CLAUDE.md` (design D1), changing nothing else. Verify:
+- [x] 5.3 Add the contributor note at the very top of `CLAUDE.md` (design D1), changing nothing else. Verify:
   `git diff CLAUDE.md` shows only added lines, all above `# Panopticon`.
 
 ## 6. Final checks
