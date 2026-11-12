@@ -16,11 +16,11 @@ is a stop (CLAUDE.md "Stop and ask"): leave a `stopped-…` devlog note and wait
 
 ## 2. Domain scrub
 
-- [ ] 2.1 Replace `panopticon.team` with `panopticon.example.com` in
+- [x] 2.1 Replace `panopticon.team` with `panopticon.example.com` in
   `tests/Panopticon.Server.Tests/Distribution/CliEndpointTests.cs`, `web/src/views/projects.test.ts`,
   `web/src/views/setupGuide.test.ts` and `web/src/views/tokens.test.ts`, the host string only. Verify: `git diff`
   shows only that string changing, and `make test` and `make web-test` pass.
-- [ ] 2.2 Do the same in `web/DESIGN.md`. Verify: `git grep -n panopticon.team -- ':!openspec/changes/archive'` lists
+- [x] 2.2 Do the same in `web/DESIGN.md`. Verify: `git grep -n panopticon.team -- ':!openspec/changes/archive'` lists
   only `README.md` (rewritten in §4) and the main specs (updated by this change's deltas at archive).
 
 ## 3. Licence, conduct and security

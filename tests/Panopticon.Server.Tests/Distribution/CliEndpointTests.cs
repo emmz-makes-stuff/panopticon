@@ -35,7 +35,7 @@ public class CliEndpointTests(PostgresFixture postgres, S3Fixture s3)
     public async Task Manifest_lists_the_version_scripts_and_every_platform_without_sign_in()
     {
         using var builds = CliBuildsDirectory.Create("0.2.0");
-        await using var factory = await FactoryAsync(builds.Path, "https://panopticon.team");
+        await using var factory = await FactoryAsync(builds.Path, "https://panopticon.example.com");
         using var http = factory.CreateClient();
 
         using var response = await http.GetAsync(CliPlatforms.ManifestPath, Ct);
@@ -43,14 +43,14 @@ public class CliEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var manifest = (await response.Content.ReadFromJsonAsync<CliManifest>(Ct))!;
         Assert.Equal("0.2.0", manifest.Version);
-        Assert.Equal("https://panopticon.team/install.sh", manifest.InstallSh);
-        Assert.Equal("https://panopticon.team/install.ps1", manifest.InstallPs1);
+        Assert.Equal("https://panopticon.example.com/install.sh", manifest.InstallSh);
+        Assert.Equal("https://panopticon.example.com/install.ps1", manifest.InstallPs1);
         Assert.Equal(CliPlatforms.All.Order(), manifest.Platforms.Keys.Order());
         var linux = manifest.Platforms[CliPlatforms.LinuxX64];
-        Assert.Equal("https://panopticon.team/cli/linux-x64/panopticon", linux.Url);
+        Assert.Equal("https://panopticon.example.com/cli/linux-x64/panopticon", linux.Url);
         Assert.Equal(builds.Bytes(CliPlatforms.LinuxX64).Length, linux.Size);
         Assert.Equal(builds.Sha256(CliPlatforms.LinuxX64), linux.Sha256);
-        Assert.Equal("https://panopticon.team/cli/win-x64/panopticon.exe", manifest.Platforms[CliPlatforms.WinX64].Url);
+        Assert.Equal("https://panopticon.example.com/cli/win-x64/panopticon.exe", manifest.Platforms[CliPlatforms.WinX64].Url);
     }
 
     [Fact]
