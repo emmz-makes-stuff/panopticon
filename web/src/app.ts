@@ -25,6 +25,20 @@ import type { ChangeCard, SessionView } from "./types";
 /** The product's name, exactly as written (web/DESIGN.md, "Name"). */
 export const PRODUCT_NAME = "PANOPTICON";
 
+/**
+ * The logo that goes just before the wordmark (web/DESIGN.md, "Logo"; spec brand-identity, "Logo beside the
+ * wordmark"). It's decorative (`alt=""`), so the wordmark alone names the product.
+ */
+export function wordmarkLogo(): HTMLImageElement {
+  const logo = document.createElement("img");
+  logo.className = "wordmark-logo";
+  logo.src = "/logo.png";
+  logo.alt = "";
+  logo.width = 128;
+  logo.height = 128;
+  return logo;
+}
+
 /** Gap between consecutive cells lighting up after a report (web/DESIGN.md, principle 4). */
 export const LIGHTING_STEP_MS = 60;
 
@@ -152,7 +166,7 @@ export async function mountApp(root: HTMLElement, deps: AppDeps = {}): Promise<A
   header.className = "top";
   const wordmark = document.createElement("h1");
   wordmark.className = "wordmark";
-  wordmark.textContent = PRODUCT_NAME;
+  wordmark.append(wordmarkLogo(), PRODUCT_NAME);
   const status = document.createElement("div");
   status.className = "status";
   const live = document.createElement("span");

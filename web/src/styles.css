@@ -96,6 +96,15 @@ body {
   text-decoration: none;
 }
 
+/* The logo before the wordmark, centred on the capitals. It stays inline rather than flex so the header row still
+   lines up on the wordmark's text baseline. */
+.wordmark-logo {
+  height: 1.3em;
+  width: auto;
+  margin-right: 0.3em;
+  vertical-align: -0.3em;
+}
+
 .status-slot {
   margin-left: auto;
 }

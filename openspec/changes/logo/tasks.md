@@ -20,11 +20,11 @@ Section 3 ends with a browser check by Emmz, which is a stop (CLAUDE.md "Stop an
 
 ## 2. Dashboard header and site icon
 
-- [ ] 2.1 Add the two icon links to `web/index.html` (design D5). Add a Vitest test that reads `web/index.html` and
+- [x] 2.1 Add the two icon links to `web/index.html` (design D5). Add a Vitest test that reads `web/index.html` and
   checks `rel="icon"` (`type="image/png"`, `sizes="32x32"`, `href="/favicon-32.png"`) and
   `rel="apple-touch-icon"` (`href="/apple-touch-icon.png"`), and that both files exist in `web/public/`. Verify: the
   test passes, and fails if either link is removed. This covers the spec's "Browser tab" scenario.
-- [ ] 2.2 Add the shared logo helper beside `PRODUCT_NAME` in `web/src/app.ts`, and use it in the shell's `a.wordmark`
+- [x] 2.2 Add the shared logo helper beside `PRODUCT_NAME` in `web/src/app.ts`, and use it in the shell's `a.wordmark`
   and in `app.ts`'s standalone `h1.wordmark` (design D3). Add tests in `web/src/header.test.ts` and
   `web/src/app.test.ts`:
   - The shell header's home link contains `img.wordmark-logo` as its first child, with `alt=""` and
@@ -35,13 +35,13 @@ Section 3 ends with a browser check by Emmz, which is a stop (CLAUDE.md "Stop an
 
   Verify: `make web-test` → `WEB_TEST_EXIT:0`. This covers the "Signed-in page", "Sign-in page" and "Screen reader"
   scenarios.
-- [ ] 2.3 Style `.wordmark-logo` and the wordmark's flex row in `web/src/styles.css` (design D4). Verify:
+- [x] 2.3 Style `.wordmark-logo` and the wordmark's flex row in `web/src/styles.css` (design D4). Verify:
   `make web-build`, `make web-format` and `make web-lint` exit 0.
-- [ ] 2.4 Add a server test in `tests/Panopticon.Server.Tests/Dashboard/DashboardEndpointTests.cs`, following the
+- [x] 2.4 Add a server test in `tests/Panopticon.Server.Tests/Dashboard/DashboardEndpointTests.cs`, following the
   existing temporary-web-root pattern. It puts `favicon-32.png` and `apple-touch-icon.png` in the web root, and
   checks that a client with no cookie gets 200 `image/png` for each. Verify: `make test` → `TEST_EXIT:0`. This covers
   "Icons without a session".
-- [ ] 2.5 Update `web/DESIGN.md`:
+- [x] 2.5 Update `web/DESIGN.md`:
   - **Name:** the logo goes with the wordmark.
   - **Header:** the logo comes first, inside the home link, and is decorative.
   - **Layout sketch:** show the logo.

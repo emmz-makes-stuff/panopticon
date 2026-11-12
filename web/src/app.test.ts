@@ -22,6 +22,19 @@ describe("mountApp", () => {
     expect(PRODUCT_NAME).toBe("PANOPTICON");
   });
 
+  // Spec brand-identity, "Logo beside the wordmark": the standalone header (no shell) has it too.
+  it("puts the decorative logo before the wordmark in its own header", async () => {
+    const { root } = await mount();
+
+    const heading = q(root, "header.top > h1.wordmark");
+    const [logo, name] = [...heading.childNodes];
+    expect(logo).toBeInstanceOf(HTMLImageElement);
+    expect((logo as HTMLImageElement).className).toBe("wordmark-logo");
+    expect((logo as HTMLImageElement).getAttribute("alt")).toBe("");
+    expect((logo as HTMLImageElement).getAttribute("src")).toBe("/logo.png");
+    expect(name?.textContent).toBe(PRODUCT_NAME);
+  });
+
   // Spec live-dashboard, "One card per change".
   it("shows one card per change, in the server's most-recent-first order", async () => {
     const { root, fetch } = await mount([

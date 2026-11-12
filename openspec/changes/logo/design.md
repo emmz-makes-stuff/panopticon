@@ -84,8 +84,11 @@ drawing the wordmark would mean rendering Gabarito outside a browser.
 
 ### D4. Size and alignment
 
-- `.wordmark-logo` is `height: 1.3em; width: auto`, so about 40 px on the 31 px wordmark. It sits on a flex row:
-  `a.wordmark` and `h1.wordmark` get `display: inline-flex; align-items: center; gap: 0.35em`.
+- `.wordmark-logo` is `height: 1.3em; width: auto`, so about 40 px on the 31 px wordmark, with `margin-right: 0.3em`
+  and `vertical-align: -0.3em`. That centres it on the capitals.
+- It stays inline. A flex wordmark was rejected while building: `.top` lines its items up with
+  `align-items: baseline`, and an inline-flex wordmark would take its baseline from the image's bottom edge. The live
+  status and account links would then sit low.
 - The logo is a dark tile on both themes. On light `--paper` it reads as an app-icon tile. On dark `--paper` the
   tile's edge nearly vanishes, and the glowing triangle carries it. Both are intended.
 - These sizes are a first guess, which is why the browser check exists.

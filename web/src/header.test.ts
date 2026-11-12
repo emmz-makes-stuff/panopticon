@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { AWAY_CHANGED, SESSION_UPDATED } from "./live";
 import { NOTIFICATIONS_KEY, type NotificationHost } from "./notifications";
-import { signedIn, startTestShell } from "./testShell";
+import { signedIn, signedOut, startTestShell } from "./testShell";
 import { card, FakeEventSource, MEMBER, q, until } from "./testing";
 import type { SessionView } from "./types";
 import { titleWith } from "./views/cards";
@@ -288,5 +288,49 @@ describe("Browser notifications", () => {
     const { root } = await startTestShell("/", signedIn());
 
     expect(q<HTMLButtonElement>(root, ".notifications-toggle").hidden).toBe(true);
+  });
+});
+
+// Spec brand-identity, "Logo beside the wordmark"; logo design D3.
+describe("Logo beside the wordmark", () => {
+  const homeLink = (root: HTMLElement) =>
+    q<HTMLAnchorElement>(root, ".wordmark-heading > a.wordmark");
+
+  function expectLogoThenWordmark(link: HTMLAnchorElement) {
+    const [logo, name] = [...link.childNodes];
+    expect(logo).toBeInstanceOf(HTMLImageElement);
+    const img = logo as HTMLImageElement;
+    expect(img.className).toBe("wordmark-logo");
+    expect(img.getAttribute("src")).toBe("/logo.png");
+    expect(name?.nodeType).toBe(Node.TEXT_NODE);
+    expect(name?.textContent).toBe("PANOPTICON");
+    expect(link.childNodes).toHaveLength(2);
+  }
+
+  it("Signed-in page: the header starts with the logo, then the wordmark, inside the link home", async () => {
+    const { root } = await startTestShell("/", signedIn());
+
+    const link = homeLink(root);
+    expect(link.getAttribute("href")).toBe("/");
+    expectLogoThenWordmark(link);
+  });
+
+  it("Sign-in page: the header shows the logo before the wordmark too", async () => {
+    const { root, heading } = await startTestShell("/", signedOut());
+
+    expect(heading()).toBe("Sign in");
+    expectLogoThenWordmark(homeLink(root));
+  });
+
+  it("Screen reader: the link is named PANOPTICON once, and the image adds nothing", async () => {
+    const { root } = await startTestShell("/", signedIn());
+
+    const link = homeLink(root);
+    const img = q<HTMLImageElement>(link, "img");
+    expect(img.getAttribute("alt")).toBe("");
+    expect(img.hasAttribute("title")).toBe(false);
+    expect(img.hasAttribute("aria-label")).toBe(false);
+    expect(link.hasAttribute("aria-label")).toBe(false);
+    expect(link.textContent).toBe("PANOPTICON");
   });
 });
