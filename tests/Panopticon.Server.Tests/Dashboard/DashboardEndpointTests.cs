@@ -379,6 +379,27 @@ public class DashboardEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal(HttpStatusCode.NotFound, api.StatusCode);
     }
 
+    // specs/brand-identity: Site icon, "Icons without a session" (logo design D2, D5).
+    [Theory]
+    [InlineData("/favicon-32.png")]
+    [InlineData("/apple-touch-icon.png")]
+    public async Task Site_icons_are_served_as_PNGs_without_a_session(string path)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var webRoot = Directory.CreateTempSubdirectory("panopticon-wwwroot-").FullName;
+        await File.WriteAllTextAsync(Path.Combine(webRoot, "index.html"), "<!doctype html><title>Panopticon</title>", ct);
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        await File.WriteAllBytesAsync(Path.Combine(webRoot, path.TrimStart('/')), png, ct);
+        await using var factory = WebRootFactory(await postgres.CreateDatabaseAsync(ct), await s3.CreateBucketAsync(ct), webRoot);
+        using var http = factory.CreateClient(new() { HandleCookies = false, AllowAutoRedirect = false });
+
+        using var response = await http.GetAsync(path, ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/png", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(png, await response.Content.ReadAsByteArrayAsync(ct));
+    }
+
     [Theory]
     [InlineData("/api")]
     [InlineData("/api/")]

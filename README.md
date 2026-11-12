@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.png" width="128" alt=""></p>
+
 # PANOPTICON
 
 **Every coding agent, every OpenSpec change, one live dashboard.**

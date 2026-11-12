@@ -11,7 +11,30 @@ bold idea, and everything around it stays quiet.
 The site title and wordmark are **"PANOPTICON"**, in capitals, with no article. Use it exactly so in the
 wordmark, the page `<title>` and anywhere else the product is named in the UI. The wordmark is set in
 Gabarito 700 with `letter-spacing: 0.03em` to open up the capitals. (This is a deliberate exception to "no
-all-caps", because it's the name.)
+all-caps", because it's the name.) The logo always comes just before the wordmark (see "Logo").
+
+## Logo
+
+The logo is an eye in a triangle, glowing pale teal on a dark rounded tile (`#121929`). The source is
+`docs/images/logo.webp` (1024×1024). The PNGs below are made from it once and committed. How they were made, the
+script included, is in the `logo` change's devlog.
+
+| File                              | Size     | Corners                     | Use                                    |
+| --------------------------------- | -------- | --------------------------- | -------------------------------------- |
+| `web/public/logo.png`             | 128×128  | transparent                 | header, before the wordmark            |
+| `web/public/favicon-32.png`       | 32×32    | transparent                 | browser tab (`<link rel="icon">`)      |
+| `web/public/apple-touch-icon.png` | 180×180  | filled with the tile colour | home screens (iOS rounds the corners)  |
+| `docs/images/logo.png`            | 512×512  | transparent                 | README                                 |
+| `docs/images/social-preview.png`  | 1280×640 | full-bleed tile colour      | GitHub social preview (a repo setting) |
+
+- Corners are transparent everywhere except the touch icon and the social preview, so the tile never shows a white
+  or square edge on either colour scheme.
+- In the header the logo is `1.3em` tall (about 40px on the 31px wordmark), with a `0.3em` gap. It's lowered by
+  `0.38em`, which centres it on the capitals. It stays inline, not flex, so the header row still lines up on the
+  wordmark's baseline.
+- It's decorative (`alt=""`) and sits inside the wordmark's link home, so a screen reader hears "PANOPTICON" once.
+- The tile is dark on both schemes. On light paper it reads as an app icon. On dark paper its edge almost disappears
+  and the glow carries it.
 
 ## Principles
 
@@ -62,7 +85,7 @@ is cool rather than cream.
 ## Layout
 
 ```
-PANOPTICON                ● Live  3 changes   Emmz  Members  Tokens  Sign out
+◬ PANOPTICON              ● Live  3 changes   Emmz  Members  Tokens  Sign out
 ──────────────────────────────────────────────────────────────────────────
 ┌──────────────────────────┐ ┌──────────────────────────┐ ┌─────────
 │ github.com               │ │ dev.azure.com            │ │ (dimmed)
@@ -88,8 +111,8 @@ PANOPTICON                ● Live  3 changes   Emmz  Members  Tokens  Sign out
 - **Agent row:** each agent is a hairline pill reading `claude-code@vm-1`, then the member who runs it in
   `--ink-muted` (`.card-agent-member`, design D17). The member is quieter than the agent, and absent for
   reports made before team sign-in.
-- **Header:** the wordmark, which is also the link home and keeps its name styling (no underline, no link
-  colour). On the dashboard, the live state follows, pushed right: a `--spark` dot and "Live", or a
+- **Header:** the logo (`◬` above), then the wordmark. Both are inside the link home, which keeps its name styling
+  (no underline, no link colour), and the logo is decorative. On the dashboard, the live state follows, pushed right: a `--spark` dot and "Live", or a
   hollow dot and "Offline, reconnecting…" while disconnected, with the number of changes beside it. Other
   pages leave that slot empty. When signed in, the account sits last: your display name (600), then
   Projects, Members, History, Metrics, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,

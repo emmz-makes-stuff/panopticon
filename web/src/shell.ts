@@ -1,5 +1,5 @@
 import { ApiError, createApi, type Api, type FetchLike, type SessionMember } from "./api";
-import { PRODUCT_NAME } from "./app";
+import { PRODUCT_NAME, wordmarkLogo } from "./app";
 import { awaySwitch } from "./away";
 import {
   browserNotifications,
@@ -113,7 +113,7 @@ export async function startShell(root: HTMLElement, deps: ShellDeps = {}): Promi
   wordmark.className = "wordmark";
   wordmark.href = "/";
   wordmark.dataset["route"] = "";
-  wordmark.textContent = PRODUCT_NAME;
+  wordmark.append(wordmarkLogo(), PRODUCT_NAME);
   const heading = document.createElement("h1");
   heading.className = "wordmark-heading";
   heading.append(wordmark);
