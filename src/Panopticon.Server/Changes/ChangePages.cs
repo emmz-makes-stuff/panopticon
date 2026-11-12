@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Panopticon.Server.Dashboard;
 using Panopticon.Server.Data;
 using Panopticon.Server.Documents;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Changes;
@@ -16,7 +17,14 @@ public sealed record ChangePage(
     ChangeCard Card,
     DateTimeOffset? ArchivedAt,
     string? ArchiveFolder,
-    IReadOnlyList<DocumentEntry> Documents);
+    IReadOnlyList<DocumentEntry> Documents)
+{
+    /// <summary>
+    /// The answers given to its sessions from the dashboard, newest first (agent-interaction D8; spec change-documents,
+    /// Answers given from the dashboard), each with its questions only for a viewer who could have answered.
+    /// </summary>
+    public IReadOnlyList<AnswerEntry> Answers { get; init; } = [];
+}
 
 /// <summary>One document in the list. <see cref="Kind"/> is proposal, design, tasks, spec, devlog, meta or other.</summary>
 public sealed record DocumentEntry(string Path, string Kind, string Title, int SizeBytes);
@@ -96,11 +104,50 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
             .Select(d => new { d.Path, d.SizeBytes })
             .ToListAsync(cancellationToken);
 
+        var scope = new ChangeScope(change.ProjectId, change.OwnerMemberId);
         return new ChangePage(
-            ChangeCards.ToCard(change, viewer.MemberId),
+            cards.WithSessions(ChangeCards.ToCard(change, viewer.MemberId)).SessionsFor(viewer, scope),
             change.ArchivedAt,
             change.ArchiveFolder,
-            Order(documents.Select(d => Describe(d.Path, d.SizeBytes))));
+            Order(documents.Select(d => Describe(d.Path, d.SizeBytes))))
+        {
+            Answers = await AnswersAsync(changeId, viewer, scope, cancellationToken),
+        };
+    }
+
+    /// <summary>The most answers a change page lists.</summary>
+    public const int MaxAnswers = 200;
+
+    private static readonly System.Text.Json.JsonSerializerOptions _questionsJson = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    private async Task<IReadOnlyList<AnswerEntry>> AnswersAsync(Guid changeId, Viewer viewer, ChangeScope scope, CancellationToken cancellationToken)
+    {
+        var rows = await db.RemoteAnswers.AsNoTracking()
+            .Where(a => a.ChangeId == changeId)
+            .OrderByDescending(a => a.AnsweredAt)
+            .ThenByDescending(a => a.Id)
+            .Take(MaxAnswers)
+            .Select(a => new
+            {
+                Answer = a,
+                SessionMember = db.Members.Where(m => m.Id == a.SessionMemberId).Select(m => m.DisplayName).FirstOrDefault(),
+                AnsweredBy = db.Members.Where(m => m.Id == a.AnsweredByMemberId).Select(m => m.DisplayName).FirstOrDefault(),
+            })
+            .ToListAsync(cancellationToken);
+
+        return [.. rows.Select(r => new AnswerEntry(
+                r.Answer.Id,
+                r.Answer.ChangeId,
+                r.SessionMember ?? string.Empty,
+                r.AnsweredBy ?? string.Empty,
+                r.Answer.AnsweredAt,
+                r.Answer.Kind == RemoteAnswer.PermissionKind ? Contracts.PromptKind.Permission : Contracts.PromptKind.Question,
+                r.Answer.ToolName,
+                r.Answer.Outcome,
+                r.Answer.QuestionsJson is { } json
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<AnsweredQuestion>>(json, _questionsJson)
+                    : null)
+            .For(viewer, r.Answer.SessionMemberId, scope))];
     }
 
     /// <summary>The document rendered, or null when the change has no document at that path or the viewer can't see it.</summary>

@@ -13,6 +13,9 @@ public sealed class Member
     public DateTimeOffset? RemovedAt { get; set; }
     public Guid? InvitedByMemberId { get; set; }
 
+    /// <summary>When the member turned away mode on, or null while it's off (agent-interaction D8).</summary>
+    public DateTimeOffset? AwaySince { get; set; }
+
     public bool IsActive => RemovedAt is null;
 }
 

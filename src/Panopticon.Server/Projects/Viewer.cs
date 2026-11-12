@@ -12,15 +12,17 @@ public sealed record ChangeScope(Guid? ProjectId, Guid? OwnerMemberId)
 }
 
 /// <summary>
-/// Who is looking (projects D2): a signed-in member and the Projects they belong to, in any role. Built once per request
-/// and handed to every change read, so a change outside the viewer's scopes is never read at all.
+/// Who is looking (projects D2): a signed-in member, the Projects they belong to in any role, and those they own
+/// (agent-interaction D5). Built once per request and handed to every change read, so a change outside the viewer's
+/// scopes is never read at all.
 /// </summary>
 public sealed class Viewer
 {
-    public Viewer(Guid memberId, IEnumerable<Guid> projectIds)
+    public Viewer(Guid memberId, IEnumerable<Guid> projectIds, IEnumerable<Guid>? ownedProjectIds = null)
     {
         MemberId = memberId;
         ProjectIds = [.. projectIds];
+        OwnedProjectIds = [.. (ownedProjectIds ?? []).Where(ProjectIds.Contains)];
     }
 
     public Guid MemberId { get; }
@@ -28,9 +30,30 @@ public sealed class Viewer
     /// <summary>The Projects the member belongs to. A list, not a set, so EF can translate <c>Contains</c> on it.</summary>
     public IReadOnlyList<Guid> ProjectIds { get; }
 
-    /// <summary>The same member, now in <paramref name="projectId"/> or not.</summary>
-    public Viewer WithProject(Guid projectId, bool isMember) =>
-        new(MemberId, isMember ? ProjectIds.Append(projectId).Distinct() : ProjectIds.Where(p => p != projectId));
+    /// <summary>The Projects the member owns: a subset of <see cref="ProjectIds"/>.</summary>
+    public IReadOnlyList<Guid> OwnedProjectIds { get; }
+
+    /// <summary>
+    /// The same member, now in <paramref name="projectId"/> with <paramref name="role"/>, or not in it (null). A role
+    /// change replaces the old role.
+    /// </summary>
+    public Viewer WithProject(Guid projectId, string? role) =>
+        new(
+            MemberId,
+            role is not null ? ProjectIds.Append(projectId).Distinct() : ProjectIds.Where(p => p != projectId),
+            role == ProjectRoles.Owner ? OwnedProjectIds.Append(projectId).Distinct() : OwnedProjectIds.Where(p => p != projectId));
+
+    /// <summary>
+    /// Whether the viewer may answer a prompt of a session belonging to <paramref name="sessionMemberId"/>, on a change
+    /// in <paramref name="scope"/> (D5; spec remote-answers, Who may answer): it's their own session, or they own the
+    /// change's Project. Only the member answers a personal change's prompts. The answer endpoint checks again against
+    /// the database, so a stale viewer can never authorise an answer.
+    /// </summary>
+    public bool CanAnswer(Guid sessionMemberId, ChangeScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        return sessionMemberId == MemberId || (scope.ProjectId is { } project && OwnedProjectIds.Contains(project));
+    }
 
     /// <summary>
     /// Whether a change in this scope is visible to the viewer: the in-memory twin of
@@ -44,15 +67,18 @@ public sealed class Viewer
             || scope is { ProjectId: null, OwnerMemberId: null };
     }
 
-    /// <summary>The viewer of a member, with their Projects as they are now.</summary>
+    /// <summary>The viewer of a member, with their Projects and roles as they are now.</summary>
     public static async Task<Viewer> LoadAsync(PanopticonDb db, Guid memberId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        var projectIds = await db.ProjectMembers.AsNoTracking()
+        var memberships = await db.ProjectMembers.AsNoTracking()
             .Where(m => m.MemberId == memberId)
-            .Select(m => m.ProjectId)
+            .Select(m => new { m.ProjectId, m.Role })
             .ToListAsync(cancellationToken);
-        return new Viewer(memberId, projectIds);
+        return new Viewer(
+            memberId,
+            memberships.Select(m => m.ProjectId),
+            memberships.Where(m => m.Role == ProjectRoles.Owner).Select(m => m.ProjectId));
     }
 
     /// <summary>

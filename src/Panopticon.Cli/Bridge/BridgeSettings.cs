@@ -150,6 +150,17 @@ internal sealed record BridgeSettings(
         return (builder.Uri, Token!.Trim());
     }
 
+    /// <summary>
+    /// The server's base URL, ending in a slash, for the REST endpoints under <c>/api/agent/</c> (agent-interaction
+    /// D3), and the token to send: the same server and token as reports, with the same errors.
+    /// </summary>
+    public (Uri BaseUrl, string Token) RequireApi()
+    {
+        var (endpoint, token) = RequireServer();
+        var path = endpoint.AbsolutePath[..^"mcp".Length];
+        return (new UriBuilder(endpoint) { Path = path }.Uri, token);
+    }
+
     /// <summary>A URL safe to show: no user-info, query or fragment.</summary>
     public static string Display(Uri url) => $"{url.Scheme}://{url.Authority}{url.AbsolutePath}";
 

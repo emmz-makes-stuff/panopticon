@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Contracts;
 using Panopticon.Server.Auth;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Data;
 using Panopticon.Server.Live;
 using Panopticon.Server.Projects;
 using Panopticon.Server.Tests.Infrastructure;
@@ -25,6 +26,89 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
         null,
         new CardProgress(0, 1),
         DateTimeOffset.UnixEpoch);
+
+    // Code review F8: a dropped session-ended or away-changed would otherwise never be caught up.
+    [Fact]
+    public async Task A_stream_whose_queue_dropped_events_sends_resync_then_the_events_it_kept()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var kit = new Viewer(_ids.Kit, [_ids.Pan]);
+        var pan = new ChangeScope(_ids.Pan, null);
+        await using var stream = DashboardEndpoints.StreamAsync(broadcaster, kit, subscribed: null, TimeSpan.FromSeconds(30), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), pan);
+        Assert.True(await moving);
+
+        // The stream is busy sending the first event while the queue overflows by one.
+        var cards = Enumerable.Range(0, ChangeBroadcaster.SubscriberCapacity + 1).Select(i => Card($"card-{i}")).ToList();
+        cards.ForEach(card => broadcaster.Publish(card, pan));
+
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal((DashboardEndpoints.ResyncEvent, null), (stream.Current.EventType, stream.Current.Data));
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal("card-1", Assert.IsType<ChangeCard>(stream.Current.Data).Change);
+    }
+
+    // Second review #5: a dropped membership change takes effect at the resync, not at the next keep-alive.
+    [Fact]
+    public async Task A_resync_rechecks_the_viewer_at_once_so_a_dropped_join_takes_effect()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var current = new Viewer(_ids.Kit, [_ids.Pan]);
+        var pan = new ChangeScope(_ids.Pan, null);
+        await using var stream = DashboardEndpoints.StreamAsync(
+                broadcaster, current, subscribed: null, TimeSpan.FromMinutes(5), recheck: _ => Task.FromResult<Viewer?>(current), Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), pan);
+        Assert.True(await moving);
+
+        // Kit joined Acme; that event is among those the full queue dropped.
+        current = new Viewer(_ids.Kit, [_ids.Pan, _ids.Acme]);
+        Enumerable.Range(0, ChangeBroadcaster.SubscriberCapacity + 1).ToList().ForEach(i => broadcaster.Publish(Card($"card-{i}"), pan));
+
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal(new ProjectsChanged(_ids.Acme, Member: true), stream.Current.Data);
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal(DashboardEndpoints.ResyncEvent, stream.Current.EventType);
+    }
+
+    [Fact]
+    public async Task A_resync_whose_recheck_finds_the_member_removed_ends_the_stream()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        Viewer? current = new Viewer(_ids.Kit, [_ids.Pan]);
+        var pan = new ChangeScope(_ids.Pan, null);
+        await using var stream = DashboardEndpoints.StreamAsync(
+                broadcaster, current, subscribed: null, TimeSpan.FromMinutes(5), recheck: _ => Task.FromResult<Viewer?>(current), Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), pan);
+        Assert.True(await moving);
+
+        current = null;
+        Enumerable.Range(0, ChangeBroadcaster.SubscriberCapacity + 1).ToList().ForEach(i => broadcaster.Publish(Card($"card-{i}"), pan));
+
+        Assert.False(await stream.MoveNextAsync());
+    }
+
+    [Fact]
+    public async Task A_stream_with_no_drops_sends_no_resync()
+    {
+        var broadcaster = new ChangeBroadcaster();
+        var kit = new Viewer(_ids.Kit, [_ids.Pan]);
+        await using var stream = DashboardEndpoints.StreamAsync(broadcaster, kit, subscribed: null, TimeSpan.FromSeconds(30), recheck: null, Ct)
+            .GetAsyncEnumerator(Ct);
+        var moving = stream.MoveNextAsync();
+        broadcaster.Publish(Card("first"), new ChangeScope(_ids.Pan, null));
+        broadcaster.Publish(Card("second"), new ChangeScope(_ids.Pan, null));
+
+        Assert.True(await moving);
+        Assert.True(await stream.MoveNextAsync());
+        Assert.Equal(DashboardEndpoints.ChangeUpdatedEvent, stream.Current.EventType);
+        Assert.Equal("second", Assert.IsType<ChangeCard>(stream.Current.Data).Change);
+    }
 
     [Fact]
     public async Task A_viewer_gets_only_the_events_of_changes_they_can_see()
@@ -135,8 +219,8 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
             .GetAsyncEnumerator(Ct);
         var moving = stream.MoveNextAsync();
 
-        broadcaster.PublishMembershipChanged(_ids.Emmz, _ids.Pan, isMember: false);
-        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, isMember: false);
+        broadcaster.PublishMembershipChanged(_ids.Emmz, _ids.Pan, role: null);
+        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, role: null);
         broadcaster.Publish(Card("pan-after"), new ChangeScope(_ids.Pan, null));
         var sentinel = Card("kit-scratch");
         broadcaster.Publish(sentinel, new ChangeScope(null, _ids.Kit));
@@ -163,7 +247,7 @@ public class ScopedStreamTests(PostgresFixture postgres, S3Fixture s3)
         var moving = stream.MoveNextAsync();
 
         broadcaster.Publish(Card("pan-before"), new ChangeScope(_ids.Pan, null));
-        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, isMember: true);
+        broadcaster.PublishMembershipChanged(_ids.Kit, _ids.Pan, ProjectRoles.Viewer);
         var after = Card("pan-after");
         broadcaster.Publish(after, new ChangeScope(_ids.Pan, null));
 

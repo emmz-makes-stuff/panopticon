@@ -11,6 +11,7 @@ using Panopticon.Server.Distribution;
 using Panopticon.Server.Documents;
 using Panopticon.Server.Live;
 using Panopticon.Server.Metrics;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Progress;
 using Panopticon.Server.Projects;
 using Panopticon.Server.Reporting;
@@ -91,6 +92,12 @@ public static class ServerSetup
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ActivityOptions>, ActivityOptionsValidation>();
 
+        // How long prompts are held and waited on (agent-interaction D6). Settable for tests.
+        services.AddOptions<PromptOptions>()
+            .Bind(configuration.GetSection(PromptOptions.Section))
+            .Validate(o => o.HoldLimit > TimeSpan.Zero && o.WaitGrace > o.WaitTimeout && o.WaitTimeout > TimeSpan.Zero && o.LateEventWindow > TimeSpan.Zero, "Panopticon:Prompts needs positive times, with WaitGrace longer than WaitTimeout.")
+            .ValidateOnStart();
+
         // Storage.
         services.AddDbContext<PanopticonDb>((sp, options) =>
             DbOptions.Configure(
@@ -124,6 +131,9 @@ public static class ServerSetup
         services.AddScoped<MetricsReader>();
         services.AddSingleton<DocumentRenderer>();
         services.AddSingleton<ChangeBroadcaster>();
+        services.AddSingleton<PresenceStore>();
+        services.AddScoped<AwayMode>();
+        services.AddHostedService<PresenceSweep>();
 
         // Auth (team-auth D4): no default scheme, so nothing is looked up unless an endpoint's policy asks for it.
         // Dashboard and /api: the session cookie. /mcp: a bearer token.
@@ -182,6 +192,10 @@ public static class ServerSetup
         app.MapDashboard();
         app.MapChanges();
         app.MapChangeTags();
+        app.MapAgentSessions();
+        app.MapAway();
+        app.MapAgentPrompts();
+        app.MapPromptAnswers();
         app.MapMetrics();
         app.MapProjects();
 

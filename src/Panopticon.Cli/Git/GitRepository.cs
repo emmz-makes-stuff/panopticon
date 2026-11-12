@@ -34,6 +34,13 @@ internal static class GitRepository
         return result.Stdout.Trim();
     }
 
+    /// <summary>The checked-out branch's short name, or null on a detached HEAD.</summary>
+    public static async Task<string?> GetBranchAsync(string repoRoot, CancellationToken cancellationToken)
+    {
+        var result = await RunGitAsync(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken);
+        return result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout) ? result.Stdout.Trim() : null;
+    }
+
     private static string Detail(string stderr)
     {
         var line = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

@@ -1,5 +1,6 @@
 // Test harness for the whole signed-in app (imported by *.test.ts only).
 import { RETURN_TO_KEY } from "./returnPath";
+import type { NotificationHost } from "./notifications";
 import { startShell, type StorageLike } from "./shell";
 import {
   card,
@@ -20,6 +21,8 @@ export interface TestShellOptions {
   local?: Record<string, string>;
   /** Replaces localStorage altogether, e.g. with one that throws, as blocked site data does. */
   storage?: StorageLike;
+  /** The browser's notifications; without one, a browser that has none. */
+  notifications?: NotificationHost;
 }
 
 /** Starts the app at `url` against a fake server, with fake navigation, storage and EventSource. */
@@ -44,6 +47,11 @@ export async function startTestShell(
     confirm: options.confirm ?? (() => true),
     copy: options.copy ?? (() => Promise.resolve()),
     platform: () => options.platform ?? "macOS",
+    notifications: options.notifications ?? {
+      permission: () => "unsupported",
+      requestPermission: () => Promise.resolve("denied"),
+      show: () => undefined,
+    },
   });
   const heading = () => root.querySelector(".view h2")?.textContent;
   return { root, nav, local, shell, heading, events };
@@ -54,6 +62,7 @@ export const signedIn = (member = MEMBER) =>
   fakeServer()
     .on("GET", "/api/session", { status: 200, body: member })
     .on("GET", "/api/changes", { status: 200, body: [card()] })
+    .on("GET", "/api/me/away", { status: 200, body: { away: false, since: null } })
     .on("GET", "/api/settings", {
       status: 200,
       body: { idleAfterSeconds: 1800, staleAfterSeconds: 14400 },

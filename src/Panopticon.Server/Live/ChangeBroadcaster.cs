@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Panopticon.Server.Dashboard;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Live;
@@ -25,8 +26,11 @@ public abstract record ChangeEvent
         /// <summary>The card, with no personal tags on it.</summary>
         public ChangeCard Card => Live.Card;
 
-        /// <summary>The card for one subscriber: with their own personal tags, and nobody else's.</summary>
-        public ChangeCard CardFor(Guid memberId) => Live.For(memberId);
+        /// <summary>
+        /// The card for one subscriber: with their own personal tags and nobody else's, and only the prompts they may
+        /// answer in full (agent-interaction D5).
+        /// </summary>
+        public ChangeCard CardFor(Viewer viewer) => Live.For(viewer, Scope);
     }
 
     /// <summary>The change was archived and leaves the live view; sent as <c>change-archived</c>.</summary>
@@ -34,15 +38,34 @@ public abstract record ChangeEvent
 
     /// <summary>
     /// A member joined a Project, left it, or changed role there. Their streams update their scope and send
-    /// <c>projects-changed</c>; nobody else's notice it.
+    /// <c>projects-changed</c>; nobody else's notice it. <see cref="Role"/> is their role now, or null once they've left,
+    /// so a promoted or demoted owner's stream follows at once (agent-interaction D5).
     /// </summary>
-    public sealed record MembershipChanged(Guid MemberId, Guid ProjectId, bool IsMember) : ChangeEvent;
+    public sealed record MembershipChanged(Guid MemberId, Guid ProjectId, string? Role) : ChangeEvent
+    {
+        public bool IsMember => Role is not null;
+    }
 
     /// <summary>A member was removed from the server: their streams end, so the browser's reconnect gets a 401.</summary>
     public sealed record MemberRemoved(Guid MemberId) : ChangeEvent;
 
     /// <summary>A Project's tags changed (tags D6); sent as <c>project-tags-changed</c> to the Project's members.</summary>
     public sealed record TagsChanged(Guid ProjectId, IReadOnlyList<ProjectTagRef> Tags) : ChangeEvent;
+
+    /// <summary>A session on the change has a new state (agent-interaction D4); sent as <c>session-updated</c>.</summary>
+    public sealed record SessionUpdated(Guid ChangeId, ChangeScope Scope, SessionView Session) : ChangeEvent;
+
+    /// <summary>A session left the change, by ending, expiring or moving on; sent as <c>session-ended</c>.</summary>
+    public sealed record SessionEnded(Guid ChangeId, ChangeScope Scope, Guid SessionId) : ChangeEvent;
+
+    /// <summary>A member turned away on or off (D8); sent as <c>away-changed</c> to that member's streams only.</summary>
+    public sealed record AwayChanged(Guid MemberId, Contracts.AwayState State) : ChangeEvent;
+
+    /// <summary>
+    /// An answer from the dashboard was recorded (D8); sent as <c>answer-recorded</c> for live change pages, with its
+    /// questions only to viewers who could have answered (D5).
+    /// </summary>
+    public sealed record AnswerRecorded(ChangeScope Scope, Guid SessionMemberId, AnswerEntry Entry) : ChangeEvent;
 }
 
 /// <summary>
@@ -74,18 +97,21 @@ public sealed class ChangeBroadcaster
 
     public Subscription Subscribe()
     {
-        var channel = Channel.CreateBounded<ChangeEvent>(new BoundedChannelOptions(SubscriberCapacity)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-        });
+        var drops = new Drops();
+        var channel = Channel.CreateBounded<ChangeEvent>(
+            new BoundedChannelOptions(SubscriberCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+            },
+            _ => drops.Note());
 
         lock (_gate)
         {
             _subscribers.Add(channel);
         }
 
-        return new Subscription(this, channel);
+        return new Subscription(this, channel, drops);
     }
 
     /// <summary>Publishes a card with each member's personal tags (tags D6).</summary>
@@ -123,8 +149,9 @@ public sealed class ChangeBroadcaster
     /// open streams take it in at once. Their keep-alive re-check reloads the Projects as a backstop, in case a full
     /// queue drops this.
     /// </summary>
-    public void PublishMembershipChanged(Guid memberId, Guid projectId, bool isMember) =>
-        Publish(new ChangeEvent.MembershipChanged(memberId, projectId, isMember));
+    /// <param name="role">The member's role in the Project now, or null when they've left it.</param>
+    public void PublishMembershipChanged(Guid memberId, Guid projectId, string? role) =>
+        Publish(new ChangeEvent.MembershipChanged(memberId, projectId, role));
 
     /// <summary>Call after removing a member from the server commits: their open streams end.</summary>
     public void PublishMemberRemoved(Guid memberId) => Publish(new ChangeEvent.MemberRemoved(memberId));
@@ -134,6 +161,35 @@ public sealed class ChangeBroadcaster
     {
         ArgumentNullException.ThrowIfNull(tags);
         Publish(new ChangeEvent.TagsChanged(projectId, tags));
+    }
+
+    /// <summary>Called by the <see cref="PresenceStore"/>, under its lock, so a session's events go out in order.</summary>
+    public void PublishSessionUpdated(Guid changeId, ChangeScope scope, SessionView session)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(session);
+        Publish(new ChangeEvent.SessionUpdated(changeId, scope, session));
+    }
+
+    /// <summary>Call after an answer's record commits.</summary>
+    public void PublishAnswerRecorded(ChangeScope scope, Guid sessionMemberId, AnswerEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(entry);
+        Publish(new ChangeEvent.AnswerRecorded(scope, sessionMemberId, entry));
+    }
+
+    /// <summary>Call after a member's away switch is written.</summary>
+    public void PublishAwayChanged(Guid memberId, Contracts.AwayState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        Publish(new ChangeEvent.AwayChanged(memberId, state));
+    }
+
+    public void PublishSessionEnded(Guid changeId, ChangeScope scope, Guid sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        Publish(new ChangeEvent.SessionEnded(changeId, scope, sessionId));
     }
 
     private void Publish(ChangeEvent change)
@@ -167,10 +223,26 @@ public sealed class ChangeBroadcaster
         channel.Writer.TryComplete();
     }
 
-    public sealed class Subscription(ChangeBroadcaster owner, Channel<ChangeEvent> channel) : IDisposable
+    public sealed class Subscription(ChangeBroadcaster owner, Channel<ChangeEvent> channel, Drops drops) : IDisposable
     {
         public ChannelReader<ChangeEvent> Reader => channel.Reader;
 
+        /// <summary>
+        /// Whether the queue dropped an event since the last call (code review F8): the stream sends <c>resync</c>, and
+        /// the browser loads the state again, as on a reconnect.
+        /// </summary>
+        public bool TakeDropped() => drops.Take();
+
         public void Dispose() => owner.Remove(channel);
+    }
+
+    /// <summary>A subscriber's dropped-event flag, set by the channel as it drops and taken by the stream.</summary>
+    public sealed class Drops
+    {
+        private int _dropped;
+
+        internal void Note() => Interlocked.Exchange(ref _dropped, 1);
+
+        internal bool Take() => Interlocked.Exchange(ref _dropped, 0) == 1;
     }
 }

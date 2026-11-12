@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Panopticon.Server.Data;
+using Panopticon.Server.Presence;
 using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Dashboard;
@@ -26,6 +27,25 @@ public sealed record ChangeCard(
     /// card a live update publishes: the stream fills it in per subscriber.
     /// </summary>
     public IReadOnlyList<PersonalTagRef> PersonalTags { get; init; } = [];
+
+    /// <summary>The sessions working on it right now, oldest first (agent-interaction D4). Never stored: from the presence store.</summary>
+    public IReadOnlyList<SessionView> Sessions { get; init; } = [];
+
+    /// <summary>
+    /// The last report or session event, whichever is newer: what the quiet state goes by (spec live-dashboard, Quiet
+    /// cards). Cards are still ordered by <see cref="LastReportedAt"/>.
+    /// </summary>
+    public DateTimeOffset LastActiveAt =>
+        Sessions.Count == 0 ? LastReportedAt : new[] { LastReportedAt, Sessions.Max(s => s.LastEventAt) }.Max();
+
+    /// <summary>
+    /// The card with each session's prompt as <paramref name="viewer"/> may see it, on a change in
+    /// <paramref name="scope"/> (agent-interaction D5). Every card that goes to a person goes through here.
+    /// </summary>
+    public ChangeCard SessionsFor(Viewer viewer, ChangeScope scope) =>
+        Sessions.Any(s => s.PromptDetail is not null)
+            ? this with { Sessions = [.. Sessions.Select(s => s.For(viewer, scope))] }
+            : this;
 }
 
 /// <summary>
@@ -35,9 +55,16 @@ public sealed record ChangeCard(
 /// </summary>
 public sealed record LiveCard(ChangeCard Card, IReadOnlyDictionary<Guid, IReadOnlyList<PersonalTagRef>> PersonalTags)
 {
-    /// <summary>The card as <paramref name="memberId"/> sees it: with their own personal tags, and nobody else's.</summary>
-    public ChangeCard For(Guid memberId) =>
-        PersonalTags.TryGetValue(memberId, out var tags) ? Card with { PersonalTags = tags } : Card;
+    /// <summary>
+    /// The card as <paramref name="viewer"/> sees it, on a change in <paramref name="scope"/>: with their own personal
+    /// tags and nobody else's, and only the prompts they may answer in full.
+    /// </summary>
+    public ChangeCard For(Viewer viewer, ChangeScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(viewer);
+        var card = PersonalTags.TryGetValue(viewer.MemberId, out var tags) ? Card with { PersonalTags = tags } : Card;
+        return card.SessionsFor(viewer, scope);
+    }
 }
 
 /// <summary>A personal tag as a card shows it: its key and value, with no id (tags D6).</summary>
@@ -66,8 +93,11 @@ public sealed record CardSection(int Number, string Title, CardProgress Progress
 /// <summary>Done over total; total 0 is the "empty" state, shown as such rather than as 0%.</summary>
 public sealed record CardProgress(int Done, int Total);
 
-/// <summary>Builds cards from the database: for the read API, and for live updates after a report.</summary>
-public sealed class ChangeCards(PanopticonDb db)
+/// <summary>
+/// Builds cards from the database, with their sessions from <paramref name="presence"/>: for the read API, and for live
+/// updates after a report. With no store (some tests), cards have no sessions.
+/// </summary>
+public sealed class ChangeCards(PanopticonDb db, PresenceStore? presence = null)
 {
     /// <summary>The active changes the viewer can see, most recently reported first; archived ones are in the history.</summary>
     public async Task<IReadOnlyList<ChangeCard>> ListAsync(Viewer viewer, CancellationToken cancellationToken)
@@ -77,7 +107,11 @@ public sealed class ChangeCards(PanopticonDb db)
             .Where(c => c.ArchivedAt == null)
             .OrderByDescending(c => c.LastReportedAt)
             .ToListAsync(cancellationToken);
-        return changes.ConvertAll(c => ToCard(c, viewer.MemberId));
+        var sessions = presence?.For([.. changes.Select(c => c.Id)]);
+        return changes.ConvertAll(c => (ToCard(c, viewer.MemberId) with
+        {
+            Sessions = sessions?.GetValueOrDefault(c.Id) ?? [],
+        }).SessionsFor(viewer, new ChangeScope(c.ProjectId, c.OwnerMemberId)));
     }
 
     /// <summary>
@@ -88,14 +122,14 @@ public sealed class ChangeCards(PanopticonDb db)
     public async Task<LiveCard?> GetAsync(Guid changeId, CancellationToken cancellationToken)
     {
         var change = await Query().SingleOrDefaultAsync(c => c.Id == changeId && c.ArchivedAt == null, cancellationToken);
-        return change is null ? null : ToLive(change);
+        return change is null ? null : WithSessions(ToLive(change));
     }
 
     /// <summary>A change's card, active or archived, and whether it's archived (for tagging, which works on both).</summary>
     public async Task<(LiveCard Card, bool Archived)> GetIncludingArchivedAsync(Guid changeId, CancellationToken cancellationToken)
     {
         var change = await Query().SingleAsync(c => c.Id == changeId, cancellationToken);
-        return (ToLive(change), change.ArchivedAt is not null);
+        return (WithSessions(ToLive(change)), change.ArchivedAt is not null);
     }
 
     internal IQueryable<Change> Query() => db.Changes
@@ -142,6 +176,15 @@ public sealed class ChangeCards(PanopticonDb db)
             PersonalTags = viewerMemberId is { } memberId ? PersonalTagsOf(change, memberId) : [],
         };
     }
+
+    /// <summary>The card with its sessions on it, from the store.</summary>
+    public ChangeCard WithSessions(ChangeCard card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        return presence is null ? card : card with { Sessions = presence.For(card.ChangeId) };
+    }
+
+    private LiveCard WithSessions(LiveCard live) => live with { Card = WithSessions(live.Card) };
 
     private static LiveCard ToLive(Change change) =>
         new(

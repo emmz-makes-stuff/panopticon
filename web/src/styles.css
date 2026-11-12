@@ -8,6 +8,7 @@
   --rule: #dde2ee;
   --lit: #0f8b7d;
   --spark: #d6336c;
+  --prompt: #6e56cf;
 
   --font-display: "Gabarito", system-ui, sans-serif;
   --font-body: "Atkinson Hyperlegible Next", system-ui, sans-serif;
@@ -29,6 +30,7 @@
     --rule: #2d3355;
     --lit: #3fd1be;
     --spark: #ff7aa2;
+    --prompt: #a594f9;
     color-scheme: dark;
   }
 }
@@ -41,6 +43,7 @@
   --rule: #2d3355;
   --lit: #3fd1be;
   --spark: #ff7aa2;
+  --prompt: #a594f9;
   color-scheme: dark;
 }
 
@@ -529,6 +532,240 @@ body {
 /* The member who runs the agent: present, but quieter than the agent itself (design D17). */
 .card-agent-member {
   color: var(--ink-muted);
+}
+
+/*
+ * Session rows (agent-interaction D10), under the agents: one line each, the activity in ink and the rest muted. A
+ * working first pass; §6.4's design pass sets the final look.
+ */
+/*
+ * Sessions and prompts (web/DESIGN.md "Sessions and prompts"). Rows are text under a hairline; the one loud thing is
+ * "Needs you": a paper well with the spark rule, the same attention mark errors and a just-updated edge use.
+ */
+.card-sessions {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0 0;
+  border-top: 1px solid var(--rule);
+  list-style: none;
+  font-size: var(--step--1);
+  color: var(--ink-muted);
+}
+
+.card-session {
+  overflow-wrap: anywhere;
+}
+
+/* The activity is the row: body size. Its time stays small and muted, with who and where in its tooltip. */
+.card-session-what {
+  font-size: var(--step-0);
+  color: var(--ink);
+}
+
+/* The terminal mark: every session row is a line from a terminal (Emmz, 2026-11-11). Decoration only, so its alt
+   text is empty and screen readers skip it. --prompt is used for nothing else. */
+.card-session-what::before {
+  content: "❯";
+  content: "❯" / "";
+  margin-right: 0.4em;
+  color: var(--prompt);
+  font-weight: 600;
+}
+
+.card-session-time {
+  font-size: var(--step--1);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.card--stale .card-session-what {
+  color: var(--ink-muted);
+}
+
+/* A teammate's view: who it needs, quietly. Nothing here to act on. */
+.card-session-needs {
+  margin-top: 0.3rem;
+  color: var(--ink-muted);
+}
+
+.card-session-marker {
+  font-weight: 600;
+}
+
+/* Yours to answer: the well. */
+.card--needs-you {
+  border-color: var(--spark);
+}
+
+.card-session-needs.needs-you {
+  padding: 0.6rem 0.75rem 0.75rem;
+  border-left: 3px solid var(--spark);
+  border-radius: 0 4px 4px 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.card-session-questions {
+  margin: 0.3rem 0;
+  padding-left: 1.1rem;
+}
+
+.card-session-terminal {
+  color: var(--ink-muted);
+}
+
+/* The prompt form: page vocabulary inside a card. Main action ink, others outlined; never teal. */
+.prompt-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  font-size: var(--step--1);
+}
+
+.prompt-question {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.prompt-legend {
+  margin-bottom: 0.2rem;
+  padding: 0;
+  font-size: var(--step-0);
+  line-height: 1.35;
+}
+
+.prompt-header {
+  font-weight: 600;
+}
+
+.prompt-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.5rem;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.prompt-option input,
+.prompt-form input[type="checkbox"],
+.prompt-form input[type="radio"] {
+  accent-color: var(--ink);
+}
+
+.prompt-option-label {
+  font-weight: 600;
+}
+
+.prompt-option-description {
+  grid-column: 2;
+  color: var(--ink-muted);
+}
+
+.prompt-preview {
+  margin-left: 1.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--card);
+}
+
+.prompt-preview > :first-child {
+  margin-top: 0;
+}
+
+.prompt-preview > :last-child {
+  margin-bottom: 0;
+}
+
+.prompt-input {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--card);
+  font:
+    0.8rem / 1.5 ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.prompt-pending,
+.prompt-status {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.prompt-status:empty {
+  display: none;
+}
+
+.prompt-other-label,
+.prompt-message-label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.prompt-other,
+.prompt-message {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ink-muted) 55%, var(--rule));
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink);
+  font: 400 var(--step--1) / 1.5 var(--font-body);
+  resize: vertical;
+}
+
+.prompt-yes-no,
+.prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.prompt-form button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--ink-muted) 55%, var(--rule));
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink);
+  font: 600 var(--step--1) / 1.5 var(--font-body);
+  cursor: pointer;
+}
+
+.prompt-form .prompt-send,
+.prompt-form .prompt-allow,
+.prompt-form .prompt-toggle[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--card);
+}
+
+.prompt-form .prompt-send {
+  justify-self: start;
+}
+
+.prompt-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.prompt-error {
+  margin: 0;
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--spark);
+  font-weight: 600;
 }
 
 /* Lit-cell bars */
@@ -1972,4 +2209,94 @@ body {
   margin: 0.6rem 0 0;
   font-size: var(--step--1);
   color: var(--ink-muted);
+}
+
+/*
+ * Header toggles (web/DESIGN.md "Sessions and prompts"): Away and Notifications share one form, a hairline pill that
+ * turns solid ink when on. Not spark (that's live) and not teal (that's progress). The state is in the text too.
+ */
+.away-switch,
+.notifications-toggle {
+  padding: 0.1rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--ink-muted) 55%, var(--rule));
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font: 400 var(--step--1) / 1.5 var(--font-body);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.away-switch[aria-pressed="true"],
+.notifications-toggle[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--card);
+}
+
+.away-switch-state,
+.notifications-toggle-state {
+  font-weight: 600;
+}
+
+.away-switch:disabled {
+  cursor: progress;
+}
+
+/* The change page's answers: a list, not cards. */
+.change-answers {
+  margin: 1.25rem 0;
+  max-width: 48rem;
+}
+
+.answers-title {
+  margin: 0 0 0.4rem;
+  font: 700 var(--step-1) / 1.15 var(--font-display);
+}
+
+.answer-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.answer {
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.answer:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+
+.answer-time {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.answer-questions {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 1fr;
+  gap: 0.15rem 0.9rem;
+  margin: 0.35rem 0 0;
+  font-size: var(--step--1);
+}
+
+.answer-question {
+  color: var(--ink-muted);
+}
+
+.answer-given {
+  margin: 0;
+  font-weight: 600;
+}
+
+@media (max-width: 30rem) {
+  .answer-questions {
+    grid-template-columns: 1fr;
+  }
+
+  .answer-given {
+    margin-bottom: 0.3rem;
+  }
 }

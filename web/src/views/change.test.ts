@@ -1,8 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CHANGE_ARCHIVED, CHANGE_UPDATED, PROJECTS_CHANGED } from "../live";
+import {
+  ANSWER_RECORDED,
+  CHANGE_ARCHIVED,
+  CHANGE_UPDATED,
+  PROJECTS_CHANGED,
+  RESYNC,
+} from "../live";
 import { savedReturn, signedIn, signedOut, startTestShell } from "../testShell";
 import { card, FakeEventSource, q, until } from "../testing";
-import type { ChangeMetrics, ChangePage, DocumentEntry, SectionMetric } from "../types";
+import type {
+  AnswerEntry,
+  ChangeMetrics,
+  ChangePage,
+  DocumentEntry,
+  SectionMetric,
+} from "../types";
 import { changeHref } from "../links";
 import { defaultDocument } from "./change";
 
@@ -174,6 +186,21 @@ describe("change page", () => {
 
     expect(server.to("GET", "/api/changes/c1")).toHaveLength(before + 1);
     expect(source.url).toBe("/api/events");
+  });
+
+  it("resync reloads the change and the away switch, as a reconnect does (code review F8)", async () => {
+    const server = serverFor();
+    const { root } = await startTestShell("/changes/c1", server);
+    await until(() => root.querySelector(".change-head") !== null);
+    const source = FakeEventSource.latest();
+    source.open();
+    const changes = server.to("GET", "/api/changes/c1").length;
+    const away = server.to("GET", "/api/me/away").length;
+
+    source.emit(RESYNC, "");
+    await until(() => server.to("GET", "/api/changes/c1").length === changes + 1);
+
+    expect(server.to("GET", "/api/me/away")).toHaveLength(away + 1);
   });
 
   it("Archived while reading: says it has been archived, keeps its documents, and stops following", async () => {
@@ -517,5 +544,69 @@ describe("change page membership changes", () => {
 
     expect(root.querySelector("article.doc")).toBeNull();
     expect(source.closed).toBe(true);
+  });
+});
+
+describe("change page answers (spec remote-answers, Answers are attributed)", () => {
+  const entry = (overrides: Partial<AnswerEntry> = {}): AnswerEntry => ({
+    id: "a1",
+    changeId: "c1",
+    sessionMember: "Emmz",
+    answeredBy: "Bob",
+    answeredAt: "2026-11-08T11:55:00Z",
+    kind: "question",
+    questions: [{ question: "Which store?", answer: "Postgres" }],
+    ...overrides,
+  });
+  const answers = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLElement>(".answer")].map((a) => a.textContent);
+
+  it("Bob answers Emmz's question: who, whose session, when, and the answer", async () => {
+    const { root } = await startTestShell(
+      "/changes/c1",
+      serverFor(
+        changePage({
+          answers: [
+            entry(),
+            entry({
+              id: "a0",
+              kind: "permission",
+              questions: null,
+              tool: "Bash",
+              outcome: "deny",
+              answeredBy: "Emmz",
+              answeredAt: "2026-11-08T10:00:00Z",
+            }),
+          ],
+        }),
+      ),
+    );
+    await until(() => answers(root).length === 2);
+
+    expect(q(root, ".change-answers").hidden).toBe(false);
+    expect(answers(root)).toEqual([
+      "Bob answered a question for Emmz, 5m agoWhich store?Postgres",
+      "Emmz denied Bash for Emmz, 2h ago",
+    ]);
+  });
+
+  it("no answers, no section", async () => {
+    const { root } = await startTestShell("/changes/c1", serverFor());
+    await until(() => shownPath(root) === "proposal.md");
+
+    expect(q(root, ".change-answers").hidden).toBe(true);
+  });
+
+  it("adds answer-recorded live, for this change only, once", async () => {
+    const { root } = await startTestShell("/changes/c1", serverFor());
+    await until(() => FakeEventSource.instances.length === 1);
+    const stream = FakeEventSource.latest();
+    stream.open();
+
+    stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ id: "x", changeId: "other" })));
+    stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ questions: null })));
+    stream.emit(ANSWER_RECORDED, JSON.stringify(entry({ questions: null })));
+
+    expect(answers(root)).toEqual(["Bob answered a question for Emmz, 5m ago"]);
   });
 });

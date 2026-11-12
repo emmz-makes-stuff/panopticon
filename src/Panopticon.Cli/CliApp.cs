@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Panopticon.Cli.Bridge;
 using Panopticon.Cli.Config;
+using Panopticon.Cli.Hook;
 using Panopticon.Cli.Login;
 using Panopticon.Cli.Update;
 
@@ -24,7 +25,9 @@ internal static class CliApp
             stdout.WriteLine("Usage: panopticon <command>");
             stdout.WriteLine();
             stdout.WriteLine("Commands:");
+            stdout.WriteLine("  away [on | off]         Show or set away mode: prompts wait for an answer on the dashboard");
             stdout.WriteLine("  login [--server <url>]  Log this machine in: approve a code in the dashboard, and save a token");
+            stdout.WriteLine("  hook                    Send a Claude Code hook event (on stdin) to the dashboard; run by the plugin");
             stdout.WriteLine("  mcp                     Run the local MCP bridge over stdio");
             stdout.WriteLine("  tags                    List the personal tags sent with this machine's reports");
             stdout.WriteLine("  tags add <tag>...       Add personal tags, e.g. dev or \"language: csharp\"");
@@ -86,6 +89,17 @@ internal static class CliApp
             return await UntilCtrlCAsync(cancellationToken => update.RunAsync(args[1..], cancellationToken));
         }
 
+        if (args[0] == "hook")
+        {
+            return await RunHookAsync(Console.In, stdout);
+        }
+
+        if (args[0] == "away")
+        {
+            var away = new AwayCommand(static () => new HttpClient(), BridgeSettings.FromEnvironment(stderr), stdout, stderr);
+            return await UntilCtrlCAsync(cancellationToken => away.RunAsync(args[1..], cancellationToken));
+        }
+
         if (args[0] == "tags")
         {
             return new TagsCommand(CliConfigFile.ForCurrentUser(), stdout, stderr).Run(args[1..]);
@@ -93,6 +107,26 @@ internal static class CliApp
 
         await stderr.WriteLineAsync($"Unknown command '{args[0]}'. Run 'panopticon --help'.");
         return 1;
+    }
+
+    /// <summary>
+    /// <c>panopticon hook</c>, run by the plugin's hooks with Claude Code's event on stdin. Nothing reaches stdout or
+    /// stderr: a saved login it can't read is noted in the hook log, like every other failure.
+    /// </summary>
+    private static Task<int> RunHookAsync(TextReader stdin, TextWriter stdout)
+    {
+        var config = CliConfigFile.ForCurrentUser();
+        var log = HookLog.NextTo(config, TimeProvider.System);
+        using var configProblems = new StringWriter();
+        var settings = BridgeSettings.Resolve(
+            Environment.GetEnvironmentVariable, config, configProblems, Environment.CurrentDirectory, Environment.MachineName);
+        if (configProblems.ToString().Trim() is { Length: > 0 } problem)
+        {
+            log.Write($"hook: {problem}");
+        }
+
+        var hook = new HookCommand(static () => new HttpClient(), settings, WorktreeLinksFile.NextTo(config), log, stdout, TimeProvider.System);
+        return hook.RunAsync(stdin, CancellationToken.None);
     }
 
     /// <summary>

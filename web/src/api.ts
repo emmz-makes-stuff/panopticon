@@ -31,7 +31,7 @@ export interface Api {
   get<T>(path: string): Promise<T>;
   /** Resolves to the JSON body, or `undefined` for an empty answer (204). */
   send<T = undefined>(
-    method: "POST" | "PATCH" | "DELETE",
+    method: "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     body?: unknown,
   ): Promise<T>;

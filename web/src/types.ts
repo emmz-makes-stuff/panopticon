@@ -67,6 +67,100 @@ export interface ChangeCard {
   projectTags: ProjectTagRef[];
   /** The viewer's own personal tags on it, by key then value (tags D6). */
   personalTags: PersonalTagRef[];
+  /** The change's Claude Code sessions right now, oldest first (agent-interaction D4). Absent from older servers. */
+  sessions?: SessionView[];
+  /** ISO 8601: its last report or its sessions' last event, whichever is later (spec live-dashboard, Quiet cards). */
+  lastActiveAt?: string;
+}
+
+// Sessions and their prompts (server: Panopticon.Server.Presence, agent-interaction D4, D5).
+
+/** What a session is doing (spec agent-presence, Session states). Ended sessions leave the card. */
+export type SessionState =
+  "working" | "waiting-on-question" | "waiting-on-permission" | "waiting-on-user";
+
+/** What a session waits on, as everyone who can see it sees it. */
+export interface SessionPrompt {
+  kind: "question" | "permission";
+  /** A permission prompt's tool, e.g. "Bash". */
+  tool?: string | null;
+}
+
+/** One option of a held question. */
+export interface PromptOption {
+  label: string;
+  description?: string | null;
+  /**
+   * The option's preview, already rendered by the server as documents are (spec remote-answers, Safe rendering): it's
+   * inserted as is.
+   */
+  previewHtml?: string | null;
+}
+
+/** One question of a held prompt. */
+export interface PromptQuestion {
+  question: string;
+  header: string;
+  options: PromptOption[];
+  multiSelect: boolean;
+}
+
+/** The prompt itself: only for a viewer who may answer it (D5). Its presence means "Needs you". */
+export interface PromptDetail {
+  id: string;
+  /** False: it's the terminal's to answer. */
+  held: boolean;
+  askedAt: string;
+  questions?: PromptQuestion[] | null;
+  /** A held permission prompt's input, cut to 2 KB, once it has arrived. */
+  preview?: string | null;
+}
+
+/** A member's away switch (`GET`/`PUT /api/me/away`, and the `away-changed` event; agent-interaction D8). */
+export interface AwayState {
+  away: boolean;
+  /** ISO 8601: since when, while away. */
+  since?: string | null;
+}
+
+/** One question and the answer given, as an answer's record keeps it. */
+export interface AnsweredQuestion {
+  question: string;
+  answer: string;
+}
+
+/**
+ * An answer given from the dashboard (spec remote-answers, Answers are attributed), as the change page lists it and
+ * `answer-recorded` sends it. `questions` comes only to a viewer who could have answered (D5).
+ */
+export interface AnswerEntry {
+  id: string;
+  changeId: string;
+  sessionMember: string;
+  answeredBy: string;
+  /** ISO 8601. */
+  answeredAt: string;
+  kind: "question" | "permission";
+  tool?: string | null;
+  /** A permission prompt's: "allow" or "deny". */
+  outcome?: "allow" | "deny" | null;
+  questions?: AnsweredQuestion[] | null;
+}
+
+/** One Claude Code session on a change (spec live-dashboard, Sessions on a card). */
+export interface SessionView {
+  id: string;
+  memberId: string;
+  memberName: string;
+  machine: string;
+  state: SessionState;
+  /** The one-line activity, while working. */
+  activity?: string | null;
+  /** ISO 8601: when the current state and activity began. */
+  since: string;
+  lastEventAt: string;
+  prompt?: SessionPrompt | null;
+  promptDetail?: PromptDetail | null;
 }
 
 // The change page and history (server: Panopticon.Server.Changes, change-documents-and-history D9).
@@ -91,6 +185,8 @@ export interface ChangePage {
   archivedAt: string | null;
   archiveFolder: string | null;
   documents: DocumentEntry[];
+  /** Answers given from the dashboard, newest first (spec remote-answers, Answers are attributed). */
+  answers?: AnswerEntry[];
 }
 
 /** `GET /api/changes/{id}/documents/{path}`: HTML the server has already made safe (D8). */

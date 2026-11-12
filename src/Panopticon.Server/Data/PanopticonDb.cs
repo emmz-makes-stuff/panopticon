@@ -22,6 +22,7 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
     public DbSet<ProjectTag> ProjectTags => Set<ProjectTag>();
     public DbSet<ChangeProjectTag> ChangeProjectTags => Set<ChangeProjectTag>();
     public DbSet<ChangeAgentTag> ChangeAgentTags => Set<ChangeAgentTag>();
+    public DbSet<RemoteAnswer> RemoteAnswers => Set<RemoteAnswer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -166,6 +167,23 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
             agentTag.Property(t => t.Value).HasMaxLength(TagText.MaxPartLength);
             agentTag.Property(t => t.KeyKey).HasMaxLength(TagText.MaxPartLength);
             agentTag.Property(t => t.ValueKey).HasMaxLength(TagText.MaxPartLength);
+        });
+
+        // agent-interaction D8: a change's answers go with it; members are only ever soft-removed, so they're restricted.
+        modelBuilder.Entity<RemoteAnswer>(answer =>
+        {
+            answer.HasIndex(a => new { a.ChangeId, a.AnsweredAt });
+            answer.Property(a => a.Kind).HasMaxLength(10);
+            answer.Property(a => a.Outcome).HasMaxLength(5);
+            answer.Property(a => a.ToolName).HasMaxLength(200);
+            answer.Property(a => a.QuestionsJson).HasColumnType("jsonb");
+            answer.HasOne<Change>().WithMany().HasForeignKey(a => a.ChangeId).OnDelete(DeleteBehavior.Cascade);
+            answer.HasOne<Member>().WithMany().HasForeignKey(a => a.SessionMemberId).OnDelete(DeleteBehavior.Restrict);
+            answer.HasOne<Member>().WithMany().HasForeignKey(a => a.AnsweredByMemberId).OnDelete(DeleteBehavior.Restrict);
+            answer.ToTable(t => t.HasCheckConstraint(
+                "ck_remote_answers_kind",
+                "(kind = 'question' AND questions_json IS NOT NULL AND tool_name IS NULL AND outcome IS NULL) OR " +
+                "(kind = 'permission' AND tool_name IS NOT NULL AND outcome IN ('allow', 'deny') AND questions_json IS NULL)"));
         });
 
         modelBuilder.Entity<ReportEvent>(reportEvent =>

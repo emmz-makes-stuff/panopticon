@@ -423,6 +423,149 @@ public class MigrationTests(PostgresFixture postgres)
             $"SELECT count(*)::int AS \"Value\" FROM information_schema.tables WHERE table_name IN ('project_tags', 'change_project_tags', 'change_agent_tags')").SingleAsync(ct));
     }
 
+    // agent-interaction D8: the away flag and the answer record, in one migration with a down migration.
+    [Fact]
+    public async Task The_agent_interaction_migration_adds_the_away_flag_and_the_answer_table_and_rolls_back()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await postgres.CreateDatabaseAsync(TagsMigration, ct);
+        var memberId = Guid.NewGuid();
+        await using (var before = PostgresFixture.CreateDb(connectionString))
+        {
+            await before.Database.ExecuteSqlAsync(
+                $"INSERT INTO members (id, email, email_key, display_name, created_at) VALUES ({memberId}, 'emmz@example.com', 'emmz@example.com', 'emmz', now())",
+                ct);
+        }
+
+        await using var db = PostgresFixture.CreateDb(connectionString);
+        await db.Database.MigrateAsync(ct);
+
+        Assert.Null((await db.Members.SingleAsync(ct)).AwaySince);
+        Assert.Equal(1, await CountTablesAsync(db, "remote_answers", ct));
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync(ct));
+
+        await db.GetService<IMigrator>().MigrateAsync(TagsMigration, cancellationToken: ct);
+
+        Assert.Equal(0, await CountTablesAsync(db, "remote_answers", ct));
+        Assert.Equal(0, await db.Database.SqlQuery<int>(
+            $"SELECT count(*)::int AS \"Value\" FROM information_schema.columns WHERE table_name = 'members' AND column_name = 'away_since'").SingleAsync(ct));
+    }
+
+    [Fact]
+    public async Task The_away_flag_is_kept()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await postgres.CreateDatabaseAsync(ct);
+        var since = new DateTimeOffset(2026, 11, 11, 17, 0, 0, TimeSpan.Zero);
+        var emmz = NewMember("emmz@example.com");
+        await using (var db = PostgresFixture.CreateDb(connectionString))
+        {
+            emmz.AwaySince = since;
+            db.Members.Add(emmz);
+            await db.SaveChangesAsync(ct);
+        }
+
+        await using var after = PostgresFixture.CreateDb(connectionString);
+        Assert.Equal(since, (await after.Members.SingleAsync(ct)).AwaySince);
+    }
+
+    [Fact]
+    public async Task Deleting_a_change_deletes_its_remote_answers()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var (emmz, bob) = (NewMember("emmz@example.com"), NewMember("bob@example.com"));
+        var repo = NewRepo();
+        db.AddRange(emmz, bob, repo);
+        await db.SaveChangesAsync(ct);
+        var (change, other) = (NewChange(repo.Id), NewChange(repo.Id, "2026-11-01-cleanup"));
+        db.AddRange(change, other);
+        db.RemoteAnswers.AddRange(
+            NewQuestionAnswer(change.Id, emmz.Id, bob.Id),
+            NewPermissionAnswer(change.Id, emmz.Id, emmz.Id, RemoteAnswer.Deny),
+            NewQuestionAnswer(other.Id, emmz.Id, emmz.Id));
+        await db.SaveChangesAsync(ct);
+
+        await db.Changes.Where(c => c.Id == change.Id).ExecuteDeleteAsync(ct);
+
+        Assert.Equal([other.Id], await db.RemoteAnswers.Select(a => a.ChangeId).ToListAsync(ct));
+        Assert.Equal(2, await db.Members.CountAsync(ct));
+    }
+
+    [Fact]
+    public async Task A_remote_answer_must_match_its_kind()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var repo = NewRepo();
+        db.AddRange(emmz, repo);
+        await db.SaveChangesAsync(ct);
+        var change = NewChange(repo.Id);
+        db.Changes.Add(change);
+        await db.SaveChangesAsync(ct);
+
+        db.RemoteAnswers.AddRange(
+            NewQuestionAnswer(change.Id, emmz.Id, emmz.Id),
+            NewPermissionAnswer(change.Id, emmz.Id, emmz.Id, RemoteAnswer.Allow));
+        await db.SaveChangesAsync(ct);
+
+        foreach (var spoil in new Action<RemoteAnswer>[]
+        {
+            a => a.Outcome = "maybe",
+            a => a.ToolName = null,
+            a => a.QuestionsJson = """[]""",
+        })
+        {
+            db.ChangeTracker.Clear();
+            var permission = NewPermissionAnswer(change.Id, emmz.Id, emmz.Id, RemoteAnswer.Allow);
+            spoil(permission);
+            db.RemoteAnswers.Add(permission);
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        }
+
+        foreach (var spoil in new Action<RemoteAnswer>[]
+        {
+            a => a.QuestionsJson = null,
+            a => a.Outcome = RemoteAnswer.Allow,
+            a => a.ToolName = "Bash",
+            a => a.Kind = "plan",
+        })
+        {
+            db.ChangeTracker.Clear();
+            var question = NewQuestionAnswer(change.Id, emmz.Id, emmz.Id);
+            spoil(question);
+            db.RemoteAnswers.Add(question);
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        }
+    }
+
+    private static Task<int> CountTablesAsync(PanopticonDb db, string table, CancellationToken ct) =>
+        db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM information_schema.tables WHERE table_name = {table}").SingleAsync(ct);
+
+    private static RemoteAnswer NewQuestionAnswer(Guid changeId, Guid sessionMemberId, Guid answeredBy) => new()
+    {
+        Id = Guid.NewGuid(),
+        ChangeId = changeId,
+        SessionMemberId = sessionMemberId,
+        AnsweredByMemberId = answeredBy,
+        AnsweredAt = DateTimeOffset.UnixEpoch,
+        Kind = RemoteAnswer.QuestionKind,
+        QuestionsJson = """[{"question":"Which store?","answer":"Memory"}]""",
+    };
+
+    private static RemoteAnswer NewPermissionAnswer(Guid changeId, Guid sessionMemberId, Guid answeredBy, string outcome) => new()
+    {
+        Id = Guid.NewGuid(),
+        ChangeId = changeId,
+        SessionMemberId = sessionMemberId,
+        AnsweredByMemberId = answeredBy,
+        AnsweredAt = DateTimeOffset.UnixEpoch,
+        Kind = RemoteAnswer.PermissionKind,
+        ToolName = "Bash",
+        Outcome = outcome,
+    };
+
     private static ProjectTag NewTag(Guid projectId, string key, string? value = null) => new()
     {
         Id = Guid.NewGuid(),
@@ -434,6 +577,7 @@ public class MigrationTests(PostgresFixture postgres)
         CreatedAt = DateTimeOffset.UnixEpoch,
     };
 
+    private const string TagsMigration = "20261110153322_Tags";
     private const string RetiredCopiesMigration = "20261110011205_RetiredCopies";
     private const string MetricsMigration = "20261109164834_ChangeMetrics";
     private const string DocumentsMigration = "20261108184053_ChangeDocumentsAndHistory";

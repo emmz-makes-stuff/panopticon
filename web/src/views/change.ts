@@ -1,3 +1,4 @@
+import { answerList, withAnswer } from "../answerList";
 import { leadingProjectLabel } from "../projectLabel";
 import { tagPicker } from "../tagPicker";
 import { ApiError, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
@@ -5,14 +6,19 @@ import { el, page, routeLink } from "../dom";
 import { agentName, calendarDate, relativeTime } from "../format";
 import { changeHref } from "../links";
 import {
+  ANSWER_RECORDED,
+  AWAY_CHANGED,
   CHANGE_ARCHIVED,
   CHANGE_UPDATED,
   PROJECT_TAGS_CHANGED,
   PROJECTS_CHANGED,
+  parseAnswerEntry,
   parseArchivedId,
+  parseAwayState,
   parseCard,
   parseProjectsChange,
   parseProjectTagsChange,
+  RESYNC,
   retagCard,
 } from "../live";
 import { renderChangeMetrics } from "../metricsPanel";
@@ -72,6 +78,8 @@ export function changeView(env: Env): View {
     let metricsTicket = 0;
     const archivedStatus = el("p", "change-archived-status");
     archivedStatus.setAttribute("role", "status");
+    // agent-interaction D8: answers given from the dashboard, kept live by `answer-recorded`.
+    const answers = answerList(env.now);
 
     let first: ChangePage;
     try {
@@ -88,7 +96,7 @@ export function changeView(env: Env): View {
     }
 
     root.replaceChildren(
-      el("section", "page change-page", head, metricsPanel, archivedStatus, body),
+      el("section", "page change-page", head, metricsPanel, archivedStatus, answers.element, body),
     );
     let latest = first;
     void loadMetrics();
@@ -117,6 +125,7 @@ export function changeView(env: Env): View {
     async function show(changePage: ChangePage, mine: number): Promise<void> {
       latest = changePage;
       head.replaceChildren(...renderHead(changePage));
+      answers.render(changePage.answers ?? []);
       const listed = changePage.documents;
       const wanted = requested ? listed.find((d) => d.path === requested) : undefined;
       const selected = wanted ?? defaultDocument(listed);
@@ -283,10 +292,16 @@ export function changeView(env: Env): View {
       source.onopen = () => {
         if (opened) {
           refresh();
+          env.refreshAway();
         }
 
         opened = true;
       };
+      // The server's queue for this stream overflowed (code review F8): catch up as on a reconnect.
+      source.addEventListener(RESYNC, () => {
+        refresh();
+        env.refreshAway();
+      });
       source.onerror = () => {
         // The browser retries by itself. If it gives up, the page keeps its documents without live updates.
       };
@@ -321,6 +336,22 @@ export function changeView(env: Env): View {
 
         latest = { ...latest, card: retagCard(latest.card, change) };
         tags.projectTagsChanged(change);
+      });
+
+      source.addEventListener(ANSWER_RECORDED, (event) => {
+        const entry = parseAnswerEntry(event.data);
+        if (entry?.changeId.toLowerCase() === changeId.toLowerCase()) {
+          latest = { ...latest, answers: withAnswer(latest.answers ?? [], entry) };
+          answers.render(latest.answers ?? []);
+        }
+      });
+
+      // The header's away switch follows this stream too, while it's the one open.
+      source.addEventListener(AWAY_CHANGED, (event) => {
+        const state = parseAwayState(event.data);
+        if (state) {
+          env.awayChanged(state);
+        }
       });
 
       return () => source.close();
