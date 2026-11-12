@@ -21,9 +21,9 @@ script URLs, and each platform's download URL, size and SHA-256. Every URL SHALL
 `Panopticon:PublicUrl`.
 
 #### Scenario: Manifest on the public server
-- **WHEN** an anonymous client asks `https://panopticon.team/api/cli` on a server with `0.2.0` builds
-- **THEN** it gets version `0.2.0`, `https://panopticon.team/install.sh`, `https://panopticon.team/install.ps1`, and
-  for `linux-x64` the URL `https://panopticon.team/cli/linux-x64/panopticon` with that file's size and SHA-256
+- **WHEN** an anonymous client asks `https://panopticon.example.com/api/cli` on a server with `0.2.0` builds
+- **THEN** it gets version `0.2.0`, `https://panopticon.example.com/install.sh`, `https://panopticon.example.com/install.ps1`, and
+  for `linux-x64` the URL `https://panopticon.example.com/cli/linux-x64/panopticon` with that file's size and SHA-256
 
 #### Scenario: URLs ignore the request's host
 - **WHEN** `Panopticon:PublicUrl` is `https://panopticon.example.com` and the request arrives with another `Host`
@@ -57,9 +57,9 @@ matching build from this server. It SHALL check the SHA-256 and install the file
 platform, or a checksum mismatch, it SHALL stop with an error and change nothing.
 
 #### Scenario: Install on a Linux VM
-- **WHEN** someone runs `curl -fsSL https://panopticon.team/install.sh | sh` on an arm64 Linux VM without .NET
+- **WHEN** someone runs `curl -fsSL https://panopticon.example.com/install.sh | sh` on an arm64 Linux VM without .NET
 - **THEN** `~/.local/bin/panopticon` is the `linux-arm64` build, `panopticon --version` prints the server's CLI
-  version, and the script prints `panopticon login --server https://panopticon.team` as the next step
+  version, and the script prints `panopticon login --server https://panopticon.example.com` as the next step
 
 #### Scenario: Unsupported platform
 - **WHEN** the script runs on an Intel Mac
@@ -92,9 +92,9 @@ server, checks its SHA-256, installs it to `%LOCALAPPDATA%\Programs\panopticon\p
 directory to the user's `PATH` if it's missing. It SHALL print the `panopticon login --server` command to run next.
 
 #### Scenario: Install on Windows
-- **WHEN** someone runs `irm https://panopticon.team/install.ps1 | iex` on x64 Windows
+- **WHEN** someone runs `irm https://panopticon.example.com/install.ps1 | iex` on x64 Windows
 - **THEN** `panopticon.exe` is installed, a new terminal finds `panopticon` on `PATH`, and the script prints
-  `panopticon login --server https://panopticon.team`
+  `panopticon login --server https://panopticon.example.com`
 
 #### Scenario: Windows on Arm
 - **WHEN** the script runs on arm64 Windows
@@ -178,8 +178,8 @@ command. The commands are `curl -fsSL <url> | sh` and `irm <url> | iex`. On a se
 and point to `make install`.
 
 #### Scenario: Visitor on macOS
-- **WHEN** a member on macOS opens the Tokens page of `https://panopticon.team`
-- **THEN** it shows `curl -fsSL https://panopticon.team/install.sh | sh` with a copy button, and the Windows command
+- **WHEN** a member on macOS opens the Tokens page of `https://panopticon.example.com`
+- **THEN** it shows `curl -fsSL https://panopticon.example.com/install.sh | sh` with a copy button, and the Windows command
   is one click away
 
 #### Scenario: Server without CLI builds
@@ -195,7 +195,7 @@ exactly those builds. If any platform's build fails, nothing SHALL be published 
 #### Scenario: Tag a release
 - **WHEN** `v0.2.0` is pushed
 - **THEN** a GitHub Release `v0.2.0` holds the four builds and `SHA256SUMS`, and once the deploy finishes,
-  `https://panopticon.team/api/cli` reports version `0.2.0` with the same SHA-256s
+  `https://panopticon.example.com/api/cli` reports version `0.2.0` with the same SHA-256s
 
 #### Scenario: One platform fails to build
 - **WHEN** the macOS build fails for a tag

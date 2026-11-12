@@ -39,7 +39,7 @@ async function openTokens(
     .on(
       "GET",
       "/api/cli",
-      options.manifest ?? { status: 200, body: manifestFor("https://panopticon.team") },
+      options.manifest ?? { status: 200, body: manifestFor("https://panopticon.example.com") },
     )
     .on("DELETE", "/api/tokens/t1", () => {
       options.onDelete?.();
@@ -74,7 +74,7 @@ describe("setup guide", () => {
 
     expect(titles(root)).toEqual(["Install the CLI", "Log in", "Connect your agent"]);
     expect(commands(root, ".setup-login")).toEqual([
-      "panopticon login --server https://panopticon.team",
+      "panopticon login --server https://panopticon.example.com",
     ]);
     expect(root.querySelector(".setup-guide-intro")?.textContent).toContain(
       "the machine where your agent works",
@@ -150,7 +150,7 @@ describe("setup guide", () => {
     q<HTMLButtonElement>(root, ".setup-login button").click();
     await until(() => copy.mock.calls.length === 1);
 
-    expect(copy).toHaveBeenCalledWith("panopticon login --server https://panopticon.team");
+    expect(copy).toHaveBeenCalledWith("panopticon login --server https://panopticon.example.com");
   });
 
   it("Steps marked done: none, then install and log in, then all three", () => {

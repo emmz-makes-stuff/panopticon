@@ -152,12 +152,12 @@ Set up a machine                                         Hide   (Projects only)
 Run these on the machine where your agent works, then its reports show up here.
 [1]  Install the CLI
  |   [macOS and Linux][Windows]
- |   $ curl -fsSL https://panopticon.team/install.sh | sh
+ |   $ curl -fsSL https://panopticon.example.com/install.sh | sh
  |   [Copy]  Copied.
  |   Installs panopticon 0.2.0.
 [2]  Log in
  |   Log the machine in to this server. It opens a page here to approve it, and saves the login.
- |   $ panopticon login --server https://panopticon.team
+ |   $ panopticon login --server https://panopticon.example.com
  |   [Copy]
 [✓]  Connect your agent   Done
      In Claude Code, add the Panopticon plugin, then check the setup. …

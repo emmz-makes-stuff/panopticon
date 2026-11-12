@@ -1144,8 +1144,8 @@ describe("/projects setup guide", () => {
         status: 200,
         body: {
           version: "0.2.0",
-          installSh: "https://panopticon.team/install.sh",
-          installPs1: "https://panopticon.team/install.ps1",
+          installSh: "https://panopticon.example.com/install.sh",
+          installPs1: "https://panopticon.example.com/install.ps1",
           platforms: {},
         },
       });
