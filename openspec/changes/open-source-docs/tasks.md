@@ -61,13 +61,13 @@ is a stop (CLAUDE.md "Stop and ask"): leave a `stopped-…` devlog note and wait
 
 ## 6. Final checks
 
-- [ ] 6.1 Check every relative Markdown link and anchor in the root `*.md` files and `docs/`, `web/DESIGN.md` with a
+- [x] 6.1 Check every relative Markdown link and anchor in the root `*.md` files and `docs/`, `web/DESIGN.md` with a
   scratchpad script (no new dependency). Verify: the script reports zero broken links.
-- [ ] 6.2 Confirm the change's scope: `git diff --stat <first-section-base>..HEAD` touches only Markdown files,
+- [x] 6.2 Confirm the change's scope: `git diff --stat <first-section-base>..HEAD` touches only Markdown files,
   `LICENSE`, the change folder and the four test files from 2.1, and
   `git grep -n panopticon.team -- ':!openspec/changes/archive' ':!openspec/specs'` finds nothing. Verify: both
   outputs quoted in the section-done note.
-- [ ] 6.3 Write the change-done devlog note with the owner's go-public checklist (design D9) and a summary of the
+- [x] 6.3 Write the change-done devlog note with the owner's go-public checklist (design D9) and a summary of the
   audit findings. Verify: the note's `## Next` is the checklist, and `make gates` is green.
 
 ## Workflow follow-up

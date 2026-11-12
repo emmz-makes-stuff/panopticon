@@ -52,5 +52,6 @@ Outside `openspec/changes/archive/`, the repository's files SHALL NOT name any p
 SHALL use `panopticon.example.com` or `localhost`.
 
 #### Scenario: Searching the tree for a server domain
-- **WHEN** someone searches the working tree, excluding `openspec/changes/archive/`, for `panopticon.team`
-- **THEN** nothing is found
+- **WHEN** someone searches the working tree, excluding `openspec/changes/archive/`, for the domain of a public
+  Panopticon server
+- **THEN** nothing is found, and this spec doesn't name one either
