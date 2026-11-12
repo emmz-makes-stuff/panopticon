@@ -37,15 +37,22 @@ The PNGs are made once from the WebP with a throwaway script in the scratchpad, 
 script:
 
 1. decodes the WebP with `dwebp -ppm`;
-2. applies a rounded-rectangle alpha mask with 4×4 supersampled edges;
-3. downsamples by area-averaging (premultiplied alpha), so small sizes stay crisp;
-4. writes the PNG with Node's `zlib`.
+2. derives the alpha mask for the four corners from the source itself;
+3. flattens the background texture;
+4. downsamples by area-averaging (premultiplied alpha, linear light), so small sizes stay crisp;
+5. writes the PNG with Node's `zlib`.
 
 The exact commands go in a devlog note, so the files can be made again later.
 
-- **Measuring the mask:** the corner radius is measured from the source along the top edge and the left edge, where
-  the background turns from near-white to dark. The rounded square's inset is checked the same way, since the source
-  may have a margin. That keeps the mask from cutting into the artwork or leaving a white rim.
+- **The corner mask:** task 1.1 measured the source. The rounded square is full-bleed, with no margin. Its corner is
+  a smooth curve that ends about 170 px from each edge, close to a circle of radius 170–176 px but not exactly one.
+  Fitting a geometric mask would be a guess, so inside the four 180 px corner zones, where there's no artwork, each
+  pixel's alpha comes from where it sits between white and the background. Its colour becomes the background. That
+  keeps the source's own anti-aliased edge, with no white rim and no cut into the tile.
+- **Flattening the background:** the source's background carries faint texture, with channel deviations of up to 7
+  from `#121929`. It shows as ghostly blocks once the tile sits on a plain field. Deviations up to 3 become the exact
+  background, 8 and above stay as they are, and a smoothstep blends the values between. The glow's tail is above that
+  range, so it survives.
 - **Alternatives rejected:**
   - Adding `sharp` or ImageMagick as a dependency, for a job done once.
   - Clipping the corners with CSS `border-radius`. That fixes the header only, not the favicon, touch icon or README.

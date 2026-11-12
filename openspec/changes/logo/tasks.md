@@ -5,17 +5,17 @@ Section 3 ends with a browser check by Emmz, which is a stop (CLAUDE.md "Stop an
 
 ## 1. Assets
 
-- [ ] 1.1 Measure the source with `dwebp -ppm` and a scratchpad Node script. Find the rounded square's inset and
+- [x] 1.1 Measure the source with `dwebp -ppm` and a scratchpad Node script. Find the rounded square's inset and
   corner radius, from the white-to-dark transition along the top edge, the left edge and the diagonal, and the
   background colour (design D1). Verify: the inset, radius and colour, and the commands that found them, are recorded
   in a devlog note.
-- [ ] 1.2 Generate `web/public/favicon-32.png`, `web/public/apple-touch-icon.png`, `web/public/logo.png`,
+- [x] 1.2 Generate `web/public/favicon-32.png`, `web/public/apple-touch-icon.png`, `web/public/logo.png`,
   `docs/images/logo.png` and `docs/images/social-preview.png` at the sizes and corner treatments in design D2, using
   the scratchpad script (mask, area-average downsample, Node `zlib` PNG writer). Verify: `sips -g pixelWidth -g
   pixelHeight -g hasAlpha` on each file matches D2. The four transparent-corner files have alpha 0 at pixel (0,0) and
   are opaque at the centre. The touch icon and social preview have no transparent pixels. The social preview is under
   1 MB. Each file, viewed with Read, shows no white rim or fringe.
-- [ ] 1.3 Record how the assets were made in the devlog note: the full script and the commands, so they can be made
+- [x] 1.3 Record how the assets were made in the devlog note: the full script and the commands, so they can be made
   again from the WebP. Verify: the note holds the script text and the exact commands.
 
 ## 2. Dashboard header and site icon
