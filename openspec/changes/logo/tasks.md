@@ -52,10 +52,10 @@ Section 3 ends with a browser check by Emmz, which is a stop (CLAUDE.md "Stop an
 
 ## 3. README, social preview and browser check
 
-- [ ] 3.1 Put the logo above `# PANOPTICON` in `README.md` (design D6). Verify: the scratchpad link checker finds
+- [x] 3.1 Put the logo above `# PANOPTICON` in `README.md` (design D6). Verify: the scratchpad link checker finds
   `docs/images/logo.png`, with 0 broken links.
-- [ ] 3.2 Run `make gates` → `GATES_EXIT:0`.
-- [ ] 3.3 Browser check by Emmz (human verification, a stop). Write a `stopped-browser-check` devlog note with a
+- [x] 3.2 Run `make gates` → `GATES_EXIT:0`.
+- [x] 3.3 Browser check by Emmz (human verification, a stop). Write a `stopped-browser-check` devlog note with a
   copy-pasteable recipe: run the server and the dashboard locally, then check four things:
   - the tab icon;
   - the header logo on the dashboard, Members and sign-in pages, in light and dark schemes;

@@ -30,7 +30,7 @@ script included, is in the `logo` change's devlog.
 - Corners are transparent everywhere except the touch icon and the social preview, so the tile never shows a white
   or square edge on either colour scheme.
 - In the header the logo is `1.3em` tall (about 40px on the 31px wordmark), with a `0.3em` gap. It's lowered by
-  `0.3em`, which centres it on the capitals. It stays inline, not flex, so the header row still lines up on the
+  `0.38em`, which centres it on the capitals. It stays inline, not flex, so the header row still lines up on the
   wordmark's baseline.
 - It's decorative (`alt=""`) and sits inside the wordmark's link home, so a screen reader hears "PANOPTICON" once.
 - The tile is dark on both schemes. On light paper it reads as an app icon. On dark paper its edge almost disappears

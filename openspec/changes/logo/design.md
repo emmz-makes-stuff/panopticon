@@ -85,7 +85,7 @@ drawing the wordmark would mean rendering Gabarito outside a browser.
 ### D4. Size and alignment
 
 - `.wordmark-logo` is `height: 1.3em; width: auto`, so about 40 px on the 31 px wordmark, with `margin-right: 0.3em`
-  and `vertical-align: -0.3em`. That centres it on the capitals.
+  and `vertical-align: -0.38em`. That centres it on the capitals.
 - It stays inline. A flex wordmark was rejected while building: `.top` lines its items up with
   `align-items: baseline`, and an inline-flex wordmark would take its baseline from the image's bottom edge. The live
   status and account links would then sit low.
