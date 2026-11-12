@@ -25,12 +25,12 @@ is a stop (CLAUDE.md "Stop and ask"): leave a `stopped-…` devlog note and wait
 
 ## 3. Licence, conduct and security
 
-- [ ] 3.1 Add `LICENSE`: the standard MIT text with `Copyright (c) 2026 Emmz`. Verify: it matches the SPDX MIT
+- [x] 3.1 Add `LICENSE`: the standard MIT text with `Copyright (c) 2026 Emmz`. Verify: it matches the SPDX MIT
   template word for word apart from the copyright line.
-- [ ] 3.2 Add `CODE_OF_CONDUCT.md`: the Contributor Covenant 2.1, fetched from contributor-covenant.org (not written
+- [x] 3.2 Add `CODE_OF_CONDUCT.md`: the Contributor Covenant 2.1, fetched from contributor-covenant.org (not written
   from memory; a failed fetch is a stop), with the GitHub-only enforcement contact from design D7. Verify: apart from
   the contact, it matches the fetched text, and `grep -c '@' CODE_OF_CONDUCT.md` finds no email address.
-- [ ] 3.3 Add `SECURITY.md` per design D7. Verify: it covers supported versions, the private reporting route, what to
+- [x] 3.3 Add `SECURITY.md` per design D7. Verify: it covers supported versions, the private reporting route, what to
   include and what to expect, and names no email address.
 
 ## 4. README front page and the docs split
