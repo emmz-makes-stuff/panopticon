@@ -35,18 +35,18 @@ is a stop (CLAUDE.md "Stop and ask"): leave a `stopped-…` devlog note and wait
 
 ## 4. README front page and the docs split
 
-- [ ] 4.1 Create `docs/using.md` and `docs/development.md` by moving the README sections in design D2's table, whole
+- [x] 4.1 Create `docs/using.md` and `docs/development.md` by moving the README sections in design D2's table, whole
   and with wording kept; fix relative links for the new location. Verify: a diff of each moved section against the old
   README shows only headings, links and the host changing.
-- [ ] 4.2 Create `docs/self-hosting.md` per design D4, from the moved Configuration, Migrations, container and Railway
+- [x] 4.2 Create `docs/self-hosting.md` per design D4, from the moved Configuration, Migrations, container and Railway
   sections plus the new parts. Check every setting against `src/Panopticon.Server` (its options classes and
   `appsettings*.json`) and every command against the `Makefile`, `Dockerfile` and `.github/workflows/deploy.yml`.
   Verify: each scenario of the `self-hosting-guide` spec is satisfied by a named section, recorded in a devlog note,
   and no setting the server reads outside Development is missing from the table.
-- [ ] 4.3 Rewrite `README.md` as the front page per design D3: opening section, how it works, getting on a server,
+- [x] 4.3 Rewrite `README.md` as the front page per design D3: opening section, how it works, getting on a server,
   links, licence. Verify: it has no section left over from the old manual, links every new doc, and fits in about
   80 lines.
-- [ ] 4.4 Update every in-repo link to a moved README anchor (`docs/cli.md`, `web/DESIGN.md`, `docs/`, and any spec or
+- [x] 4.4 Update every in-repo link to a moved README anchor (`docs/cli.md`, `web/DESIGN.md`, `docs/`, and any spec or
   ADR outside the archive). Verify: `git grep -n 'README.md#' -- ':!openspec/changes/archive'` finds only anchors
   that still exist in the new README.
 
