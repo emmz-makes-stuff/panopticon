@@ -52,6 +52,17 @@ internal static class PromptHookOutput
     }
 
     /// <summary>
+    /// <c>request_visit</c>'s URL, reason and action (visit-requests D3), or null when the input isn't that shape: the
+    /// tool then runs and reports the problem itself.
+    /// </summary>
+    public static VisitRequest? Visit(JsonElement? toolInput) =>
+        toolInput is { ValueKind: JsonValueKind.Object } input
+        && Text(input, "url") is { } url
+        && Text(input, "reason") is { } reason
+            ? new VisitRequest(url, reason, Text(input, "action"))
+            : null;
+
+    /// <summary>
     /// A held permission prompt's input as the dashboard previews it, cut to 2 KB: a Bash call's command, or any other
     /// tool's input as JSON. Never sent until the server holds the prompt (spec remote-answers, Permission input stays
     /// local unless held).
@@ -69,8 +80,9 @@ internal static class PromptHookOutput
     }
 
     /// <summary>
-    /// D7's output for an answer: a question's answers injected into its input, or a permission's allow or deny. Null
-    /// when the answer doesn't fit the prompt (the terminal asks instead).
+    /// D7's output for an answer: a question's answers injected into its input, a permission's allow or deny, or a
+    /// visit's answer injected into <c>request_visit</c>'s input (visit-requests D2). Null when the answer doesn't fit
+    /// the prompt (the terminal asks instead).
     /// </summary>
     public static string? For(PromptKind kind, JsonElement? toolInput, PromptAnswer answer)
     {
@@ -80,7 +92,34 @@ internal static class PromptHookOutput
         {
             json.WriteStartObject();
             json.WriteStartObject("hookSpecificOutput");
-            if (kind == PromptKind.Question)
+            if (kind == PromptKind.Visit)
+            {
+                if (answer.Visited is not { } visited)
+                {
+                    return null;
+                }
+
+                json.WriteString("hookEventName", "PreToolUse");
+                json.WriteString("permissionDecision", "allow");
+                json.WriteStartObject("updatedInput");
+                if (toolInput is { ValueKind: JsonValueKind.Object } input)
+                {
+                    // The agent's own panopticon_answer, if it sent one, never survives: only the dashboard's does.
+                    foreach (var property in input.EnumerateObject().Where(p => p.Name != RequestVisit.AnswerField))
+                    {
+                        property.WriteTo(json);
+                    }
+                }
+
+                json.WritePropertyName(RequestVisit.AnswerField);
+                JsonSerializer.Serialize(
+                    json,
+                    new VisitAnswer(visited ? RequestVisit.Done : RequestVisit.Cant, answer.Message, answer.AnsweredBy),
+                    ContractsJsonContext.Default.VisitAnswer);
+                json.WriteEndObject();
+                json.WriteString("additionalContext", $"Answered by {answer.AnsweredBy} via Panopticon.");
+            }
+            else if (kind == PromptKind.Question)
             {
                 if (answer.Answers is not { } answers)
                 {

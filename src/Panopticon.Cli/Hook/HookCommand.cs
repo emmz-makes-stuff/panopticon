@@ -65,7 +65,7 @@ internal sealed record PromptWaitOptions(TimeSpan HoldLimit, TimeSpan ServerLoss
 /// failure, it writes nothing and the terminal asks as usual.</item>
 /// </list>
 /// </summary>
-internal sealed class HookCommand(
+internal sealed partial class HookCommand(
     Func<HttpClient> createHttpClient,
     BridgeSettings settings,
     WorktreeLinksFile? links,
@@ -159,7 +159,7 @@ internal sealed class HookCommand(
         var tool = hookEvent.ToolName;
         return hookEvent.EventName switch
         {
-            "PreToolUse" when tool is not null and not AskUserQuestion => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
+            "PreToolUse" when tool is not null and not AskUserQuestion && !IsVisitTool(tool) => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
             "PostToolUse" when tool is not null and not AskUserQuestion => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
             "PostToolUse" => (SessionState.Working, null),
             "UserPromptSubmit" => (SessionState.Working, null),
@@ -172,7 +172,8 @@ internal sealed class HookCommand(
     /// <summary>
     /// The prompt an event raises, or null. A <c>PermissionRequest</c> for <c>AskUserQuestion</c> is ignored: Claude
     /// Code raises one for every question the <c>PreToolUse</c> hook doesn't answer (D1, found in §1), and the
-    /// question is already posted.
+    /// question is already posted. <c>PreToolUse</c> on the bridge's <c>request_visit</c> is a visit request
+    /// (visit-requests D3), and a <c>PermissionRequest</c> for it is ignored too, as the plugin's matchers do.
     /// </summary>
     internal static PromptKind? PromptKindFor(HookEvent hookEvent)
     {
@@ -180,10 +181,21 @@ internal sealed class HookCommand(
         return hookEvent switch
         {
             { EventName: "PreToolUse", ToolName: AskUserQuestion } => PromptKind.Question,
-            { EventName: "PermissionRequest", ToolName: { } tool } when tool != AskUserQuestion => PromptKind.Permission,
+            { EventName: "PreToolUse", ToolName: { } tool } when IsVisitTool(tool) => PromptKind.Visit,
+            { EventName: "PermissionRequest", ToolName: { } tool } when tool != AskUserQuestion && !IsVisitTool(tool) => PromptKind.Permission,
             _ => null,
         };
     }
+
+    /// <summary>
+    /// Whether <paramref name="toolName"/> is the bridge's <c>request_visit</c>, by Claude Code's MCP tool name: the
+    /// plugin's server (<c>mcp__plugin_panopticon_panopticon__request_visit</c>) or a hand-added one
+    /// (<c>mcp__panopticon__request_visit</c>). The plugin's <c>hooks.json</c> uses the same pattern.
+    /// </summary>
+    internal static bool IsVisitTool(string toolName) => VisitToolPattern().IsMatch(toolName);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^mcp__.*panopticon.*__request_visit$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex VisitToolPattern();
 
     /// <summary>The server, the repo and the change the event is for; null when the session isn't on a change.</summary>
     private async Task<Target?> ResolveTargetAsync(HookEvent hookEvent, HttpClient http, CancellationToken cancellationToken)
@@ -212,15 +224,32 @@ internal sealed class HookCommand(
     /// </summary>
     private async Task AskAsync(HookEvent hookEvent, PromptKind kind, Target target, CancellationTokenSource budget, CancellationToken cancellationToken)
     {
-        var waiting = kind == PromptKind.Question ? SessionState.WaitingOnQuestion : SessionState.WaitingOnPermission;
+        var waiting = kind switch
+        {
+            PromptKind.Question => SessionState.WaitingOnQuestion,
+            PromptKind.Visit => SessionState.WaitingOnVisit,
+            _ => SessionState.WaitingOnPermission,
+        };
         var questions = kind == PromptKind.Question ? PromptHookOutput.Questions(hookEvent.ToolInput) : null;
+        var visit = kind == PromptKind.Visit ? PromptHookOutput.Visit(hookEvent.ToolInput) : null;
         var request = new PromptRequest(
-            target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, kind, questions, kind == PromptKind.Permission ? hookEvent.ToolName : null, target.Project, _startedAt);
-        var problem = kind == PromptKind.Question && questions is null
-            ? "its questions can't be read"
-            : PromptLimits.Problem(request);
+            target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, kind, questions, kind == PromptKind.Permission ? hookEvent.ToolName : null, target.Project, _startedAt, visit);
+        var problem = (kind, questions, visit) switch
+        {
+            (PromptKind.Question, null, _) => "its questions can't be read",
+            (PromptKind.Visit, _, null) => "its url and reason can't be read",
+            _ => PromptLimits.Problem(request),
+        };
         if (problem is not null)
         {
+            // A visit request the tool will refuse at once isn't waiting on anyone: the session is just running a tool.
+            if (kind == PromptKind.Visit)
+            {
+                await SendAsync(hookEvent, target, SessionState.Working, ActivitySummary.For(hookEvent.ToolName!, hookEvent.ToolInput), budget.Token);
+                log.Write($"hook {hookEvent.EventName}: this visit request wasn't sent to the dashboard: {problem}.");
+                return;
+            }
+
             await SendAsync(hookEvent, target, waiting, null, budget.Token);
             log.Write($"hook {hookEvent.EventName}: this prompt went to the terminal, not the dashboard: {problem}.");
             return;

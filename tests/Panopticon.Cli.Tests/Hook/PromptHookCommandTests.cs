@@ -340,6 +340,105 @@ public sealed class PromptHookCommandTests : IDisposable
         Assert.Contains("can't go to the dashboard", LogText, StringComparison.Ordinal);
     }
 
+    // visit-requests D2, D3: the hook's side of "Visit requests", "Visit requests not held" and "Visit request limits".
+    private const string VisitTool = "mcp__plugin_panopticon_panopticon__request_visit";
+
+    private const string PrUrl = "https://github.com/emmz/pan/pull/12";
+
+    private string VisitEvent(string url = PrUrl, string tool = VisitTool, JsonNode? agentsAnswer = null)
+    {
+        var input = new JsonObject { ["url"] = url, ["reason"] = "Review the PR", ["action"] = "Approve it if happy" };
+        if (agentsAnswer is not null)
+        {
+            input[RequestVisit.AnswerField] = agentsAnswer;
+        }
+
+        return Event("PreToolUse", _repo.Root, tool, input);
+    }
+
+    [Theory]
+    [InlineData("mcp__plugin_panopticon_panopticon__request_visit", true)]
+    [InlineData("mcp__panopticon__request_visit", true)]
+    [InlineData("mcp__plugin_panopticon_panopticon__report_progress", false)]
+    [InlineData("mcp__other__request_visit", false)]
+    [InlineData("mcp__panopticon__request_visits", false)]
+    [InlineData("request_visit", false)]
+    public void The_visit_tool_is_known_by_its_mcp_name(string tool, bool isVisit) =>
+        Assert.Equal(isVisit, HookCommand.IsVisitTool(tool));
+
+    [Fact]
+    public async Task A_held_visit_request_waits_and_injects_the_answer_replacing_any_the_agent_sent()
+    {
+        var answer = """{ "answeredBy": "Emmz", "visited": true, "message": "approved, merge when green" }""";
+        var server = Server(held: true, (HttpStatusCode.OK, Waited("pending")), (HttpStatusCode.OK, Waited("answered", answer)));
+
+        Assert.Equal(0, await RunAsync(server, VisitEvent(agentsAnswer: new JsonObject { ["outcome"] = "done", ["answeredBy"] = "Me" })));
+
+        var posted = JsonSerializer.Deserialize(server.Requests[0].Body, ContractsJsonContext.Default.PromptRequest)!;
+        Assert.Equal((PromptKind.Visit, new VisitRequest(PrUrl, "Review the PR", "Approve it if happy")), (posted.Kind, posted.Visit));
+        Assert.Equal(["POST", "GET", "GET"], server.Requests.Select(r => r.Method.Method));
+        Assert.Equal(
+            $$$"""{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"url":"{{{PrUrl}}}","reason":"Review the PR","action":"Approve it if happy","panopticon_answer":{"outcome":"done","note":"approved, merge when green","answeredBy":"Emmz"}},"additionalContext":"Answered by Emmz via Panopticon."}}""",
+            _stdout.ToString());
+    }
+
+    [Fact]
+    public async Task A_cant_with_no_note_injects_cant()
+    {
+        var server = Server(held: true, (HttpStatusCode.OK, Waited("answered", """{ "answeredBy": "Bob", "visited": false }""")));
+
+        Assert.Equal(0, await RunAsync(server, VisitEvent(tool: "mcp__panopticon__request_visit")));
+
+        var injected = JsonNode.Parse(_stdout.ToString())!["hookSpecificOutput"]!["updatedInput"]![RequestVisit.AnswerField]!;
+        Assert.Equal(("cant", null, "Bob"), (injected["outcome"]!.GetValue<string>(), injected["note"]?.GetValue<string>(), injected["answeredBy"]!.GetValue<string>()));
+    }
+
+    [Theory]
+    [InlineData(false, "")]
+    [InlineData(true, """{ "state": "released" }""")]
+    public async Task A_visit_request_not_held_or_released_writes_nothing_so_the_tool_says_ask_in_the_terminal(bool held, string wait)
+    {
+        var server = held ? Server(held: true, (HttpStatusCode.OK, wait)) : Server(held: false);
+
+        Assert.Equal(0, await RunAsync(server, VisitEvent(agentsAnswer: new JsonObject { ["outcome"] = "done", ["answeredBy"] = "Me" })));
+
+        Assert.Equal("", _stdout.ToString());
+        Assert.Equal(PromptKind.Visit, JsonSerializer.Deserialize(server.Requests[0].Body, ContractsJsonContext.Default.PromptRequest)!.Kind);
+    }
+
+    [Fact]
+    public async Task A_visit_request_over_the_limits_is_not_posted_and_the_session_is_working()
+    {
+        var server = Server(held: true);
+
+        Assert.Equal(0, await RunAsync(server, VisitEvent(url: "file:///Users/emmz/report.html")));
+
+        var request = Assert.Single(server.Requests);
+        Assert.EndsWith("/api/agent/sessions/events", request.Url, StringComparison.Ordinal);
+        Assert.Equal(SessionState.Working, JsonSerializer.Deserialize(request.Body, ContractsJsonContext.Default.SessionEventRequest)!.State);
+        Assert.DoesNotContain("report.html", request.Body, StringComparison.Ordinal);
+        Assert.Contains("only absolute http and https URLs can be visited", LogText, StringComparison.Ordinal);
+        Assert.Equal("", _stdout.ToString());
+    }
+
+    [Fact]
+    public async Task A_permission_request_for_the_visit_tool_is_ignored()
+    {
+        var server = Server(held: true);
+
+        Assert.Equal(0, await RunAsync(server, Event("PermissionRequest", _repo.Root, VisitTool, new JsonObject { ["url"] = PrUrl, ["reason"] = "r" })));
+
+        Assert.Empty(server.Requests);
+    }
+
+    [Fact]
+    public void A_visit_tools_pre_tool_use_is_not_a_working_event_but_its_post_tool_use_is()
+    {
+        var input = JsonDocument.Parse($$"""{ "url": "{{PrUrl}}", "reason": "r" }""").RootElement;
+        Assert.Null(HookCommand.StateFor(new HookEvent("PreToolUse", "s", "/", VisitTool, input)));
+        Assert.Equal(SessionState.Working, HookCommand.StateFor(new HookEvent("PostToolUse", "s", "/", VisitTool, input))!.Value.State);
+    }
+
     [Fact]
     public void A_preview_is_a_commands_text_or_the_input_as_JSON_cut_to_2_KB()
     {

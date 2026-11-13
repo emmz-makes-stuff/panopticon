@@ -142,6 +142,8 @@ public sealed record ReportProgressResult(
 [JsonSerializable(typeof(PromptCreated))]
 [JsonSerializable(typeof(PromptPreview))]
 [JsonSerializable(typeof(PromptWaitResult))]
+[JsonSerializable(typeof(VisitAnswer))]
+[JsonSerializable(typeof(RequestVisitResult))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(int))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;

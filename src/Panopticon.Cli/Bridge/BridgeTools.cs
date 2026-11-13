@@ -113,6 +113,37 @@ internal sealed class BridgeTools
         }
     }
 
+    /// <summary>
+    /// <c>request_visit</c> (visit-requests D1, D2; spec cli-bridge, Requesting a visit). The tool never waits or calls the
+    /// server: while the member is away, the plugin's sync <c>PreToolUse</c> hook holds the call before it runs, and
+    /// injects the dashboard's answer into the input as <see cref="RequestVisit.AnswerField"/>, which the tool doesn't
+    /// advertise. It is read from the raw arguments, not bound as a parameter.
+    /// </summary>
+    [McpServerTool(Name = ContractsAssembly.RequestVisitToolName, Destructive = false, Idempotent = false, ReadOnly = true, OpenWorld = true)]
+    [Description("Ask your member to visit a web page, and wait for them to say they've done it. Use this whenever you need them to look at or act on a page: reviewing a pull request, approving a pipeline run, checking how a page looks, or anything else that needs a person in a browser. While they're away, Panopticon puts the request on their dashboard with the link, and this call returns once they answer Done or Can't, with an optional note. Wait for that answer before relying on the visit. When they can't be reached that way (they're at the keyboard, or the request couldn't be held), it returns at once and tells you to ask in the terminal instead. Only http and https URLs, with no user name or password in them.")]
+    public static CallToolResult RequestVisit(
+        RequestContext<CallToolRequestParams> context,
+        [Description("The page to visit: an absolute http or https URL.")] string url,
+        [Description("Why they need to visit it, in a sentence, e.g. \"Review the PR for the tags change\".")] string reason,
+        [Description("Optional. What to do there, e.g. \"Approve it if the checks are green\".")] string? action = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (PromptLimits.VisitProblem(new VisitRequest(url, reason, action)) is { } problem)
+        {
+            return ToolError(new BridgeException($"This visit can't be requested: {problem}."));
+        }
+
+        var answer = Contracts.RequestVisit.AnswerIn(context.Params?.Arguments);
+        var result = answer is null
+            ? new RequestVisitResult(Reached: false, url)
+            : new RequestVisitResult(Reached: true, url, answer.Outcome, answer.Note, answer.AnsweredBy);
+        return new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = result.Describe() }],
+            StructuredContent = JsonSerializer.SerializeToElement(result, ContractsJsonContext.Default.RequestVisitResult),
+        };
+    }
+
     // A tool error, not a protocol error: the agent sees the message and the bridge keeps serving.
     private static CallToolResult ToolError(BridgeException exception) => new()
     {

@@ -1,8 +1,9 @@
 # The `panopticon` CLI
 
 `panopticon login` gives this machine an API token, approved in the dashboard. `panopticon mcp` is a local
-MCP server that agents talk to over stdio. It offers three tools, `report_progress`, `list_projects` and
-`tag_change`, and forwards each call to the Panopticon server's online MCP endpoint (`/mcp`). `panopticon tags`
+MCP server that agents talk to over stdio. It offers four tools. `report_progress`, `list_projects` and `tag_change`
+forward each call to the Panopticon server's online MCP endpoint (`/mcp`). `request_visit` asks you to visit a web page
+(see [Visit requests](#visit-requests)). `panopticon tags`
 keeps the personal tags this machine's reports carry. `panopticon hook` sends Claude Code sessions' activity and
 prompts, and `panopticon away` turns away mode on or off (see [Session activity and away
 mode](#session-activity-and-away-mode)). `panopticon update` installs the build your server serves (see
@@ -347,6 +348,26 @@ A question (`AskUserQuestion`) or a permission prompt is posted to the server, w
   8 KB, or a prompt over 64 KB in all, goes to the terminal. The card shows the session waiting on a question it
   can't show.
 
+### Visit requests
+
+When an agent needs you to look at or act on a web page, such as reviewing a pull request, approving a pipeline run or
+checking how a page looks, it calls the bridge's `request_visit` tool. It gives the `url`, a `reason`, and optionally
+an `action`, what to do there. No hook can spot that need by itself, so the tool's description tells the agent when
+to use it.
+
+- **You're away:** the plugin's hook holds the call before the tool runs, as it does a question. The card shows the
+  reason, the action, and the URL in full as a link that opens in a new tab. Answer **Done** or **Can't**, with an
+  optional note of up to 1,000 characters. The agent is told, for example, "Done: approved. Answered by Emmz via
+  Panopticon." The change's page records who answered, the URL and Done or Can't, but not the note.
+- **You're not away**, the change has no card, or the request is released (as for any prompt: away off, 8 hours,
+  or a minute without the server): the tool returns at once and tells the agent to ask you in the terminal, with the
+  URL in the question.
+- **Only `http` and `https` URLs**, of up to 2,048 characters, with no user name or password in them. A reason is
+  required, up to 500 characters, and an action is up to 1,000. A request outside these limits is a tool error the
+  agent sees, and it never leaves the machine.
+- Only you and the owners of the change's Project see the URL, reason and action. Other members see "Needs Emmz:
+  visit a page".
+
 ### `panopticon away`
 
 ```sh
@@ -364,7 +385,8 @@ the same switch. It uses the same server and token as reports. Without a login i
 Any MCP client that can launch a stdio server works the same way. Its command is `panopticon` with the
 arguments `["mcp"]`, and it starts in the repo (or any directory inside it). It uses the saved login, or the two
 variables above. `list_projects` takes no arguments and uses the same server and token as reports, and so does
-`tag_change`.
+`tag_change`. `request_visit` needs Claude Code's hooks to reach the dashboard: from any other agent, it always says
+to ask in the terminal.
 
 ## Troubleshooting
 

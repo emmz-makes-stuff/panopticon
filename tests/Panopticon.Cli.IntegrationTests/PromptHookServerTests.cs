@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Panopticon.Cli.Bridge;
 using Panopticon.Cli.Config;
 using Panopticon.Cli.Hook;
+using Panopticon.Cli.IntegrationTests.Infrastructure;
 using Panopticon.Cli.Tests.Infrastructure;
 using Panopticon.Contracts;
 using Panopticon.Server.Data;
@@ -192,6 +193,63 @@ public sealed class PromptHookServerTests(PostgresFixture postgres, S3Fixture s3
         Assert.Equal("", await hook.WaitAsync(TimeSpan.FromSeconds(10), Ct));
         using var late = await world.Tags.Emmz.PostApiAsync(
             PromptAnswerEndpoints.AnswerPath(session.PromptDetail!.Id), new { answers = new Dictionary<string, string> { ["Which store?"] = "Memory" } }, Ct);
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, late.StatusCode);
+    }
+
+    // visit-requests D1, D2: the hook holds request_visit, and its output is the input the bridge's tool then runs with.
+    private const string PrUrl = "https://github.com/emmz/pan/pull/12";
+
+    private static string PrVisit(string cwd) => Event("PreToolUse", cwd, "mcp__plugin_panopticon_panopticon__request_visit", new JsonObject
+    {
+        ["url"] = PrUrl,
+        ["reason"] = "Review the PR",
+        ["action"] = "Approve it if happy",
+    });
+
+    [Fact]
+    public async Task Away_a_visit_answered_on_the_dashboard_reaches_the_tool_as_done_with_the_note_and_who_answered()
+    {
+        await using var world = await CreateAsync(away: true);
+        var hook = RunHookAsync(world, PrVisit(world.Repo.Root));
+
+        var session = await SessionWhenAsync(world, s => s.PromptDetail is { Held: true });
+        Assert.Equal((SessionState.WaitingOnVisit, PrUrl), (session.State, session.PromptDetail!.Visit!.Url));
+        Assert.False(hook.IsCompleted);
+        using (var answered = await world.Tags.Emmz.PostApiAsync(
+            PromptAnswerEndpoints.AnswerPath(session.PromptDetail.Id), new { visited = true, message = "approved" }, Ct))
+        {
+            answered.EnsureSuccessStatusCode();
+        }
+
+        var output = JsonNode.Parse(await hook.WaitAsync(TimeSpan.FromSeconds(30), Ct))!["hookSpecificOutput"]!;
+        Assert.Equal("allow", output["permissionDecision"]!.GetValue<string>());
+
+        // Claude Code runs the tool with updatedInput: the bridge turns it into the agent's answer.
+        using var repo = TempGitRepo.Create();
+        await using var bridge = await BridgeHarness.StartAsync(
+            new BridgeSettings(null, null, repo.Root, "vm-1"), () => new HttpClient(), "claude-code", Ct);
+        var arguments = output["updatedInput"]!.AsObject().ToDictionary(p => p.Key, p => (object?)p.Value);
+        var result = await bridge.Client.CallToolAsync(ContractsAssembly.RequestVisitToolName, arguments, cancellationToken: Ct);
+        Assert.Matches(@"^Done: approved\. Answered by .+ via Panopticon\.$", BridgeHarness.Text(result));
+
+        await using var db = world.Tags.Factory.NewDb();
+        var row = await db.RemoteAnswers.SingleAsync(Ct);
+        Assert.Equal((RemoteAnswer.VisitKind, RemoteAnswer.Done, PrUrl), (row.Kind, row.Outcome, row.Url));
+    }
+
+    [Fact]
+    public async Task Not_away_or_after_away_off_a_visit_writes_nothing_so_the_tool_says_ask_in_the_terminal()
+    {
+        await using var world = await CreateAsync(away: false);
+        Assert.Equal("", await RunHookAsync(world, PrVisit(world.Repo.Root)).WaitAsync(TimeSpan.FromSeconds(10), Ct));
+
+        await SetAwayAsync(world.Tags, true);
+        var held = RunHookAsync(world, PrVisit(world.Repo.Root));
+        var session = await SessionWhenAsync(world, s => s.PromptDetail is { Held: true });
+        await SetAwayAsync(world.Tags, false);
+
+        Assert.Equal("", await held.WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        using var late = await world.Tags.Emmz.PostApiAsync(PromptAnswerEndpoints.AnswerPath(session.PromptDetail!.Id), new { visited = true }, Ct);
         Assert.Equal(System.Net.HttpStatusCode.Conflict, late.StatusCode);
     }
 
