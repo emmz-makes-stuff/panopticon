@@ -2,7 +2,7 @@
 
 ## 1. Spike: `updatedInput` on an MCP tool (human verification)
 
-- [ ] 1.1 In a scratch repo (never committed), write a throwaway sync `PreToolUse` hook for a scratch MCP tool. The hook returns `allow` with `updatedInput` that adds a `panopticon_answer` object and `additionalContext`. The tool is a tiny bridge build or a stub stdio server that echoes its arguments. Give Emmz a copy-pasteable recipe to drive it in a real Claude Code. Also check that the matchers in design D3 match `mcp__plugin_panopticon_panopticon__request_visit` and exclude it from the catch-alls, using node's `RegExp`. Verify: the tool receives `panopticon_answer`, the session sees the `additionalContext`, and no permission prompt appears. Record the exact JSON, the Claude Code version, and which D2 path holds (as designed, fallback parameter, or stop) in a devlog note, and amend D2 if needed.
+- [x] 1.1 In a scratch repo (never committed), write a throwaway sync `PreToolUse` hook for a scratch MCP tool. The hook returns `allow` with `updatedInput` that adds a `panopticon_answer` object and `additionalContext`. The tool is a tiny bridge build or a stub stdio server that echoes its arguments. Give Emmz a copy-pasteable recipe to drive it in a real Claude Code. Also check that the matchers in design D3 match `mcp__plugin_panopticon_panopticon__request_visit` and exclude it from the catch-alls, using node's `RegExp`. Verify: the tool receives `panopticon_answer`, the session sees the `additionalContext`, and no permission prompt appears. Record the exact JSON, the Claude Code version, and which D2 path holds (as designed, fallback parameter, or stop) in a devlog note, and amend D2 if needed.
 
 ## 2. Contracts and the answer record
 
