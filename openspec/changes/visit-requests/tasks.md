@@ -27,8 +27,8 @@
 
 ## 6. Plugin: hooks and instructions (`../panopticon-skills`)
 
-- [ ] 6.1 On a `change/visit-requests` branch in `panopticon-skills`, add the sync `PreToolUse` entry for `request_visit`, and exclude it from the async catch-all and from `PermissionRequest` (design D3). Bump the plugin to 0.3.0 in `plugin.json` and `marketplace.json`. Verify: `jq -e .` parses each file, `plugins/panopticon/tests/panopticon-hook.test.sh` passes, and a node check shows each matcher matches or skips the tool as D3 says.
-- [ ] 6.2 Add the `request_visit` line to the `report-progress` skill, and a "Visit requests" section to the plugin README (D8). Commit in `panopticon-skills`. Verify the skill and README name the tool exactly as the bridge lists it.
+- [x] 6.1 On a `change/visit-requests` branch in `panopticon-skills`, add the sync `PreToolUse` entry for `request_visit`, and exclude it from the async catch-all and from `PermissionRequest` (design D3). Bump the plugin to 0.3.0 in `plugin.json` and `marketplace.json`. Verify: `jq -e .` parses each file, `plugins/panopticon/tests/panopticon-hook.test.sh` passes, and a node check shows each matcher matches or skips the tool as D3 says.
+- [x] 6.2 Add the `request_visit` line to the `report-progress` skill, and a "Visit requests" section to the plugin README (D8). Commit in `panopticon-skills`. Verify the skill and README name the tool exactly as the bridge lists it.
 
 ## 7. End to end (human verification)
 

@@ -129,7 +129,11 @@ Migration Plan, and merges once a CLI with `request_visit` is released.
 
 - A new plugin with an old CLI: the old hook sees a `PreToolUse` on an unknown tool, sends a working event, and
   writes nothing. The old bridge has no `request_visit`, so the agent never calls it.
-- A new CLI with an old plugin: no sync hook, so the tool always returns "ask in the terminal".
+- A new CLI with an old plugin: no sync hook, so the tool always returns "ask in the terminal". But the old async
+  `PreToolUse` catch-all still matches `request_visit`, so the new CLI posts the visit from an async hook that Claude
+  Code kills after 10 seconds. While the member is away, the card then shows a held visit for about 90 seconds, until
+  the server's wait grace releases it, though the agent has already moved on. That is harmless but confusing, so the
+  plugin README says to update the CLI and the plugin together. (Found in §4.)
 
 ## Risks / Trade-offs
 
