@@ -258,6 +258,7 @@ const SESSION_STATES: readonly string[] = [
   "working",
   "waiting-on-question",
   "waiting-on-permission",
+  "waiting-on-visit",
   "waiting-on-user",
 ];
 
@@ -315,7 +316,7 @@ export function parseAnswerEntry(data: string): AnswerEntry | null {
       typeof value.sessionMember === "string" &&
       typeof value.answeredBy === "string" &&
       typeof value.answeredAt === "string" &&
-      (value.kind === "question" || value.kind === "permission")
+      (value.kind === "question" || value.kind === "permission" || value.kind === "visit")
       ? (value as AnswerEntry)
       : null;
   } catch {

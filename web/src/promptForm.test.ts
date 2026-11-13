@@ -316,6 +316,89 @@ describe("Permission prompts: the form", () => {
   });
 });
 
+// Spec remote-answers: "Visit request form"; visit-requests D7.
+const PR = "https://github.com/emmz/pan/pull/12";
+
+function visiting(url = PR, overrides: Partial<SessionView> = {}): SessionView {
+  return asking({
+    state: "waiting-on-visit",
+    prompt: { kind: "visit" },
+    promptDetail: detail({
+      questions: null,
+      visit: { url, reason: "Review the PR", action: "Approve it if you're happy" },
+    }),
+    ...overrides,
+  });
+}
+
+describe("Visit request form", () => {
+  it("shows the reason, the action and the URL in full as a link to a new tab with no opener or referrer", () => {
+    const { held, marker } = show(visiting());
+    const shown = held();
+
+    expect(marker()).toBe("Needs you");
+    expect(shown.classList.contains("prompt-form--visit")).toBe(true);
+    expect(q(shown, ".prompt-text").textContent).toBe("Review the PR");
+    expect(q(shown, ".prompt-visit-action").textContent).toBe("Approve it if you're happy");
+    const link = q<HTMLAnchorElement>(shown, "a.prompt-visit-link");
+    expect(link.textContent).toBe(PR);
+    expect(link.href).toBe(PR);
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toBe("noopener noreferrer");
+    expect(q(shown, ".prompt-visit-hint").textContent).toBe(" (opens in a new tab)");
+  });
+
+  it.each(["javascript:alert(1)", "file:///Users/emmz/report.html", "not a url"])(
+    "shows %s as text, never as a link",
+    (url) => {
+      const { held } = show(visiting(url));
+      const shown = held();
+
+      expect(shown.querySelector("a")).toBeNull();
+      expect(q(shown, ".prompt-visit-link").textContent).toBe(url);
+    },
+  );
+
+  it("Done with a note sends visited true and the trimmed note", async () => {
+    const { held, posted } = show(visiting());
+    const shown = held();
+
+    const note = q<HTMLTextAreaElement>(shown, ".prompt-message");
+    expect(note.maxLength).toBe(1000);
+    type(note, "  approved, merge when green ");
+    button(shown, ".prompt-done").click();
+    await until(() => posted().length === 1);
+
+    expect(posted()[0]?.body).toEqual({ visited: true, message: "approved, merge when green" });
+  });
+
+  it("Can't with no note sends visited false and no message", async () => {
+    const { held, posted } = show(visiting());
+
+    button(held(), ".prompt-cant").click();
+    await until(() => posted().length === 1);
+
+    expect(posted()[0]?.body).toEqual({ visited: false });
+  });
+
+  it("the reason, action and URL are text, never markup", () => {
+    const { held } = show(
+      asking({
+        state: "waiting-on-visit",
+        prompt: { kind: "visit" },
+        promptDetail: detail({
+          questions: null,
+          visit: { url: PR, reason: "<img src=x onerror=alert(1)>", action: "<b>bold</b>" },
+        }),
+      }),
+    );
+    const shown = held();
+
+    expect(shown.querySelector("img, b")).toBeNull();
+    expect(q(shown, ".prompt-text").textContent).toBe("<img src=x onerror=alert(1)>");
+  });
+});
+
 describe("answer errors, inline", () => {
   it.each([
     [403, "Only the session's member and its Project's owners can answer this."],

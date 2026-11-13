@@ -77,11 +77,18 @@ export interface ChangeCard {
 
 /** What a session is doing (spec agent-presence, Session states). Ended sessions leave the card. */
 export type SessionState =
-  "working" | "waiting-on-question" | "waiting-on-permission" | "waiting-on-user";
+  | "working"
+  | "waiting-on-question"
+  | "waiting-on-permission"
+  | "waiting-on-visit"
+  | "waiting-on-user";
+
+/** A prompt's kind: a question, a permission prompt, or a visit request (visit-requests D1). */
+export type PromptKind = "question" | "permission" | "visit";
 
 /** What a session waits on, as everyone who can see it sees it. */
 export interface SessionPrompt {
-  kind: "question" | "permission";
+  kind: PromptKind;
   /** A permission prompt's tool, e.g. "Bash". */
   tool?: string | null;
 }
@@ -114,6 +121,15 @@ export interface PromptDetail {
   questions?: PromptQuestion[] | null;
   /** A held permission prompt's input, cut to 2 KB, once it has arrived. */
   preview?: string | null;
+  /** A visit request's page, why, and what to do there (spec remote-answers, Visit request form). */
+  visit?: VisitRequest | null;
+}
+
+/** The page a visit request asks the member to visit. */
+export interface VisitRequest {
+  url: string;
+  reason: string;
+  action?: string | null;
 }
 
 /** A member's away switch (`GET`/`PUT /api/me/away`, and the `away-changed` event; agent-interaction D8). */
@@ -140,11 +156,13 @@ export interface AnswerEntry {
   answeredBy: string;
   /** ISO 8601. */
   answeredAt: string;
-  kind: "question" | "permission";
+  kind: PromptKind;
   tool?: string | null;
-  /** A permission prompt's: "allow" or "deny". */
-  outcome?: "allow" | "deny" | null;
+  /** A permission prompt's: "allow" or "deny". A visit request's: "done" or "cant". */
+  outcome?: "allow" | "deny" | "done" | "cant" | null;
   questions?: AnsweredQuestion[] | null;
+  /** A visit request's URL: only for a viewer who could have answered. */
+  url?: string | null;
 }
 
 /** One Claude Code session on a change (spec live-dashboard, Sessions on a card). */

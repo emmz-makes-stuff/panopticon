@@ -8,7 +8,7 @@ import {
   SESSION_ENDED,
   SESSION_UPDATED,
 } from "./live";
-import { elapsed, sessionText } from "./sessionRows";
+import { elapsed, heldPrompts, needs, sessionText } from "./sessionRows";
 import { card, FakeEventSource, fakeFetch, NOW, q, settle } from "./testing";
 import type { ChangeCard, SessionView } from "./types";
 
@@ -120,7 +120,40 @@ describe("session rows", () => {
         SAM,
       ),
     ).toBe("waiting on permission for Bash");
+    expect(
+      sessionText(session({ state: "waiting-on-visit", prompt: { kind: "visit" } }), SAM),
+    ).toBe("waiting on a visit request");
     expect(sessionText(session({ activity: null }), EMMZ)).toBe("working");
+  });
+
+  it("A visit request needs you, or names its member to anyone else: 'Needs Emmz: visit a page'", () => {
+    const visiting = session({ state: "waiting-on-visit", prompt: { kind: "visit" } });
+
+    expect(needs(visiting, EMMZ)).toBe("Needs you");
+    expect(needs(visiting, SAM)).toBe("Needs Emmz: visit a page");
+  });
+
+  it("counts a held visit request as a held prompt of kind visit", () => {
+    const held = heldPrompts([
+      card({
+        changeId: "tags",
+        change: "tags",
+        sessions: [
+          session({
+            state: "waiting-on-visit",
+            prompt: { kind: "visit" },
+            promptDetail: {
+              id: "p1",
+              held: true,
+              askedAt: "2026-11-13T12:00:00Z",
+              visit: { url: "https://example.com/", reason: "Look" },
+            },
+          }),
+        ],
+      }),
+    ]);
+
+    expect(held.map((p) => [p.promptId, p.kind])).toEqual([["p1", "visit"]]);
   });
 
   it("lists each session in the server's order, and keeps names as text", async () => {

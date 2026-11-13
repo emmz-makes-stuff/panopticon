@@ -38,4 +38,21 @@ describe("answerSummary", () => {
   it("names who answered a question for whom", () => {
     expect(answerSummary(entry({ kind: "question" }))).toBe("Bob answered a question for Emmz");
   });
+
+  // Spec remote-answers: "Visit answers are attributed".
+  it("Recorded: a visit's URL and Done, for a viewer who could have answered", () => {
+    const pr = "https://github.com/emmz/pan/pull/12";
+    expect(
+      answerSummary(entry({ kind: "visit", answeredBy: "Emmz", url: pr, outcome: "done" })),
+    ).toBe(`Emmz visited ${pr} for Emmz: done`);
+    expect(answerSummary(entry({ kind: "visit", url: pr, outcome: "cant" }))).toBe(
+      `Bob visited ${pr} for Emmz: can't`,
+    );
+  });
+
+  it("Recorded: only that a visit request was answered, for anyone else", () => {
+    expect(
+      answerSummary(entry({ kind: "visit", answeredBy: "Emmz", url: null, outcome: "done" })),
+    ).toBe("Emmz answered a visit request for Emmz");
+  });
 });

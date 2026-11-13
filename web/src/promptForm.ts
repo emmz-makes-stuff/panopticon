@@ -1,5 +1,5 @@
 import { ApiError, type Api } from "./api";
-import type { PromptDetail, PromptQuestion, SessionView } from "./types";
+import type { PromptDetail, PromptKind, PromptQuestion, SessionView, VisitRequest } from "./types";
 
 /**
  * The form that answers a held prompt from the dashboard (spec remote-answers, Question forms, Permission prompts and
@@ -10,23 +10,43 @@ import type { PromptDetail, PromptQuestion, SessionView } from "./types";
  * in as is. A permission prompt's input is a command, not Markdown: it goes in a `<pre>` as text.
  */
 
-/** The longest Other answer and deny message the server takes (`PromptAnswerEndpoints`). */
+/** The longest Other answer, deny message and visit note the server takes (`PromptAnswerEndpoints`). */
 export const MAX_ANSWER_LENGTH = 2000;
 export const MAX_MESSAGE_LENGTH = 500;
+export const MAX_VISIT_NOTE_LENGTH = 1000;
 
 /** `POST /api/prompts/{id}/answer`'s body. */
 export type PromptAnswerBody =
-  { answers: Record<string, string> } | { allow: boolean; message?: string };
+  | { answers: Record<string, string> }
+  | { allow: boolean; message?: string }
+  | { visited: boolean; message?: string };
 
-/** The form for `detail`, a held prompt of `session`'s: a question's, or a permission prompt's. */
+/** The form for `detail`, a held prompt of `session`'s: a question's, a permission prompt's, or a visit request's. */
 export function renderPromptForm(
   session: SessionView,
   detail: PromptDetail,
   api: Api,
 ): HTMLFormElement {
+  if (detail.visit) {
+    return visitForm(detail, detail.visit, api);
+  }
+
   return detail.questions?.length
     ? questionForm(detail, detail.questions, api)
     : permissionForm(session, detail, api);
+}
+
+/**
+ * The link for a visit request's URL, or null when it isn't an `http:` or `https:` URL (visit-requests D7). The
+ * server refuses anything else, but the page checks again before it makes a link.
+ */
+export function visitHref(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -250,6 +270,58 @@ function permissionForm(session: SessionView, detail: PromptDetail, api: Api): H
   return form;
 }
 
+/**
+ * A visit request's form (spec remote-answers, Visit request form): the reason and action as text, the URL in full as
+ * a link that opens in a new tab with no opener and no referrer, Done, Can't, and an optional note.
+ */
+function visitForm(detail: PromptDetail, visit: VisitRequest, api: Api): HTMLFormElement {
+  const form = baseForm(detail, "visit");
+  form.append(element("p", "prompt-text", visit.reason));
+  if (visit.action) {
+    form.append(element("p", "prompt-visit-action", visit.action));
+  }
+
+  const where = element("p", "prompt-visit-url");
+  const href = visitHref(visit.url);
+  if (href) {
+    // The URL in full as the link's text, so the host is plain to see.
+    const link = element("a", "prompt-visit-link", visit.url);
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    where.append(link, element("span", "prompt-visit-hint", " (opens in a new tab)"));
+  } else {
+    where.append(element("span", "prompt-visit-link", visit.url));
+  }
+
+  form.append(where);
+
+  const noteLabel = element("label", "prompt-message-label");
+  const note = document.createElement("textarea");
+  note.className = "prompt-message";
+  note.maxLength = MAX_VISIT_NOTE_LENGTH;
+  note.rows = 2;
+  noteLabel.append(element("span", "", "Note (optional)"), " ", note);
+  form.append(noteLabel);
+
+  const actions = element("div", "prompt-actions");
+  const done = button("Done", "button", "prompt-done");
+  const cant = button("Can't", "button", "prompt-cant");
+  actions.append(done, cant);
+  const { error, status } = messages(form);
+  form.append(actions);
+
+  const answer = (visited: boolean): void => {
+    const text = note.value.trim();
+    void post(form, api, detail.id, text ? { visited, message: text } : { visited }, error, status);
+  };
+  done.addEventListener("click", () => answer(true));
+  cant.addEventListener("click", () => answer(false));
+  form.addEventListener("submit", (event) => event.preventDefault());
+
+  return form;
+}
+
 async function post(
   form: HTMLFormElement,
   api: Api,
@@ -281,7 +353,7 @@ async function post(
   }
 }
 
-function baseForm(detail: PromptDetail, kind: "question" | "permission"): HTMLFormElement {
+function baseForm(detail: PromptDetail, kind: PromptKind): HTMLFormElement {
   const form = element("form", `prompt-form prompt-form--${kind}`);
   form.dataset["promptId"] = detail.id;
   form.noValidate = true;

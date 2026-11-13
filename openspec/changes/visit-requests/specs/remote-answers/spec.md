@@ -74,5 +74,5 @@ who could have answered it.
 
 #### Scenario: Recorded
 - **WHEN** Emmz answers a visit request for `https://github.com/emmz/pan/pull/12` with Done
-- **THEN** the change's answers list "Emmz: visited https://github.com/emmz/pan/pull/12, done", and Sam sees only
-  "Emmz answered a visit request"
+- **THEN** the change's answers list "Emmz visited https://github.com/emmz/pan/pull/12 for Emmz: done", and Sam sees
+  only "Emmz answered a visit request for Emmz"

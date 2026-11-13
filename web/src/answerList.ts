@@ -40,6 +40,13 @@ export function answerSummary(entry: AnswerEntry): string {
     return `${entry.answeredBy} answered a question for ${member}`;
   }
 
+  if (entry.kind === "visit") {
+    // The URL comes only to a viewer who could have answered (spec remote-answers, Visit answers are attributed).
+    return entry.url
+      ? `${entry.answeredBy} visited ${entry.url} for ${member}: ${entry.outcome === "done" ? "done" : "can't"}`
+      : `${entry.answeredBy} answered a visit request for ${member}`;
+  }
+
   const verb = entry.outcome === "allow" ? "allowed" : "denied";
   return `${entry.answeredBy} ${verb} ${entry.tool ?? "a tool"} for ${member}`;
 }

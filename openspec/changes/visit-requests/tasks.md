@@ -22,8 +22,8 @@
 
 ## 5. Dashboard: the visit form
 
-- [ ] 5.1 Add the visit kind to `types.ts`, and a visit form to `promptForm.ts` (design D7). It shows the reason and the action as text, the full URL as a `target="_blank" rel="noopener noreferrer"` link (only for `http:`/`https:` after `new URL()`), Done, Can't and a note with `maxlength=1000`. Verify with `promptForm.test.ts`: the link's attributes, a `javascript:` URL shown as text, and the answer body for Done and for Can't with a note.
-- [ ] 5.2 Give `card.ts`, `answerList.ts`, the tab-title count and notifications the visit wording: "Needs you" with the form, "Needs Emmz: visit a page", "visited <url>, done", and "<change>: visit a page". Verify the `live-dashboard` "A visit request" scenario and the answer-list scenario with `card.test.ts`, `answerList.test.ts` and the title and notification tests.
+- [x] 5.1 Add the visit kind to `types.ts`, and a visit form to `promptForm.ts` (design D7). It shows the reason and the action as text, the full URL as a `target="_blank" rel="noopener noreferrer"` link (only for `http:`/`https:` after `new URL()`), Done, Can't and a note with `maxlength=1000`. Verify with `promptForm.test.ts`: the link's attributes, a `javascript:` URL shown as text, and the answer body for Done and for Can't with a note.
+- [x] 5.2 Give `card.ts`, `answerList.ts`, the tab-title count and notifications the visit wording: "Needs you" with the form, "Needs Emmz: visit a page", "visited <url>, done", and "<change>: visit a page". Verify the `live-dashboard` "A visit request" scenario and the answer-list scenario with `card.test.ts`, `answerList.test.ts` and the title and notification tests.
 
 ## 6. Plugin: hooks and instructions (`../panopticon-skills`)
 
