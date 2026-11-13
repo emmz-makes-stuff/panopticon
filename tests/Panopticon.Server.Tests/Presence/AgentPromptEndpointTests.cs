@@ -341,4 +341,107 @@ public class AgentPromptEndpointTests(PostgresFixture postgres, S3Fixture s3)
         world.Store.Sweep();
         Assert.Null(await SessionOnCardAsync(world.Tags.Emmz));
     }
+
+    // visit-requests: a visit request is a third kind of prompt, held and released as the others are.
+    private static readonly VisitRequest _prVisit = new("https://github.com/emmz/pan/pull/12", "Review the PR", "Approve it if happy");
+
+    private static PromptRequest Visit(Guid project, VisitRequest? visit = null, string change = "team-auth") =>
+        new(_repo, change, "vm-1", "s-1", PromptKind.Visit, Project: project.ToString(), Visit: visit ?? _prVisit);
+
+    [Fact]
+    public async Task A_visit_request_while_away_is_held_with_its_url_reason_and_action()
+    {
+        await using var world = await WorldAsync(away: true);
+
+        var created = await AskAsync(world, Visit(world.Tags.Pan));
+
+        Assert.True(created.Held);
+        var session = (await SessionOnCardAsync(world.Tags.Emmz))!.Value;
+        Assert.Equal("waiting-on-visit", session.GetProperty("state").GetString());
+        Assert.Equal("visit", session.GetProperty("prompt").GetProperty("kind").GetString());
+        var detail = session.GetProperty("promptDetail");
+        Assert.True(detail.GetProperty("held").GetBoolean());
+        var visit = detail.GetProperty("visit");
+        Assert.Equal(
+            ("https://github.com/emmz/pan/pull/12", "Review the PR", "Approve it if happy"),
+            (visit.GetProperty("url").GetString(), visit.GetProperty("reason").GetString(), visit.GetProperty("action").GetString()));
+        Assert.Equal(PromptWaitState.Pending, (await WaitAsync(world, created.PromptId)).Result!.State);
+    }
+
+    [Fact]
+    public async Task A_visit_request_while_not_away_or_with_no_card_is_not_held()
+    {
+        await using (var atDesk = await WorldAsync(away: false))
+        {
+            var created = await AskAsync(atDesk, Visit(atDesk.Tags.Pan));
+            Assert.False(created.Held);
+            Assert.Equal(PromptWaitState.Released, (await WaitAsync(atDesk, created.PromptId)).Result!.State);
+        }
+
+        await using var away = await WorldAsync(away: true);
+        Assert.False((await AskAsync(away, Visit(away.Tags.Pan, change: "tags"))).Held);
+    }
+
+    [Fact]
+    public async Task Visit_requests_over_the_limits_or_malformed_are_refused()
+    {
+        await using var world = await WorldAsync(away: true);
+
+        foreach (var bad in new[]
+        {
+            Visit(world.Tags.Pan, _prVisit with { Url = "file:///Users/emmz/report.html" }),
+            Visit(world.Tags.Pan, _prVisit with { Url = "https://bob:secret@example.com/" }),
+            Visit(world.Tags.Pan, _prVisit with { Reason = "" }),
+            Visit(world.Tags.Pan, _prVisit with { Action = new string('a', PromptLimits.MaxVisitActionLength + 1) }),
+            Visit(world.Tags.Pan) with { Visit = null },
+            Visit(world.Tags.Pan) with { Tool = "Bash" },
+        })
+        {
+            using var response = await world.Agent.PostAsJsonAsync(AgentPromptEndpoints.PromptsPath, bad, Ct);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        Assert.Null(await SessionOnCardAsync(world.Tags.Emmz));
+    }
+
+    [Fact]
+    public async Task A_held_visit_request_is_released_by_away_off_after_8_hours_and_without_a_wait()
+    {
+        // Away off: released at once, and the card no longer offers to answer it.
+        await using (var off = await WorldAsync(away: true))
+        {
+            var created = await AskAsync(off, Visit(off.Tags.Pan));
+            using (var turnOff = await off.Agent.SendApiAsync(HttpMethod.Put, AwayEndpoints.AgentPath, new AwayState(false), Ct))
+            {
+                turnOff.EnsureSuccessStatusCode();
+            }
+
+            Assert.Equal(PromptWaitState.Released, (await WaitAsync(off, created.PromptId)).Result!.State);
+            Assert.False((await SessionOnCardAsync(off.Tags.Emmz))!.Value.GetProperty("promptDetail").GetProperty("held").GetBoolean());
+        }
+
+        await using (var overnight = await WorldAsync(away: true, waitGrace: HookAlwaysWaiting))
+        {
+            var created = await AskAsync(overnight, Visit(overnight.Tags.Pan));
+            overnight.Clock.Advance(TimeSpan.FromHours(8));
+            overnight.Store.Sweep();
+            Assert.Equal(PromptWaitState.Released, (await WaitAsync(overnight, created.PromptId)).Result!.State);
+        }
+
+        await using var lost = await WorldAsync(away: true);
+        var asked = await AskAsync(lost, Visit(lost.Tags.Pan));
+        await WaitAsync(lost, asked.PromptId);
+        lost.Clock.Advance(TimeSpan.FromSeconds(91));
+        lost.Store.Sweep();
+        Assert.Equal(PromptWaitState.Released, (await WaitAsync(lost, asked.PromptId)).Result!.State);
+    }
+
+    [Fact]
+    public async Task A_visit_request_takes_no_preview()
+    {
+        await using var world = await WorldAsync(away: true);
+        var created = await AskAsync(world, Visit(world.Tags.Pan));
+
+        Assert.Equal(HttpStatusCode.Conflict, await PreviewAsync(world, created.PromptId, "anything"));
+    }
 }

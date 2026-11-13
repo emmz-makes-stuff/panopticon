@@ -80,6 +80,7 @@ public sealed class PresenceStore(
         public PromptKind Kind { get; } = request.Kind;
         public IReadOnlyList<PromptQuestion>? Questions { get; } = request.Questions;
         public string? Tool { get; } = request.Tool;
+        public VisitRequest? Visit { get; } = request.Visit;
         public bool Held { get; } = held;
         public DateTimeOffset AskedAt { get; } = askedAt;
         public DateTimeOffset LastWaitAt { get; set; } = askedAt;
@@ -244,7 +245,7 @@ public sealed class PresenceStore(
                 memberId,
                 memberName,
                 request.Machine.Trim(),
-                request.Kind == PromptKind.Question ? SessionState.WaitingOnQuestion : SessionState.WaitingOnPermission,
+                WaitingState(request.Kind),
                 null,
                 now,
                 now)
@@ -254,7 +255,8 @@ public sealed class PresenceStore(
                     promptId,
                     held,
                     now,
-                    request.Kind == PromptKind.Question && request.Questions is { } questions ? [.. questions.Select(PromptQuestionView.For)] : null),
+                    request.Kind == PromptKind.Question && request.Questions is { } questions ? [.. questions.Select(PromptQuestionView.For)] : null,
+                    Visit: request.Kind == PromptKind.Visit ? request.Visit : null),
             };
             // Never ignored: a prompt comes from a sync hook, so the terminal is waiting on it now. It moves the stamp
             // on, so a late event from before it can't clear it (second review #2), and a new prompt forgets an end.
@@ -264,6 +266,15 @@ public sealed class PresenceStore(
             return new PromptCreated(promptId.ToString(), held);
         }
     }
+
+    /// <summary>The state of a session waiting on a prompt of <paramref name="kind"/>.</summary>
+    internal static SessionState WaitingState(PromptKind kind) => kind switch
+    {
+        PromptKind.Question => SessionState.WaitingOnQuestion,
+        PromptKind.Permission => SessionState.WaitingOnPermission,
+        PromptKind.Visit => SessionState.WaitingOnVisit,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a prompt kind."),
+    };
 
     /// <summary>A held permission prompt's input preview, already cut to 2 KB, for those who may answer it.</summary>
     public PreviewOutcome SetPreview(Guid memberId, Guid promptId, string preview)
@@ -407,7 +418,8 @@ public sealed class PresenceStore(
                 prompt.Kind,
                 prompt.Questions,
                 prompt.Tool,
-                prompt.IsPending && !prompt.Claimed && placement is not null);
+                prompt.IsPending && !prompt.Claimed && placement is not null,
+                prompt.Visit);
         }
     }
 

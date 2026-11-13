@@ -37,6 +37,7 @@ public class AgentContractsTests
     [InlineData(SessionState.Working, "working")]
     [InlineData(SessionState.WaitingOnQuestion, "waiting-on-question")]
     [InlineData(SessionState.WaitingOnPermission, "waiting-on-permission")]
+    [InlineData(SessionState.WaitingOnVisit, "waiting-on-visit")]
     [InlineData(SessionState.WaitingOnUser, "waiting-on-user")]
     [InlineData(SessionState.Ended, "ended")]
     public void Every_session_state_has_its_wire_name(SessionState state, string name)

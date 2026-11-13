@@ -141,12 +141,13 @@ public sealed partial class ChangePages(PanopticonDb db, ChangeCards cards, IDoc
                 r.SessionMember ?? string.Empty,
                 r.AnsweredBy ?? string.Empty,
                 r.Answer.AnsweredAt,
-                r.Answer.Kind == RemoteAnswer.PermissionKind ? Contracts.PromptKind.Permission : Contracts.PromptKind.Question,
+                AnswerEntry.KindOf(r.Answer.Kind),
                 r.Answer.ToolName,
                 r.Answer.Outcome,
                 r.Answer.QuestionsJson is { } json
                     ? System.Text.Json.JsonSerializer.Deserialize<List<AnsweredQuestion>>(json, _questionsJson)
-                    : null)
+                    : null,
+                r.Answer.Url)
             .For(viewer, r.Answer.SessionMemberId, scope))];
     }
 

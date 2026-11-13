@@ -26,7 +26,8 @@ public sealed record AnsweredQuestion(string Question, string Answer);
 
 /// <summary>
 /// An answer given from the dashboard (D8; spec remote-answers, Answers are attributed), as the change page lists it
-/// and <c>answer-recorded</c> sends it. <see cref="Questions"/> goes only to viewers who could have answered (D5).
+/// and <c>answer-recorded</c> sends it. <see cref="Questions"/> and a visit's <see cref="Url"/> go only to viewers who
+/// could have answered (D5; spec remote-answers, Visit answers are attributed).
 /// </summary>
 public sealed record AnswerEntry(
     Guid Id,
@@ -37,14 +38,26 @@ public sealed record AnswerEntry(
     PromptKind Kind,
     string? Tool = null,
     string? Outcome = null,
-    IReadOnlyList<AnsweredQuestion>? Questions = null)
+    IReadOnlyList<AnsweredQuestion>? Questions = null,
+    string? Url = null)
 {
     /// <summary>The entry as <paramref name="viewer"/> may see it.</summary>
     public AnswerEntry For(Viewer viewer, Guid sessionMemberId, ChangeScope scope)
     {
         ArgumentNullException.ThrowIfNull(viewer);
-        return Questions is null || viewer.CanAnswer(sessionMemberId, scope) ? this : this with { Questions = null };
+        return (Questions is null && Url is null) || viewer.CanAnswer(sessionMemberId, scope)
+            ? this
+            : this with { Questions = null, Url = null };
     }
+
+    /// <summary>The prompt kind a <see cref="RemoteAnswer.Kind"/> records.</summary>
+    public static PromptKind KindOf(string kind) => kind switch
+    {
+        RemoteAnswer.QuestionKind => PromptKind.Question,
+        RemoteAnswer.PermissionKind => PromptKind.Permission,
+        RemoteAnswer.VisitKind => PromptKind.Visit,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a recorded answer kind."),
+    };
 }
 
 /// <summary>Answering a held prompt from the dashboard (D3, D5, D6, D8), for signed-in members.</summary>
@@ -56,6 +69,9 @@ public static class PromptAnswerEndpoints
     public const int MaxAnswerLength = 2000;
 
     public const int MaxMessageLength = 500;
+
+    /// <summary>The longest note on a visit answer (spec remote-answers, Visit request form).</summary>
+    public const int MaxVisitNoteLength = 1000;
 
     private static readonly JsonSerializerOptions _questionsJson = new(JsonSerializerDefaults.Web);
 
@@ -122,7 +138,13 @@ public static class PromptAnswerEndpoints
         var questions = prompt.Kind == PromptKind.Question
             ? prompt.Questions!.Select(q => new AnsweredQuestion(q.Question, request.Answers![q.Question].Trim())).ToList()
             : null;
-        var outcome = prompt.Kind == PromptKind.Permission ? (request.Allow!.Value ? RemoteAnswer.Allow : RemoteAnswer.Deny) : null;
+        var outcome = prompt.Kind switch
+        {
+            PromptKind.Permission => request.Allow!.Value ? RemoteAnswer.Allow : RemoteAnswer.Deny,
+            PromptKind.Visit => request.Visited!.Value ? RemoteAnswer.Done : RemoteAnswer.Cant,
+            _ => null,
+        };
+        var url = prompt.Kind == PromptKind.Visit ? prompt.Visit!.Url : null;
         var row = new RemoteAnswer
         {
             Id = Guid.CreateVersion7(),
@@ -130,10 +152,17 @@ public static class PromptAnswerEndpoints
             SessionMemberId = prompt.SessionMemberId,
             AnsweredByMemberId = viewer.MemberId,
             AnsweredAt = clock.GetUtcNow(),
-            Kind = prompt.Kind == PromptKind.Question ? RemoteAnswer.QuestionKind : RemoteAnswer.PermissionKind,
+            Kind = prompt.Kind switch
+            {
+                PromptKind.Question => RemoteAnswer.QuestionKind,
+                PromptKind.Permission => RemoteAnswer.PermissionKind,
+                PromptKind.Visit => RemoteAnswer.VisitKind,
+                _ => throw new InvalidOperationException($"Prompt {id} has no kind to record."),
+            },
             ToolName = prompt.Kind == PromptKind.Permission ? prompt.Tool : null,
             Outcome = outcome,
             QuestionsJson = questions is null ? null : JsonSerializer.Serialize(questions, _questionsJson),
+            Url = url,
         };
         db.RemoteAnswers.Add(row);
         await db.SaveChangesAsync(cancellationToken);
@@ -154,11 +183,13 @@ public static class PromptAnswerEndpoints
         }
 
         var answeredBy = names[viewer.MemberId];
+        var given = request.Message?.Trim() is { Length: > 0 } trimmed ? trimmed : null;
         presence.CompleteAnswer(id, new PromptAnswer(
             answeredBy,
             questions?.ToDictionary(q => q.Question, q => q.Answer),
             request.Allow is { } allow && prompt.Kind == PromptKind.Permission ? allow : null,
-            outcome == RemoteAnswer.Deny ? request.Message?.Trim() is { Length: > 0 } message ? message : null : null));
+            outcome == RemoteAnswer.Deny || prompt.Kind == PromptKind.Visit ? given : null,
+            prompt.Kind == PromptKind.Visit ? request.Visited : null));
 
         var entry = new AnswerEntry(
             row.Id,
@@ -169,7 +200,8 @@ public static class PromptAnswerEndpoints
             prompt.Kind,
             row.ToolName,
             row.Outcome,
-            questions);
+            questions,
+            url);
         broadcaster.PublishAnswerRecorded(scope, prompt.SessionMemberId, entry);
         return TypedResults.Ok(entry);
     }
@@ -179,7 +211,7 @@ public static class PromptAnswerEndpoints
     {
         if (prompt.Kind == PromptKind.Permission)
         {
-            if (request.Allow is null || request.Answers is not null)
+            if (request.Allow is null || request.Answers is not null || request.Visited is not null)
             {
                 return "Answer a permission prompt with allow true or false.";
             }
@@ -187,7 +219,17 @@ public static class PromptAnswerEndpoints
             return request.Message is { Length: > MaxMessageLength } ? $"A message is at most {MaxMessageLength} characters." : null;
         }
 
-        if (request.Answers is not { } answers || request.Allow is not null || request.Message is not null)
+        if (prompt.Kind == PromptKind.Visit)
+        {
+            if (request.Visited is null || request.Answers is not null || request.Allow is not null)
+            {
+                return "Answer a visit request with visited true (Done) or false (Can't).";
+            }
+
+            return request.Message is { Length: > MaxVisitNoteLength } ? $"A note is at most {MaxVisitNoteLength} characters." : null;
+        }
+
+        if (request.Answers is not { } answers || request.Allow is not null || request.Message is not null || request.Visited is not null)
         {
             return "Answer a question with an answer for each of its questions.";
         }
