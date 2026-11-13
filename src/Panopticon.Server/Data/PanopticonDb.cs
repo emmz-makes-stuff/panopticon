@@ -177,13 +177,15 @@ public sealed class PanopticonDb(DbContextOptions<PanopticonDb> options) : DbCon
             answer.Property(a => a.Outcome).HasMaxLength(5);
             answer.Property(a => a.ToolName).HasMaxLength(200);
             answer.Property(a => a.QuestionsJson).HasColumnType("jsonb");
+            answer.Property(a => a.Url).HasMaxLength(Contracts.PromptLimits.MaxVisitUrlLength);
             answer.HasOne<Change>().WithMany().HasForeignKey(a => a.ChangeId).OnDelete(DeleteBehavior.Cascade);
             answer.HasOne<Member>().WithMany().HasForeignKey(a => a.SessionMemberId).OnDelete(DeleteBehavior.Restrict);
             answer.HasOne<Member>().WithMany().HasForeignKey(a => a.AnsweredByMemberId).OnDelete(DeleteBehavior.Restrict);
             answer.ToTable(t => t.HasCheckConstraint(
                 "ck_remote_answers_kind",
-                "(kind = 'question' AND questions_json IS NOT NULL AND tool_name IS NULL AND outcome IS NULL) OR " +
-                "(kind = 'permission' AND tool_name IS NOT NULL AND outcome IN ('allow', 'deny') AND questions_json IS NULL)"));
+                "(kind = 'question' AND questions_json IS NOT NULL AND tool_name IS NULL AND outcome IS NULL AND url IS NULL) OR " +
+                "(kind = 'permission' AND tool_name IS NOT NULL AND outcome IS NOT NULL AND outcome IN ('allow', 'deny') AND questions_json IS NULL AND url IS NULL) OR " +
+                "(kind = 'visit' AND url IS NOT NULL AND outcome IS NOT NULL AND outcome IN ('done', 'cant') AND tool_name IS NULL AND questions_json IS NULL)"));
         });
 
         modelBuilder.Entity<ReportEvent>(reportEvent =>

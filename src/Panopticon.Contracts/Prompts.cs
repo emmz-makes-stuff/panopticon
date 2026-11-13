@@ -7,12 +7,16 @@ namespace Panopticon.Contracts;
 // A session's question or permission prompt, posted by the sync hook and held while its member is away
 // (agent-interaction D3, D6). Through ContractsJsonContext, like every other contract.
 
-/// <summary>What a prompt is: <c>question</c> (<c>AskUserQuestion</c>) or <c>permission</c> (<c>PermissionRequest</c>).</summary>
+/// <summary>
+/// What a prompt is: <c>question</c> (<c>AskUserQuestion</c>), <c>permission</c> (<c>PermissionRequest</c>), or
+/// <c>visit</c> (the bridge's <c>request_visit</c>, visit-requests D1).
+/// </summary>
 [JsonConverter(typeof(PromptKindConverter))]
 public enum PromptKind
 {
     Question,
     Permission,
+    Visit,
 }
 
 /// <summary>Reads and writes <see cref="PromptKind"/> by kebab-case name, refusing numbers.</summary>
@@ -30,8 +34,14 @@ public sealed record PromptQuestion(
     bool MultiSelect = false);
 
 /// <summary>
-/// Body of <c>POST /api/agent/prompts</c>: the session fields, plus <see cref="Questions"/> for a question or
-/// <see cref="Tool"/> for a permission prompt. A permission prompt never carries its input here (D2): that goes to
+/// A visit request (spec remote-answers, Visit requests): the page the agent needs its member to visit, why, and
+/// optionally what to do there.
+/// </summary>
+public sealed record VisitRequest(string Url, string Reason, string? Action = null);
+
+/// <summary>
+/// Body of <c>POST /api/agent/prompts</c>: the session fields, plus <see cref="Questions"/> for a question,
+/// <see cref="Tool"/> for a permission prompt, or <see cref="Visit"/> for a visit request. A permission prompt never carries its input here (D2): that goes to
 /// <c>PUT /api/agent/prompts/{id}/preview</c>, and only once the server has held the prompt.
 /// <see cref="OccurredAt"/> is when the hook's process started, as on a session event: a late event from before the
 /// prompt is then ignored, rather than clearing it.
@@ -45,7 +55,8 @@ public sealed record PromptRequest(
     IReadOnlyList<PromptQuestion>? Questions = null,
     string? Tool = null,
     string? Project = null,
-    DateTimeOffset? OccurredAt = null);
+    DateTimeOffset? OccurredAt = null,
+    VisitRequest? Visit = null);
 
 /// <summary>
 /// Answer to <c>POST /api/agent/prompts</c>. The server decides <see cref="Held"/> from the member's away flag in this
@@ -77,14 +88,16 @@ public sealed class PromptWaitStateConverter()
 /// <summary>
 /// An answer from the dashboard, for the hook's output (D7). A question's has <see cref="Answers"/>: each question's
 /// text to its chosen labels joined by <c>", "</c>, or the Other text. A permission prompt's has <see cref="Allow"/>,
-/// and for a deny an optional <see cref="Message"/>.
+/// and for a deny an optional <see cref="Message"/>. A visit request's has <see cref="Visited"/> (Done or Can't), and
+/// an optional note in <see cref="Message"/>.
 /// </summary>
 /// <param name="AnsweredBy">The answering member's display name, for "Answered by … via Panopticon."</param>
 public sealed record PromptAnswer(
     string AnsweredBy,
     IReadOnlyDictionary<string, string>? Answers = null,
     bool? Allow = null,
-    string? Message = null);
+    string? Message = null,
+    bool? Visited = null);
 
 /// <summary>Answer to <c>GET /api/agent/prompts/{id}/wait</c>.</summary>
 public sealed record PromptWaitResult(PromptWaitState State, PromptAnswer? Answer = null);
@@ -108,6 +121,60 @@ public static class PromptLimits
 
     /// <summary>A permission prompt's input preview is cut to 2 KB.</summary>
     public const int MaxPermissionPreviewBytes = 2 * 1024;
+
+    /// <summary>A visit request's URL, in characters.</summary>
+    public const int MaxVisitUrlLength = 2048;
+
+    /// <summary>A visit request's reason, in characters (it must have at least one).</summary>
+    public const int MaxVisitReasonLength = 500;
+
+    /// <summary>A visit request's action, in characters.</summary>
+    public const int MaxVisitActionLength = 1000;
+
+    /// <summary>
+    /// Why <paramref name="visit"/> can't go to the dashboard, worded for the agent that asked, or null when it can
+    /// (spec remote-answers, Visit request limits). The bridge's tool, the hook and the server all check this.
+    /// </summary>
+    public static string? VisitProblem(VisitRequest visit)
+    {
+        ArgumentNullException.ThrowIfNull(visit);
+        if (string.IsNullOrWhiteSpace(visit.Url))
+        {
+            return "the url is empty";
+        }
+
+        if (visit.Url.Length > MaxVisitUrlLength)
+        {
+            return $"the url is over {MaxVisitUrlLength} characters";
+        }
+
+        // Uri trims surrounding whitespace, but the URL is shown and recorded as given.
+        if (visit.Url.Trim().Length != visit.Url.Length
+            || !Uri.TryCreate(visit.Url, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return "only absolute http and https URLs can be visited";
+        }
+
+        if (uri.UserInfo.Length > 0)
+        {
+            return "the url has a user name or password in it";
+        }
+
+        if (string.IsNullOrWhiteSpace(visit.Reason))
+        {
+            return "the reason is empty";
+        }
+
+        if (visit.Reason.Length > MaxVisitReasonLength)
+        {
+            return $"the reason is over {MaxVisitReasonLength} characters";
+        }
+
+        return visit.Action is { Length: > MaxVisitActionLength }
+            ? $"the action is over {MaxVisitActionLength} characters"
+            : null;
+    }
 
     /// <summary>Why <paramref name="request"/> can't go to the dashboard, or null when it can.</summary>
     public static string? Problem(PromptRequest request)
@@ -160,6 +227,11 @@ public static class PromptLimits
                     return "a question prompt names a tool";
                 }
 
+                if (request.Visit is not null)
+                {
+                    return "a question prompt has a visit";
+                }
+
                 break;
 
             case PromptKind.Permission:
@@ -173,10 +245,33 @@ public static class PromptLimits
                     return "a permission prompt has questions";
                 }
 
+                if (request.Visit is not null)
+                {
+                    return "a permission prompt has a visit";
+                }
+
+                break;
+
+            case PromptKind.Visit:
+                if (request.Visit is not { } visit)
+                {
+                    return "a visit request has no visit";
+                }
+
+                if (request.Questions is not null || request.Tool is not null)
+                {
+                    return "a visit request has questions or a tool";
+                }
+
+                if (VisitProblem(visit) is { } problem)
+                {
+                    return problem;
+                }
+
                 break;
 
             default:
-                return "it isn't a question or a permission prompt";
+                return "it isn't a question, a permission prompt or a visit request";
         }
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(request, ContractsJsonContext.Default.PromptRequest).Length;

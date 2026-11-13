@@ -515,6 +515,7 @@ public class MigrationTests(PostgresFixture postgres)
             a => a.Outcome = "maybe",
             a => a.ToolName = null,
             a => a.QuestionsJson = """[]""",
+            a => a.Outcome = null,
         })
         {
             db.ChangeTracker.Clear();
@@ -539,6 +540,90 @@ public class MigrationTests(PostgresFixture postgres)
             await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
         }
     }
+
+    // visit-requests D5: a visit answer has its URL and done or cant, and nothing of the other kinds.
+    [Fact]
+    public async Task A_visit_answer_must_have_its_url_and_outcome_and_nothing_else()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var repo = NewRepo();
+        db.AddRange(emmz, repo);
+        await db.SaveChangesAsync(ct);
+        var change = NewChange(repo.Id);
+        db.Changes.Add(change);
+        await db.SaveChangesAsync(ct);
+
+        db.RemoteAnswers.AddRange(
+            NewVisitAnswer(change.Id, emmz.Id, RemoteAnswer.Done),
+            NewVisitAnswer(change.Id, emmz.Id, RemoteAnswer.Cant));
+        await db.SaveChangesAsync(ct);
+
+        foreach (var spoil in new Action<RemoteAnswer>[]
+        {
+            a => a.Url = null,
+            a => a.Outcome = RemoteAnswer.Allow,
+            a => a.Outcome = null,
+            a => a.ToolName = "Bash",
+            a => a.QuestionsJson = """[]""",
+        })
+        {
+            db.ChangeTracker.Clear();
+            var visit = NewVisitAnswer(change.Id, emmz.Id, RemoteAnswer.Done);
+            spoil(visit);
+            db.RemoteAnswers.Add(visit);
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        }
+
+        // The other kinds can't carry a URL.
+        foreach (var other in new[]
+        {
+            NewQuestionAnswer(change.Id, emmz.Id, emmz.Id),
+            NewPermissionAnswer(change.Id, emmz.Id, emmz.Id, RemoteAnswer.Allow),
+        })
+        {
+            db.ChangeTracker.Clear();
+            other.Url = "https://example.com/";
+            db.RemoteAnswers.Add(other);
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        }
+    }
+
+    [Fact]
+    public async Task The_visit_requests_migration_rolls_back_dropping_only_visit_answers()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = PostgresFixture.CreateDb(await postgres.CreateDatabaseAsync(ct));
+        var emmz = NewMember("emmz@example.com");
+        var repo = NewRepo();
+        db.AddRange(emmz, repo);
+        await db.SaveChangesAsync(ct);
+        var change = NewChange(repo.Id);
+        db.Changes.Add(change);
+        await db.SaveChangesAsync(ct);
+        var question = NewQuestionAnswer(change.Id, emmz.Id, emmz.Id);
+        db.RemoteAnswers.AddRange(question, NewVisitAnswer(change.Id, emmz.Id, RemoteAnswer.Done));
+        await db.SaveChangesAsync(ct);
+
+        await db.GetService<IMigrator>().MigrateAsync(AgentInteractionMigration, cancellationToken: ct);
+
+        Assert.Equal([question.Id], await db.Database.SqlQuery<Guid>($"SELECT id AS \"Value\" FROM remote_answers").ToListAsync(ct));
+        Assert.Equal(0, await db.Database.SqlQuery<int>(
+            $"SELECT count(*)::int AS \"Value\" FROM information_schema.columns WHERE table_name = 'remote_answers' AND column_name = 'url'").SingleAsync(ct));
+    }
+
+    private static RemoteAnswer NewVisitAnswer(Guid changeId, Guid memberId, string outcome) => new()
+    {
+        Id = Guid.NewGuid(),
+        ChangeId = changeId,
+        SessionMemberId = memberId,
+        AnsweredByMemberId = memberId,
+        AnsweredAt = DateTimeOffset.UnixEpoch,
+        Kind = RemoteAnswer.VisitKind,
+        Url = "https://github.com/emmz/pan/pull/12",
+        Outcome = outcome,
+    };
 
     private static Task<int> CountTablesAsync(PanopticonDb db, string table, CancellationToken ct) =>
         db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM information_schema.tables WHERE table_name = {table}").SingleAsync(ct);
@@ -577,6 +662,7 @@ public class MigrationTests(PostgresFixture postgres)
         CreatedAt = DateTimeOffset.UnixEpoch,
     };
 
+    private const string AgentInteractionMigration = "20261111170617_AgentInteraction";
     private const string TagsMigration = "20261110153322_Tags";
     private const string RetiredCopiesMigration = "20261110011205_RetiredCopies";
     private const string MetricsMigration = "20261109164834_ChangeMetrics";

@@ -6,8 +6,8 @@
 
 ## 2. Contracts and the answer record
 
-- [ ] 2.1 Add `PromptKind.Visit`, `VisitRequest`, `PromptRequest.Visit`, `PromptAnswer.Visited`, and the visit limits in `PromptLimits.Problem`: an absolute `http`/`https` URL of at most 2,048 characters with no user info, a reason of 1–500 characters, an action of at most 1,000, and no questions or tool. Add the visit fields to the dashboard's answer body (design D4). Verify with round-trip serialisation tests and a `Problem` test for each limit, including `file:` and `https://bob:secret@…` URLs refused.
-- [ ] 2.2 Add `RemoteAnswer.Url` and the `done`/`cant` outcomes in one migration with a down migration (D5). Verify with migration tests: it applies and rolls back.
+- [x] 2.1 Add `PromptKind.Visit`, `VisitRequest`, `PromptRequest.Visit`, `PromptAnswer.Visited`, and the visit limits in `PromptLimits.Problem`: an absolute `http`/`https` URL of at most 2,048 characters with no user info, a reason of 1–500 characters, an action of at most 1,000, and no questions or tool. Add the visit fields to the dashboard's answer body (design D4). Verify with round-trip serialisation tests and a `Problem` test for each limit, including `file:` and `https://bob:secret@…` URLs refused.
+- [x] 2.2 Add `RemoteAnswer.Url` and the `done`/`cant` outcomes in one migration with a down migration (D5). Verify with migration tests: it applies and rolls back.
 
 ## 3. Server: visit requests as prompts
 

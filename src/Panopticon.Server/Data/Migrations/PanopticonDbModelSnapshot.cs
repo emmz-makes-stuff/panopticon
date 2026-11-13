@@ -615,6 +615,11 @@ namespace Panopticon.Server.Data.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("tool_name");
 
+                    b.Property<string>("Url")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("url");
+
                     b.HasKey("Id")
                         .HasName("pk_remote_answers");
 
@@ -629,7 +634,7 @@ namespace Panopticon.Server.Data.Migrations
 
                     b.ToTable("remote_answers", null, t =>
                         {
-                            t.HasCheckConstraint("ck_remote_answers_kind", "(kind = 'question' AND questions_json IS NOT NULL AND tool_name IS NULL AND outcome IS NULL) OR (kind = 'permission' AND tool_name IS NOT NULL AND outcome IN ('allow', 'deny') AND questions_json IS NULL)");
+                            t.HasCheckConstraint("ck_remote_answers_kind", "(kind = 'question' AND questions_json IS NOT NULL AND tool_name IS NULL AND outcome IS NULL AND url IS NULL) OR (kind = 'permission' AND tool_name IS NOT NULL AND outcome IS NOT NULL AND outcome IN ('allow', 'deny') AND questions_json IS NULL AND url IS NULL) OR (kind = 'visit' AND url IS NOT NULL AND outcome IS NOT NULL AND outcome IN ('done', 'cant') AND tool_name IS NULL AND questions_json IS NULL)");
                         });
                 });
 

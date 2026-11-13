@@ -11,10 +11,15 @@ namespace Panopticon.Server.Presence;
 
 /// <summary>
 /// Body of <c>POST /api/prompts/{id}/answer</c> (D3): <see cref="Answers"/> for a question, each question's text to
-/// its chosen labels joined by <c>", "</c> or the Other text; or <see cref="Allow"/> for a permission prompt, with an
-/// optional <see cref="Message"/> for a deny.
+/// its chosen labels joined by <c>", "</c> or the Other text; <see cref="Allow"/> for a permission prompt, with an
+/// optional <see cref="Message"/> for a deny; or <see cref="Visited"/> for a visit request (Done or Can't), with an
+/// optional note in <see cref="Message"/>.
 /// </summary>
-public sealed record PromptAnswerRequest(IReadOnlyDictionary<string, string>? Answers = null, bool? Allow = null, string? Message = null);
+public sealed record PromptAnswerRequest(
+    IReadOnlyDictionary<string, string>? Answers = null,
+    bool? Allow = null,
+    string? Message = null,
+    bool? Visited = null);
 
 /// <summary>One question and the answer given, as an answer's record keeps it: never a preview.</summary>
 public sealed record AnsweredQuestion(string Question, string Answer);
