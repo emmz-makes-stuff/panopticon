@@ -206,6 +206,16 @@ public sealed class PromptHookServerTests(PostgresFixture postgres, S3Fixture s3
         ["action"] = "Approve it if happy",
     });
 
+    /// <summary>§8.2: a visit the dashboard didn't answer runs with its own input and no <c>panopticon_answer</c>.</summary>
+    private static void AssertAllowedWithNoAnswer(string stdout)
+    {
+        var output = JsonNode.Parse(stdout)!["hookSpecificOutput"]!;
+        Assert.Equal("allow", output["permissionDecision"]!.GetValue<string>());
+        var input = output["updatedInput"]!.AsObject();
+        Assert.Equal(PrUrl, input["url"]!.GetValue<string>());
+        Assert.False(input.ContainsKey(RequestVisit.AnswerField));
+    }
+
     [Fact]
     public async Task Away_a_visit_answered_on_the_dashboard_reaches_the_tool_as_done_with_the_note_and_who_answered()
     {
@@ -238,17 +248,17 @@ public sealed class PromptHookServerTests(PostgresFixture postgres, S3Fixture s3
     }
 
     [Fact]
-    public async Task Not_away_or_after_away_off_a_visit_writes_nothing_so_the_tool_says_ask_in_the_terminal()
+    public async Task Not_away_or_after_away_off_a_visit_is_allowed_with_no_answer_so_the_tool_says_ask_in_the_terminal()
     {
         await using var world = await CreateAsync(away: false);
-        Assert.Equal("", await RunHookAsync(world, PrVisit(world.Repo.Root)).WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        AssertAllowedWithNoAnswer(await RunHookAsync(world, PrVisit(world.Repo.Root)).WaitAsync(TimeSpan.FromSeconds(10), Ct));
 
         await SetAwayAsync(world.Tags, true);
         var held = RunHookAsync(world, PrVisit(world.Repo.Root));
         var session = await SessionWhenAsync(world, s => s.PromptDetail is { Held: true });
         await SetAwayAsync(world.Tags, false);
 
-        Assert.Equal("", await held.WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        AssertAllowedWithNoAnswer(await held.WaitAsync(TimeSpan.FromSeconds(10), Ct));
         using var late = await world.Tags.Emmz.PostApiAsync(PromptAnswerEndpoints.AnswerPath(session.PromptDetail!.Id), new { visited = true }, Ct);
         Assert.Equal(System.Net.HttpStatusCode.Conflict, late.StatusCode);
     }

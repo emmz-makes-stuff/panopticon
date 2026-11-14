@@ -34,6 +34,21 @@
 
 - [x] 7.1 Give Emmz a copy-pasteable recipe for a real Claude Code with the local CLI and the plugin branch. While away, ask the agent to request a visit to a real PR, answer Done with a note on the dashboard, then repeat with Can't. Then turn away off with a request held, and finally make a request while not away. Verify: one card entry per request (not two); the link opens in a new tab; the agent gets the outcome, note and "answered by Emmz"; away off and not away give "ask in the terminal"; the change page records both answers without the notes. Then run `make e2e` and `make gates`.
 
+## 8. Review fixes: visit safety
+
+- [x] 8.1 The visit form's link text shows the normalised `href` (punycode host), not the raw `visit.url`, so the host the member reads is where the link goes (`web/src/promptForm.ts`). Test with an IDN look-alike host.
+- [x] 8.2 The `request_visit` hook always strips any `panopticon_answer` the agent supplied: on paths where it isn't held or isn't answered, it emits `permissionDecision: allow` with an `updatedInput` that leaves the field out. So the tool can't report a made-up answer, and Claude Code never shows a terminal permission prompt for `request_visit`. Emmz agreed that it is always allowed, since it only returns text. Update design D2's Risks.
+- [x] 8.3 Tighten the visit-tool pattern so that only the Panopticon server's own segment matches (no `.*` spanning `__` segments), in `HookCommand.IsVisitTool`, the three `hooks.json` matchers in `../panopticon-skills`, the skill text and `docs/cli.md`. Test against a look-alike server name.
+- [x] 8.4 The change page's answer summary reads "couldn't visit" for a Can't outcome, not "visited" (`web/src/answerList.ts`).
+- [x] 8.5 Design D7 gives the notification wording the code uses: "Needs you: <change>" and "A visit request is waiting for you.", as for the other prompt kinds.
+
+## 9. Review fixes: shared code
+
+- [ ] 9.1 Move the prompt-kind-to-waiting-state map into `Panopticon.Contracts`, use it from both `PresenceStore.WaitingState` and `HookCommand.AskAsync`, and throw on an unknown kind in both.
+- [ ] 9.2 Merge the Question and Visit allow-with-injected-field branches of `PromptHookOutput` into one helper.
+- [ ] 9.3 Use one shared JSON "string property or null" helper in place of `RequestVisit.Text`, `PromptHookOutput.Text` and `ActivitySummary.Text`, keeping today's whitespace handling where a caller needs it.
+- [ ] 9.4 The dashboard reads the prompt's `kind` (adding it to `PromptDetail` if needed) instead of inferring it from the detail's shape, in `sessionRows.ts` and `renderPromptForm`.
+
 ## Workflow follow-up
 
 - Merge the `panopticon-skills` branch once a CLI with `request_visit` is released (design D9).

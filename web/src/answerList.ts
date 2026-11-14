@@ -42,9 +42,14 @@ export function answerSummary(entry: AnswerEntry): string {
 
   if (entry.kind === "visit") {
     // The URL comes only to a viewer who could have answered (spec remote-answers, Visit answers are attributed).
-    return entry.url
-      ? `${entry.answeredBy} visited ${entry.url} for ${member}: ${entry.outcome === "done" ? "done" : "can't"}`
-      : `${entry.answeredBy} answered a visit request for ${member}`;
+    if (!entry.url) {
+      return `${entry.answeredBy} answered a visit request for ${member}`;
+    }
+
+    // Can't means no visit happened, so it never reads as one (code review, §8.4).
+    return entry.outcome === "done"
+      ? `${entry.answeredBy} visited ${entry.url} for ${member}: done`
+      : `${entry.answeredBy} couldn't visit ${entry.url} for ${member}`;
   }
 
   const verb = entry.outcome === "allow" ? "allowed" : "denied";

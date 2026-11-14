@@ -284,8 +284,9 @@ function visitForm(detail: PromptDetail, visit: VisitRequest, api: Api): HTMLFor
   const where = element("p", "prompt-visit-url");
   const href = visitHref(visit.url);
   if (href) {
-    // The URL in full as the link's text, so the host is plain to see.
-    const link = element("a", "prompt-visit-link", visit.url);
+    // The parsed URL in full as the link's text, so the host shown (in punycode, with stripped characters gone) is
+    // the one the link goes to.
+    const link = element("a", "prompt-visit-link", href);
     link.href = href;
     link.target = "_blank";
     link.rel = "noopener noreferrer";

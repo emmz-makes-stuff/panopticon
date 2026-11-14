@@ -63,6 +63,8 @@ internal sealed record PromptWaitOptions(TimeSpan HoldLimit, TimeSpan ServerLoss
 /// <item>A question (<c>PreToolUse</c> on <c>AskUserQuestion</c>) or a permission prompt (<c>PermissionRequest</c>) is
 /// posted; when the server holds it, the hook waits for an answer and writes D7's output. Otherwise, and on any
 /// failure, it writes nothing and the terminal asks as usual.</item>
+/// <item>A visit request (<c>PreToolUse</c> on <c>request_visit</c>) is posted and waited on the same way, but it
+/// always writes an allow: with the dashboard's answer, or with none, never with one the agent made up.</item>
 /// </list>
 /// </summary>
 internal sealed partial class HookCommand(
@@ -87,6 +89,9 @@ internal sealed partial class HookCommand(
     /// <summary>When this run began (one run per hook process): the event's <c>OccurredAt</c>, which orders it (F2).</summary>
     private DateTimeOffset _startedAt;
 
+    /// <summary>Whether this run wrote an answer's output (D7), so nothing else may be written.</summary>
+    private bool _answered;
+
     private sealed record Target(AgentApiClient Client, RepoRef Repo, string Change, string? Project);
 
     public async Task<int> RunAsync(TextReader stdin, CancellationToken cancellationToken)
@@ -96,6 +101,7 @@ internal sealed partial class HookCommand(
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budget.CancelAfter(Budget);
         string? eventName = null;
+        HookEvent? visit = null;
         HttpClient? http = null;
         try
         {
@@ -108,6 +114,7 @@ internal sealed partial class HookCommand(
 
             eventName = hookEvent.EventName;
             var kind = PromptKindFor(hookEvent);
+            visit = kind == PromptKind.Visit ? hookEvent : null;
             var update = kind is null ? StateFor(hookEvent) : null;
             if (kind is null && update is null)
             {
@@ -144,6 +151,16 @@ internal sealed partial class HookCommand(
         finally
         {
             http?.Dispose();
+
+            // A visit request the dashboard didn't answer, on any path (off a change, not held, released, a failure),
+            // still runs, but never with an answer the agent made up (code review, §8.2): the tool then reports that
+            // it reached no one.
+            if (visit is not null && !_answered && !cancellationToken.IsCancellationRequested
+                && PromptHookOutput.UnansweredVisit(visit.ToolInput) is { } unanswered)
+            {
+                await stdout.WriteAsync(unanswered);
+                await stdout.FlushAsync(CancellationToken.None);
+            }
         }
 
         return 0;
@@ -194,7 +211,7 @@ internal sealed partial class HookCommand(
     /// </summary>
     internal static bool IsVisitTool(string toolName) => VisitToolPattern().IsMatch(toolName);
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"^mcp__.*panopticon.*__request_visit$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"^mcp__(plugin_panopticon_)?panopticon__request_visit$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
     private static partial System.Text.RegularExpressions.Regex VisitToolPattern();
 
     /// <summary>The server, the repo and the change the event is for; null when the session isn't on a change.</summary>
@@ -282,6 +299,7 @@ internal sealed partial class HookCommand(
 
         if (answer is not null && PromptHookOutput.For(kind, hookEvent.ToolInput, answer) is { } output)
         {
+            _answered = true;
             await stdout.WriteAsync(output);
             await stdout.FlushAsync(cancellationToken);
         }

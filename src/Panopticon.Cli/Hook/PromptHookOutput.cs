@@ -99,24 +99,7 @@ internal static class PromptHookOutput
                     return null;
                 }
 
-                json.WriteString("hookEventName", "PreToolUse");
-                json.WriteString("permissionDecision", "allow");
-                json.WriteStartObject("updatedInput");
-                if (toolInput is { ValueKind: JsonValueKind.Object } input)
-                {
-                    // The agent's own panopticon_answer, if it sent one, never survives: only the dashboard's does.
-                    foreach (var property in input.EnumerateObject().Where(p => p.Name != RequestVisit.AnswerField))
-                    {
-                        property.WriteTo(json);
-                    }
-                }
-
-                json.WritePropertyName(RequestVisit.AnswerField);
-                JsonSerializer.Serialize(
-                    json,
-                    new VisitAnswer(visited ? RequestVisit.Done : RequestVisit.Cant, answer.Message, answer.AnsweredBy),
-                    ContractsJsonContext.Default.VisitAnswer);
-                json.WriteEndObject();
+                WriteVisitAllow(json, toolInput, new VisitAnswer(visited ? RequestVisit.Done : RequestVisit.Cant, answer.Message, answer.AnsweredBy));
                 json.WriteString("additionalContext", $"Answered by {answer.AnsweredBy} via Panopticon.");
             }
             else if (kind == PromptKind.Question)
@@ -172,6 +155,58 @@ internal static class PromptHookOutput
         }
 
         return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    /// <summary>
+    /// The output for a visit request that got no answer from the dashboard (not held, released, or the server
+    /// failed): <c>request_visit</c> is allowed with its input minus any <c>panopticon_answer</c> the agent made up, so
+    /// the tool reports that it didn't reach anyone and Claude Code shows no permission prompt for it. Null when the
+    /// input isn't an object: the tool then reports the problem itself.
+    /// </summary>
+    public static string? UnansweredVisit(JsonElement? toolInput)
+    {
+        if (toolInput is not { ValueKind: JsonValueKind.Object })
+        {
+            return null;
+        }
+
+        using var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            json.WriteStartObject("hookSpecificOutput");
+            WriteVisitAllow(json, toolInput, answer: null);
+            json.WriteEndObject();
+            json.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    /// <summary>
+    /// <c>PreToolUse</c>'s allow for <c>request_visit</c>, with its input copied minus the agent's own
+    /// <c>panopticon_answer</c>, which never survives: only the dashboard's <paramref name="answer"/> does, when given.
+    /// </summary>
+    private static void WriteVisitAllow(Utf8JsonWriter json, JsonElement? toolInput, VisitAnswer? answer)
+    {
+        json.WriteString("hookEventName", "PreToolUse");
+        json.WriteString("permissionDecision", "allow");
+        json.WriteStartObject("updatedInput");
+        if (toolInput is { ValueKind: JsonValueKind.Object } input)
+        {
+            foreach (var property in input.EnumerateObject().Where(p => p.Name != RequestVisit.AnswerField))
+            {
+                property.WriteTo(json);
+            }
+        }
+
+        if (answer is not null)
+        {
+            json.WritePropertyName(RequestVisit.AnswerField);
+            JsonSerializer.Serialize(json, answer, ContractsJsonContext.Default.VisitAnswer);
+        }
+
+        json.WriteEndObject();
     }
 
     private static string Indented(JsonElement input)

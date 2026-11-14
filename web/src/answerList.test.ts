@@ -46,7 +46,7 @@ describe("answerSummary", () => {
       answerSummary(entry({ kind: "visit", answeredBy: "Emmz", url: pr, outcome: "done" })),
     ).toBe(`Emmz visited ${pr} for Emmz: done`);
     expect(answerSummary(entry({ kind: "visit", url: pr, outcome: "cant" }))).toBe(
-      `Bob visited ${pr} for Emmz: can't`,
+      `Bob couldn't visit ${pr} for Emmz`,
     );
   });
 

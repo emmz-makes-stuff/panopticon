@@ -52,8 +52,11 @@ When the request is answered, the hook writes a `PreToolUse` `allow` whose `upda
 structured content. With no `panopticon_answer`, the tool returns "not reached: ask in the terminal, with the URL in
 the question" at once.
 
-- The hook strips any `panopticon_answer` the agent sent before injecting its own. When it has no answer, it writes
-  nothing, so an agent that invents the field deceives only itself (see Risks).
+- The hook strips any `panopticon_answer` the agent sent before injecting its own. When it has no answer (not
+  held, released, off a change, over the limits, or a failure), it still writes `permissionDecision: allow`, with an
+  `updatedInput` that leaves the field out. So the tool says "ask in the terminal" (review fix §8.2). Allowing the
+  tool means Claude Code never shows a permission prompt for it either. That's fine: it only returns text. Emmz
+  agreed on 2026-11-14.
 - **Spike first (§1):** confirm on a real Claude Code that a `PreToolUse` `updatedInput` on an MCP tool reaches the
   server with the extra property, and that the C# MCP SDK binds it.
   - If the extra property is refused, the fallback is to declare an optional `panopticon_answer` parameter whose
@@ -62,18 +65,18 @@ the question" at once.
 
 ### D3. Telling a visit request apart
 
-`HookCommand` treats a `PreToolUse` as a visit request when its `tool_name` matches `^mcp__.*panopticon.*__request_visit$`.
+`HookCommand` treats a `PreToolUse` as a visit request when its `tool_name` matches `^mcp__(plugin_panopticon_)?panopticon__request_visit$`.
 That covers both the plugin's server (`mcp__plugin_panopticon_panopticon__request_visit`) and a hand-added
 `mcp__panopticon__request_visit`. The plugin's `hooks.json` uses the same pattern:
 
 - a new sync `PreToolUse` entry with that matcher and `timeout: 30000`;
-- the async `PreToolUse` catch-all becomes `^(?!AskUserQuestion$|mcp__.*panopticon.*__request_visit$)`, so a visit
+- the async `PreToolUse` catch-all becomes `^(?!AskUserQuestion$|mcp__(plugin_panopticon_)?panopticon__request_visit$)`, so a visit
   request isn't posted twice (the same trap as `AskUserQuestion`, agent-interaction devlog 21:50);
 - the `PermissionRequest` matcher excludes it the same way. Then a permission rule on the tool never turns into a held
   permission prompt about a visit request.
 
-The CLI also checks the visit limits (D4) before posting. A request over the limits writes nothing, and the tool itself
-returns the error.
+The CLI also checks the visit limits (D4) before posting. A request over the limits isn't posted, and the hook writes
+D2's allow with no answer, so the tool itself returns the error.
 
 ### D4. Contracts
 
@@ -99,19 +102,21 @@ prompt's kind.
 ### D6. Not away: post anyway, let the server decide
 
 As for questions, the hook always posts. The server answers `held: false` when the member isn't away, and the hook
-writes nothing, so the tool runs at once. The card shows "waiting on a visit request" for the moment it takes, then
+writes D2's allow with no answer, so the tool runs at once. The card shows "waiting on a visit request" for the moment it takes, then
 `PostToolUse` sets working. This keeps the server as the one place that decides `held` (agent-interaction D3).
 
 ### D7. Dashboard
 
 - `promptForm.ts` gets a visit form with:
   - the reason and the action, as plain text;
-  - the URL in full as the link text, so the host is visible;
+  - the URL in full as the link text, as the browser parsed it (`new URL().href`), so the host shown is the host
+    the link goes to: a look-alike Unicode host shows in punycode, and stripped tabs and newlines don't disguise it;
   - Done, Can't, and an optional note (`maxlength=1000`).
 - The link is `target="_blank" rel="noopener noreferrer"`. The browser parses the URL with `new URL()` again and
   renders a link only for `http:`/`https:`. Anything else shows as text, though the server refuses it first.
 - `card.ts`, `answerList.ts`, the tab-title count and notifications get the visit wording. Notifications say
-  "<change>: visit a page".
+  "Needs you: <change>", with the body "A visit request is waiting for you.", as for the other prompt kinds (review
+  fix §8.5).
 
 ### D8. Agent instructions
 
@@ -139,8 +144,10 @@ Migration Plan, and merges once a CLI with `request_visit` is released.
 
 - **The spike may show `updatedInput` doesn't reach MCP tools.** D2 has a fallback for a refused extra property; a
   total failure stops the change for a decision before any other section is built.
-- **An agent can put `panopticon_answer` in its own call.** Then it only misleads itself: nothing reaches the server or
-  the record. The tool's description doesn't mention the field, and the hook overwrites it whenever it answers.
+- **An agent can put `panopticon_answer` in its own call.** With the plugin's sync hook, it never reaches the tool:
+  the hook strips it on every path (D2). It survives only with no hook at all (an old plugin, or a client other than
+  Claude Code), and even then nothing reaches the server or the record, so it misleads only the agent itself. The
+  tool's description doesn't mention the field.
 - **URLs can carry secrets in the query string** (signed links, tokens). The member's own agent is sending them to the
   member's own server, and the URL is shown and recorded only for members who may answer. URLs with a user name or
   password are refused outright. Stripping queries would break most "approve this run" links.

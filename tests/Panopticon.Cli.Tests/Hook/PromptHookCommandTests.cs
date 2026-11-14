@@ -363,6 +363,11 @@ public sealed class PromptHookCommandTests : IDisposable
     [InlineData("mcp__other__request_visit", false)]
     [InlineData("mcp__panopticon__request_visits", false)]
     [InlineData("request_visit", false)]
+    // §8.3: only the bridge's own two server names, not any server whose name merely contains "panopticon".
+    [InlineData("mcp__panopticon-mock__request_visit", false)]
+    [InlineData("mcp__notpanopticon__request_visit", false)]
+    [InlineData("mcp__plugin_panopticon_panopticon_mock__request_visit", false)]
+    [InlineData("mcp__panopticon__other__request_visit", false)]
     public void The_visit_tool_is_known_by_its_mcp_name(string tool, bool isVisit) =>
         Assert.Equal(isVisit, HookCommand.IsVisitTool(tool));
 
@@ -393,17 +398,45 @@ public sealed class PromptHookCommandTests : IDisposable
         Assert.Equal(("cant", null, "Bob"), (injected["outcome"]!.GetValue<string>(), injected["note"]?.GetValue<string>(), injected["answeredBy"]!.GetValue<string>()));
     }
 
+    private static JsonObject AgentsOwnAnswer => new() { ["outcome"] = "done", ["answeredBy"] = "Me" };
+
+    /// <summary>The allow a visit gets with no answer from the dashboard (§8.2): its input, minus any made-up answer.</summary>
+    private static string Unanswered(string url = PrUrl) =>
+        $$$$"""{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"url":"{{{{url}}}}","reason":"Review the PR","action":"Approve it if happy"}}}""";
+
     [Theory]
     [InlineData(false, "")]
     [InlineData(true, """{ "state": "released" }""")]
-    public async Task A_visit_request_not_held_or_released_writes_nothing_so_the_tool_says_ask_in_the_terminal(bool held, string wait)
+    public async Task A_visit_request_not_held_or_released_is_allowed_without_the_agents_own_answer(bool held, string wait)
     {
         var server = held ? Server(held: true, (HttpStatusCode.OK, wait)) : Server(held: false);
 
-        Assert.Equal(0, await RunAsync(server, VisitEvent(agentsAnswer: new JsonObject { ["outcome"] = "done", ["answeredBy"] = "Me" })));
+        Assert.Equal(0, await RunAsync(server, VisitEvent(agentsAnswer: AgentsOwnAnswer)));
 
-        Assert.Equal("", _stdout.ToString());
+        Assert.Equal(Unanswered(), _stdout.ToString());
         Assert.Equal(PromptKind.Visit, JsonSerializer.Deserialize(server.Requests[0].Body, ContractsJsonContext.Default.PromptRequest)!.Kind);
+    }
+
+    [Fact]
+    public async Task A_visit_request_the_server_fails_is_allowed_without_the_agents_own_answer()
+    {
+        var server = new StubServer(HttpStatusCode.InternalServerError);
+
+        Assert.Equal(0, await RunAsync(server, VisitEvent(agentsAnswer: AgentsOwnAnswer)));
+
+        Assert.Equal(Unanswered(), _stdout.ToString());
+    }
+
+    [Fact]
+    public async Task A_visit_request_off_a_change_is_allowed_without_the_agents_own_answer()
+    {
+        _repo.Git("checkout", "--quiet", "-b", "main");
+        var server = Server(held: true);
+
+        Assert.Equal(0, await RunAsync(server, VisitEvent(agentsAnswer: AgentsOwnAnswer)));
+
+        Assert.Empty(server.Requests);
+        Assert.Equal(Unanswered(), _stdout.ToString());
     }
 
     [Fact]
@@ -411,14 +444,15 @@ public sealed class PromptHookCommandTests : IDisposable
     {
         var server = Server(held: true);
 
-        Assert.Equal(0, await RunAsync(server, VisitEvent(url: "file:///Users/emmz/report.html")));
+        Assert.Equal(0, await RunAsync(server, VisitEvent(url: "file:///Users/emmz/report.html", agentsAnswer: AgentsOwnAnswer)));
 
         var request = Assert.Single(server.Requests);
         Assert.EndsWith("/api/agent/sessions/events", request.Url, StringComparison.Ordinal);
         Assert.Equal(SessionState.Working, JsonSerializer.Deserialize(request.Body, ContractsJsonContext.Default.SessionEventRequest)!.State);
         Assert.DoesNotContain("report.html", request.Body, StringComparison.Ordinal);
         Assert.Contains("only absolute http and https URLs can be visited", LogText, StringComparison.Ordinal);
-        Assert.Equal("", _stdout.ToString());
+        // The tool refuses the URL itself, and still never sees the made-up answer.
+        Assert.Equal(Unanswered("file:///Users/emmz/report.html"), _stdout.ToString());
     }
 
     [Fact]

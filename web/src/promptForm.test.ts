@@ -348,6 +348,17 @@ describe("Visit request form", () => {
     expect(q(shown, ".prompt-visit-hint").textContent).toBe(" (opens in a new tab)");
   });
 
+  it.each([
+    ["a look-alike host", "https://аpple.com/login", "https://xn--pple-43d.com/login"],
+    ["a tab and a newline inside", "https://git\thub.com/\npull/1", "https://github.com/pull/1"],
+  ])("shows %s as the link goes, not as sent", (_, url, shownAs) => {
+    const { held } = show(visiting(url));
+    const link = q<HTMLAnchorElement>(held(), "a.prompt-visit-link");
+
+    expect(link.textContent).toBe(shownAs);
+    expect(link.href).toBe(shownAs);
+  });
+
   it.each(["javascript:alert(1)", "file:///Users/emmz/report.html", "not a url"])(
     "shows %s as text, never as a link",
     (url) => {

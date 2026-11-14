@@ -292,6 +292,10 @@ Or add the bridge for just yourself, without a file:
 claude mcp add panopticon --scope local -- panopticon mcp
 ```
 
+Keep the server's name `panopticon`. The plugin's hooks know `request_visit` only by its full name,
+`mcp__panopticon__request_visit` (or the plugin's own server), so under any other name visit requests never reach the
+dashboard.
+
 With `panopticon login` you don't need an `env` block at all. To point one repo somewhere else, set the
 variables in its `env` block instead, expanded from your shell so the token never lands in the file. Give each
 one an empty default, for example `"PANOPTICON_TOKEN": "${PANOPTICON_TOKEN:-}"`. Claude Code passes a plain
@@ -362,6 +366,8 @@ to use it.
 - **You're not away**, the change has no card, or the request is released (as for any prompt: away off, 8 hours,
   or a minute without the server): the tool returns at once and tells the agent to ask you in the terminal, with the
   URL in the question.
+- **No permission prompt:** the hook always allows `request_visit`, since it only returns text. It always drops any
+  answer the agent put in its own call, so the only answer the tool can report is one given on the dashboard.
 - **Only `http` and `https` URLs**, of up to 2,048 characters, with no user name or password in them. A reason is
   required, up to 500 characters, and an action is up to 1,000. A request outside these limits is a tool error the
   agent sees, and it never leaves the machine.
