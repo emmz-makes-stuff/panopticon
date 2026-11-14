@@ -33,11 +33,7 @@ internal sealed record HookEvent(string EventName, string SessionId, string Cwd,
         }
     }
 
-    private static string? Text(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
-        && !string.IsNullOrWhiteSpace(value.GetString())
-            ? value.GetString()
-            : null;
+    private static string? Text(JsonElement element, string property) => JsonText.NonBlank(element, property);
 }
 
 /// <summary>How long the sync hook waits on a held prompt (agent-interaction D6). Tests shorten these.</summary>
@@ -241,12 +237,7 @@ internal sealed partial class HookCommand(
     /// </summary>
     private async Task AskAsync(HookEvent hookEvent, PromptKind kind, Target target, CancellationTokenSource budget, CancellationToken cancellationToken)
     {
-        var waiting = kind switch
-        {
-            PromptKind.Question => SessionState.WaitingOnQuestion,
-            PromptKind.Visit => SessionState.WaitingOnVisit,
-            _ => SessionState.WaitingOnPermission,
-        };
+        var waiting = kind.WaitingState();
         var questions = kind == PromptKind.Question ? PromptHookOutput.Questions(hookEvent.ToolInput) : null;
         var visit = kind == PromptKind.Visit ? PromptHookOutput.Visit(hookEvent.ToolInput) : null;
         var request = new PromptRequest(

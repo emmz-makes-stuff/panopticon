@@ -156,6 +156,26 @@ describe("session rows", () => {
     expect(held.map((p) => [p.promptId, p.kind])).toEqual([["p1", "visit"]]);
   });
 
+  it("takes a held prompt's kind from the prompt, not the detail's shape (code review §9.4)", () => {
+    const detail = { held: true, askedAt: "2026-11-13T12:00:00Z", questions: [] };
+    const held = heldPrompts([
+      card({
+        changeId: "tags",
+        change: "tags",
+        sessions: [
+          session({
+            id: "s1",
+            prompt: { kind: "question" },
+            promptDetail: { id: "p1", ...detail },
+          }),
+          session({ id: "s2", prompt: null, promptDetail: { id: "p2", ...detail } }),
+        ],
+      }),
+    ]);
+
+    expect(held.map((p) => [p.promptId, p.kind])).toEqual([["p1", "question"]]);
+  });
+
   it("lists each session in the server's order, and keeps names as text", async () => {
     const { rows, cardFor } = await start([
       card({

@@ -19,6 +19,20 @@ public enum PromptKind
     Visit,
 }
 
+/// <summary>What follows from a <see cref="PromptKind"/>, for the CLI and the server alike.</summary>
+public static class PromptKinds
+{
+    /// <summary>The state of a session waiting on a prompt of <paramref name="kind"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> isn't a prompt kind.</exception>
+    public static SessionState WaitingState(this PromptKind kind) => kind switch
+    {
+        PromptKind.Question => SessionState.WaitingOnQuestion,
+        PromptKind.Permission => SessionState.WaitingOnPermission,
+        PromptKind.Visit => SessionState.WaitingOnVisit,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a prompt kind."),
+    };
+}
+
 /// <summary>Reads and writes <see cref="PromptKind"/> by kebab-case name, refusing numbers.</summary>
 public sealed class PromptKindConverter()
     : JsonStringEnumConverter<PromptKind>(JsonNamingPolicy.KebabCaseLower, allowIntegerValues: false);

@@ -277,4 +277,35 @@ public class AgentContractsTests
             "a permission prompt has a visit",
             PromptLimits.Problem(new PromptRequest(_repo, "c", "m", "s", PromptKind.Permission, Tool: "Bash", Visit: _prVisit)));
     }
+
+    // Code review §9.1: one map for the CLI and the server, which throws on a kind it doesn't know.
+    [Theory]
+    [InlineData(PromptKind.Question, SessionState.WaitingOnQuestion)]
+    [InlineData(PromptKind.Permission, SessionState.WaitingOnPermission)]
+    [InlineData(PromptKind.Visit, SessionState.WaitingOnVisit)]
+    public void Each_prompt_kind_has_its_waiting_state(PromptKind kind, SessionState waiting) =>
+        Assert.Equal(waiting, kind.WaitingState());
+
+    [Fact]
+    public void An_unknown_prompt_kind_has_no_waiting_state() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => ((PromptKind)99).WaitingState());
+
+    // Code review §9.3: the one JSON text helper.
+    [Theory]
+    [InlineData("""{ "p": "text" }""", "text", "text")]
+    [InlineData("""{ "p": "  " }""", "  ", null)]
+    [InlineData("""{ "p": "" }""", "", null)]
+    [InlineData("""{ "p": 3 }""", null, null)]
+    [InlineData("""{ "q": "text" }""", null, null)]
+    [InlineData("""["text"]""", null, null)]
+    [InlineData("\"text\"", null, null)]
+    public void Json_text_reads_a_string_property_and_non_blank_also_refuses_blanks(string json, string? text, string? nonBlank)
+    {
+        var element = JsonDocument.Parse(json).RootElement;
+        Assert.Equal((text, nonBlank), (JsonText.Get(element, "p"), JsonText.NonBlank(element, "p")));
+    }
+
+    [Fact]
+    public void Json_text_of_no_element_is_null() =>
+        Assert.Equal((null, null), (JsonText.Get(null, "p"), JsonText.NonBlank(null, "p")));
 }

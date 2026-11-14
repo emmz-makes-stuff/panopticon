@@ -116,12 +116,13 @@ export function heldPrompts(cards: Iterable<ChangeCard>): HeldPrompt[] {
   for (const card of cards) {
     for (const session of card.sessions ?? []) {
       const detail = session.promptDetail;
-      if (detail?.held) {
+      const kind = session.prompt?.kind;
+      if (detail?.held && kind) {
         held.push({
           promptId: detail.id,
           changeId: card.changeId,
           change: card.change,
-          kind: detail.visit ? "visit" : detail.questions?.length ? "question" : "permission",
+          kind,
           tool: session.prompt?.tool,
         });
       }
@@ -267,12 +268,14 @@ function needsBlock(session: SessionView, marker: string, viewer: SessionViewer)
     return block;
   }
 
-  if (detail.held && viewer.api) {
-    block.append(renderPromptForm(session, detail, viewer.api));
+  const form = detail.held && viewer.api ? renderPromptForm(session, detail, viewer.api) : null;
+  if (form) {
+    block.append(form);
     return block;
   }
 
-  if (detail.questions?.length) {
+  const kind = session.prompt?.kind;
+  if (kind === "question" && detail.questions?.length) {
     const list = document.createElement("ul");
     list.className = "card-session-questions";
     for (const question of detail.questions) {
@@ -280,9 +283,9 @@ function needsBlock(session: SessionView, marker: string, viewer: SessionViewer)
     }
 
     block.append(list);
-  } else if (detail.visit) {
+  } else if (kind === "visit" && detail.visit) {
     block.append(" ", span("card-session-question", detail.visit.reason));
-  } else {
+  } else if (kind === "permission") {
     const tool = session.prompt?.tool;
     block.append(
       " ",

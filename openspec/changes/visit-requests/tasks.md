@@ -44,10 +44,10 @@
 
 ## 9. Review fixes: shared code
 
-- [ ] 9.1 Move the prompt-kind-to-waiting-state map into `Panopticon.Contracts`, use it from both `PresenceStore.WaitingState` and `HookCommand.AskAsync`, and throw on an unknown kind in both.
-- [ ] 9.2 Merge the Question and Visit allow-with-injected-field branches of `PromptHookOutput` into one helper.
-- [ ] 9.3 Use one shared JSON "string property or null" helper in place of `RequestVisit.Text`, `PromptHookOutput.Text` and `ActivitySummary.Text`, keeping today's whitespace handling where a caller needs it.
-- [ ] 9.4 The dashboard reads the prompt's `kind` (adding it to `PromptDetail` if needed) instead of inferring it from the detail's shape, in `sessionRows.ts` and `renderPromptForm`.
+- [x] 9.1 Move the prompt-kind-to-waiting-state map into `Panopticon.Contracts`, use it from both `PresenceStore.WaitingState` and `HookCommand.AskAsync`, and throw on an unknown kind in both.
+- [x] 9.2 Merge the Question and Visit allow-with-injected-field branches of `PromptHookOutput` into one helper.
+- [x] 9.3 Use one shared JSON "string property or null" helper in place of `RequestVisit.Text`, `PromptHookOutput.Text` and `ActivitySummary.Text`, keeping today's whitespace handling where a caller needs it.
+- [x] 9.4 The dashboard reads the prompt's `kind` (adding it to `PromptDetail` if needed) instead of inferring it from the detail's shape, in `sessionRows.ts` and `renderPromptForm`.
 
 ## Workflow follow-up
 

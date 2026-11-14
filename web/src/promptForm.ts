@@ -21,19 +21,26 @@ export type PromptAnswerBody =
   | { allow: boolean; message?: string }
   | { visited: boolean; message?: string };
 
-/** The form for `detail`, a held prompt of `session`'s: a question's, a permission prompt's, or a visit request's. */
+/**
+ * The form for `detail`, a held prompt of `session`'s, by the prompt's kind (code review §9.4): a question's, a
+ * permission prompt's, or a visit request's. Null when the detail doesn't fit the kind, so the card says "answer in
+ * the terminal" rather than guess.
+ */
 export function renderPromptForm(
   session: SessionView,
   detail: PromptDetail,
   api: Api,
-): HTMLFormElement {
-  if (detail.visit) {
-    return visitForm(detail, detail.visit, api);
+): HTMLFormElement | null {
+  switch (session.prompt?.kind) {
+    case "visit":
+      return detail.visit ? visitForm(detail, detail.visit, api) : null;
+    case "question":
+      return detail.questions?.length ? questionForm(detail, detail.questions, api) : null;
+    case "permission":
+      return permissionForm(session, detail, api);
+    default:
+      return null;
   }
-
-  return detail.questions?.length
-    ? questionForm(detail, detail.questions, api)
-    : permissionForm(session, detail, api);
 }
 
 /**

@@ -245,7 +245,7 @@ public sealed class PresenceStore(
                 memberId,
                 memberName,
                 request.Machine.Trim(),
-                WaitingState(request.Kind),
+                request.Kind.WaitingState(),
                 null,
                 now,
                 now)
@@ -266,15 +266,6 @@ public sealed class PresenceStore(
             return new PromptCreated(promptId.ToString(), held);
         }
     }
-
-    /// <summary>The state of a session waiting on a prompt of <paramref name="kind"/>.</summary>
-    internal static SessionState WaitingState(PromptKind kind) => kind switch
-    {
-        PromptKind.Question => SessionState.WaitingOnQuestion,
-        PromptKind.Permission => SessionState.WaitingOnPermission,
-        PromptKind.Visit => SessionState.WaitingOnVisit,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a prompt kind."),
-    };
 
     /// <summary>A held permission prompt's input preview, already cut to 2 KB, for those who may answer it.</summary>
     public PreviewOutcome SetPreview(Guid memberId, Guid promptId, string preview)

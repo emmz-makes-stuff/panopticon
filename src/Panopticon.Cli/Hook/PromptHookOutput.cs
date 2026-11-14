@@ -99,7 +99,9 @@ internal static class PromptHookOutput
                     return null;
                 }
 
-                WriteVisitAllow(json, toolInput, new VisitAnswer(visited ? RequestVisit.Done : RequestVisit.Cant, answer.Message, answer.AnsweredBy));
+                var visitAnswer = new VisitAnswer(visited ? RequestVisit.Done : RequestVisit.Cant, answer.Message, answer.AnsweredBy);
+                WriteAllowInjecting(json, toolInput, RequestVisit.AnswerField, value =>
+                    JsonSerializer.Serialize(value, visitAnswer, ContractsJsonContext.Default.VisitAnswer));
                 json.WriteString("additionalContext", $"Answered by {answer.AnsweredBy} via Panopticon.");
             }
             else if (kind == PromptKind.Question)
@@ -109,25 +111,16 @@ internal static class PromptHookOutput
                     return null;
                 }
 
-                json.WriteString("hookEventName", "PreToolUse");
-                json.WriteString("permissionDecision", "allow");
-                json.WriteStartObject("updatedInput");
-                if (toolInput is { ValueKind: JsonValueKind.Object } input)
+                WriteAllowInjecting(json, toolInput, "answers", value =>
                 {
-                    foreach (var property in input.EnumerateObject().Where(p => p.Name != "answers"))
+                    value.WriteStartObject();
+                    foreach (var (question, text) in answers)
                     {
-                        property.WriteTo(json);
+                        value.WriteString(question, text);
                     }
-                }
 
-                json.WriteStartObject("answers");
-                foreach (var (question, text) in answers)
-                {
-                    json.WriteString(question, text);
-                }
-
-                json.WriteEndObject();
-                json.WriteEndObject();
+                    value.WriteEndObject();
+                });
                 json.WriteString("additionalContext", $"Answered by {answer.AnsweredBy} via Panopticon.");
             }
             else
@@ -175,7 +168,7 @@ internal static class PromptHookOutput
         {
             json.WriteStartObject();
             json.WriteStartObject("hookSpecificOutput");
-            WriteVisitAllow(json, toolInput, answer: null);
+            WriteAllowInjecting(json, toolInput, RequestVisit.AnswerField, writeValue: null);
             json.WriteEndObject();
             json.WriteEndObject();
         }
@@ -184,26 +177,27 @@ internal static class PromptHookOutput
     }
 
     /// <summary>
-    /// <c>PreToolUse</c>'s allow for <c>request_visit</c>, with its input copied minus the agent's own
-    /// <c>panopticon_answer</c>, which never survives: only the dashboard's <paramref name="answer"/> does, when given.
+    /// <c>PreToolUse</c>'s allow with an <c>updatedInput</c>: the tool's input copied minus <paramref name="field"/>,
+    /// then <paramref name="field"/> as <paramref name="writeValue"/> writes it, or left out when that's null. So
+    /// whatever the agent put in <paramref name="field"/> never survives: only the dashboard's answer does.
     /// </summary>
-    private static void WriteVisitAllow(Utf8JsonWriter json, JsonElement? toolInput, VisitAnswer? answer)
+    private static void WriteAllowInjecting(Utf8JsonWriter json, JsonElement? toolInput, string field, Action<Utf8JsonWriter>? writeValue)
     {
         json.WriteString("hookEventName", "PreToolUse");
         json.WriteString("permissionDecision", "allow");
         json.WriteStartObject("updatedInput");
         if (toolInput is { ValueKind: JsonValueKind.Object } input)
         {
-            foreach (var property in input.EnumerateObject().Where(p => p.Name != RequestVisit.AnswerField))
+            foreach (var property in input.EnumerateObject().Where(p => p.Name != field))
             {
                 property.WriteTo(json);
             }
         }
 
-        if (answer is not null)
+        if (writeValue is not null)
         {
-            json.WritePropertyName(RequestVisit.AnswerField);
-            JsonSerializer.Serialize(json, answer, ContractsJsonContext.Default.VisitAnswer);
+            json.WritePropertyName(field);
+            writeValue(json);
         }
 
         json.WriteEndObject();
@@ -220,6 +214,5 @@ internal static class PromptHookOutput
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
-    private static string? Text(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    private static string? Text(JsonElement element, string property) => JsonText.Get(element, property);
 }

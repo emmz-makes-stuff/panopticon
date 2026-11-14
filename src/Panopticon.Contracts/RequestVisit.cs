@@ -66,6 +66,5 @@ public static class RequestVisit
         return new VisitAnswer(outcome, Text(answer, "note"), answeredBy);
     }
 
-    private static string? Text(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    private static string? Text(JsonElement element, string property) => JsonText.Get(element, property);
 }

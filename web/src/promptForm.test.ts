@@ -102,6 +102,18 @@ function button(root: ParentNode, selector: string): HTMLButtonElement {
 }
 
 describe("Needs you", () => {
+  // Code review §9.4: the form follows the prompt's kind, never the detail's shape.
+  it("a held question whose questions are missing gets no form, not a permission prompt's", () => {
+    const { article, marker, form } = show(asking({ promptDetail: detail({ questions: [] }) }));
+
+    expect(marker()).toBe("Needs you");
+    expect(form()).toBeNull();
+    expect(article.querySelector(".prompt-allow, .prompt-deny")).toBeNull();
+    expect(article.querySelector(".card-session-terminal")?.textContent).toBe(
+      "answer in the terminal",
+    );
+  });
+
   it("Owner's view: a held question shows Needs you with its form", () => {
     const { article, marker, form } = show(asking());
 
