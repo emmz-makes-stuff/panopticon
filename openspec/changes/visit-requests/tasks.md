@@ -32,7 +32,7 @@
 
 ## 7. End to end (human verification)
 
-- [ ] 7.1 Give Emmz a copy-pasteable recipe for a real Claude Code with the local CLI and the plugin branch. While away, ask the agent to request a visit to a real PR, answer Done with a note on the dashboard, then repeat with Can't. Then turn away off with a request held, and finally make a request while not away. Verify: one card entry per request (not two); the link opens in a new tab; the agent gets the outcome, note and "answered by Emmz"; away off and not away give "ask in the terminal"; the change page records both answers without the notes. Then run `make e2e` and `make gates`.
+- [x] 7.1 Give Emmz a copy-pasteable recipe for a real Claude Code with the local CLI and the plugin branch. While away, ask the agent to request a visit to a real PR, answer Done with a note on the dashboard, then repeat with Can't. Then turn away off with a request held, and finally make a request while not away. Verify: one card entry per request (not two); the link opens in a new tab; the agent gets the outcome, note and "answered by Emmz"; away off and not away give "ask in the terminal"; the change page records both answers without the notes. Then run `make e2e` and `make gates`.
 
 ## Workflow follow-up
 
