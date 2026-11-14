@@ -1,12 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Session states
-A session SHALL be working, with its activity, or waiting. Waiting is on a question, on a permission prompt, on a visit
-request, or on the user after its turn ended. `PreToolUse` SHALL set working, except on `AskUserQuestion`, which sets
-waiting on a question, and on the bridge's `request_visit`, which sets waiting on a visit request. `PermissionRequest`
-SHALL set waiting on a permission prompt, except on `AskUserQuestion`, which it SHALL ignore. `Stop` SHALL set waiting
-on the user.
-`PostToolUse` and `UserPromptSubmit` SHALL set working. `SessionEnd` SHALL remove the session.
+A session SHALL be working, with its activity, or waiting: on a question, a permission prompt, a visit request, or
+the user after its turn ended. `PreToolUse` SHALL set working, but waiting on a question for `AskUserQuestion` and on
+a visit request for `request_visit`. `PermissionRequest` SHALL set waiting on a permission
+prompt but ignore `AskUserQuestion`. `Stop` SHALL set waiting on the user. `PostToolUse` and
+`UserPromptSubmit` SHALL set working. `SessionEnd` SHALL remove the session.
 
 #### Scenario: Turn ends
 - **WHEN** a session's `Stop` hook runs
