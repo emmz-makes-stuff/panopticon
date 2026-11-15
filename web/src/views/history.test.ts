@@ -63,6 +63,11 @@ describe("history page", () => {
         agents: "claude-code@vm-1 Emmz",
       },
     ]);
+    expect(
+      [...root.querySelectorAll<HTMLAnchorElement>(".history-meta a.history-repo")].map(
+        (a) => a.href,
+      ),
+    ).toEqual(["https://github.com/emmz/panopticon", "https://github.com/emmz/panopticon"]);
     expect(q(root, ".show-more").hidden).toBe(true);
   });
 
@@ -286,6 +291,8 @@ describe("history page filters", () => {
       "github.com/emmz/panopticon",
     );
     expect(root.querySelector("select[name=status]")).toBeNull();
+    // The repo choice stays a plain filter, with no link (spec repos, Repo links).
+    expect(root.querySelector(".filter-bar a")).toBeNull();
   });
 
   it("Show more keeps the filters", async () => {

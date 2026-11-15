@@ -350,6 +350,12 @@ Devlog            ┃
   outlined button. Empty: "No changes have been archived yet", and a muted line on where they come from.
 - **Cards:** the change name is the card's link. It keeps its look (no link colour or underline), and the
   focus ring shows it.
+- **Repo links:** wherever a repo's `owner/name` appears (the cards, History rows, the change page, the
+  metrics page's slowest sections and the Repos page), it links to the repo's own web page, such as GitHub or
+  Azure DevOps, in a new tab. It keeps its spot's colour and weight, and gets the header links' `--rule`
+  underline: enough to read as a link, not enough to compete with the change name. The host stays plain
+  text before it. There's no hover effect (principle 4), and the title says "Open `owner/name` on `host`".
+  The filter choices stay plain filters.
 
 ## Filters and quiet cards
 

@@ -1,7 +1,7 @@
 import { leadingProjectLabel } from "../projectLabel";
 import { tagChips } from "../tagChips";
 import { ApiError, fetchHistory, fetchHistoryChoices } from "../api";
-import { alertLine, button, el, page, routeLink } from "../dom";
+import { alertLine, button, el, page, repoLink, routeLink } from "../dom";
 import { createFilterBar, noMatch } from "../filterBar";
 import {
   filterOptions,
@@ -183,7 +183,9 @@ function row(entry: HistoryEntry): HTMLLIElement {
       "p",
       "history-meta",
       ...leadingProjectLabel(entry),
-      el("span", "history-repo", `${entry.repo.host} ${entry.repo.owner}/${entry.repo.name}`),
+      el("span", "history-host", entry.repo.host),
+      " ",
+      repoLink(entry.repo, "history-repo"),
       " ",
       archived,
     ),

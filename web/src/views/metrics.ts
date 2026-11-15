@@ -1,6 +1,6 @@
 import { ApiError, fetchHistoryChoices, fetchMetrics } from "../api";
 import { renderBarChart } from "../charts";
-import { alertLine, button, el, page, routeLink } from "../dom";
+import { alertLine, button, el, page, repoLink, routeLink } from "../dom";
 import { createFilterBar, noMatch } from "../filterBar";
 import {
   filterOptions,
@@ -177,7 +177,7 @@ function slowest(sections: readonly SlowSection[]): HTMLElement {
           "metrics-slow-change",
           routeLink(changeHref(slow.changeId), slow.change, "metrics-slow-link"),
           " ",
-          el("span", "metrics-slow-repo", `${slow.repo.owner}/${slow.repo.name}`),
+          repoLink(slow.repo, "metrics-slow-repo"),
         ),
         el("span", "metrics-slow-section", `Section ${slow.number}: ${slow.title}`),
         durationRule(slow.durationSeconds, longest),

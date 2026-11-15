@@ -128,7 +128,16 @@ describe("metrics page", () => {
       [...root.querySelectorAll<HTMLAnchorElement>(".metrics-slow a")].map((a) =>
         a.getAttribute("href"),
       ),
-    ).toEqual(["/changes/b", "/changes/g"]);
+    ).toEqual([
+      "/changes/b",
+      "https://github.com/emmz/panopticon",
+      "/changes/g",
+      "https://github.com/emmz/meko",
+    ]);
+    // The repo links open the repo in a new tab (spec repos, Repo links).
+    expect(
+      [...root.querySelectorAll<HTMLAnchorElement>(".metrics-slow-repo")].map((a) => a.target),
+    ).toEqual(["_blank", "_blank"]);
   });
 
   it("a slowest section opens its change page", async () => {

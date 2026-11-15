@@ -93,6 +93,14 @@ describe("renderCard content", () => {
 
     expect(text(element, ".card-host")).toBe("github.com");
     expect(text(element, ".card-repo-name")).toBe("emmz/panopticon");
+    // spec repos, "A card's repo": owner/name links to the repo in a new tab; the change name stays the route link.
+    const repo = element.querySelector<HTMLAnchorElement>("a.card-repo-name");
+    expect([repo?.href, repo?.target, repo?.rel]).toEqual([
+      "https://github.com/emmz/panopticon",
+      "_blank",
+      "noopener noreferrer",
+    ]);
+    expect(element.querySelector<HTMLAnchorElement>(".card-link")?.dataset["route"]).toBe("");
     expect(text(element, ".card-change")).toBe("walking-skeleton");
     expect([...element.querySelectorAll(".card-agent")].map((a) => a.textContent)).toEqual([
       "claude-code@vm-1",

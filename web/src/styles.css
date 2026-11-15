@@ -129,6 +129,15 @@ body {
   text-underline-offset: 0.2em;
 }
 
+/* A repo's owner/name, linking to its web page (repos-page D4): it keeps its spot's colour and weight, with the
+   header links' --rule underline. Kept above the spot-specific rules so their colours win. */
+.repo-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.2em;
+}
+
 .account-error {
   font-weight: 600;
 }

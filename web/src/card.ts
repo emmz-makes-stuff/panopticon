@@ -2,6 +2,7 @@ import { agentName, relativeTime } from "./format";
 import { renderProgressBar } from "./progressBar";
 import { DEFAULT_QUIET, quietState, type QuietSettings, type QuietState } from "./quiet";
 import type { ChangeCard } from "./types";
+import { repoLink } from "./dom";
 import { changeHref } from "./links";
 import { leadingProjectLabel } from "./projectLabel";
 import { CARD_TAG_LIMIT, tagChips } from "./tagChips";
@@ -31,7 +32,7 @@ export function renderCard(
   host.append(...leadingProjectLabel(card), card.repo.host);
 
   const repoLine = element("div", "card-repo");
-  repoLine.append(element("span", "card-repo-name", `${card.repo.owner}/${card.repo.name}`));
+  repoLine.append(repoLink(card.repo, "card-repo-name"));
   // When it last reported, after its quiet state when it has one: "Idle, 1h ago", "Stale, last seen 5h ago".
   const when = element("span", "card-when");
   const state = element("span", "card-state");

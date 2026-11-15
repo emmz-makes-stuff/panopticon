@@ -1,3 +1,6 @@
+import { repoWebUrl } from "./links";
+import type { CardRepo } from "./types";
+
 /** A child of `el`: a node, or text (always set as text, never parsed as markup). */
 export type Child = Node | string | null | undefined | false;
 
@@ -122,5 +125,22 @@ export function routeLink(href: string, text: string, className?: string): HTMLA
   const link = el("a", className, text);
   link.href = href;
   link.dataset["route"] = "";
+  return link;
+}
+
+/**
+ * The repo's `owner/name` as a link to its web page, in a new tab (spec repos, Repo links; repos-page D3). It's an
+ * ordinary link, not a `data-route` one, so the router leaves it to the browser.
+ */
+export function repoLink(repo: CardRepo, className?: string): HTMLAnchorElement {
+  const link = el(
+    "a",
+    className ? `${className} repo-link` : "repo-link",
+    `${repo.owner}/${repo.name}`,
+  );
+  link.href = repoWebUrl(repo);
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title = `Open ${repo.owner}/${repo.name} on ${repo.host}`;
   return link;
 }

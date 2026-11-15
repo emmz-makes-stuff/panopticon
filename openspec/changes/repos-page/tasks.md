@@ -7,9 +7,9 @@
 
 ## 2. Dashboard: repo links
 
-- [ ] 2.1 Add `repoWebUrl(repo)` to `web/src/links.ts` (design D2) and `repoLink(repo, text)` to `web/src/dom.ts` (D3). Verify with unit tests for the "Repo web addresses" scenarios (Azure DevOps, a `*.visualstudio.com` host, a nested GitLab group, GitHub, a name needing encoding), and that the link has `target="_blank"`, `rel="noopener noreferrer"`, a title, and no `data-route`.
-- [ ] 2.2 Use `repoLink` for the repo's `owner/name` in `card.ts`, `views/history.ts` (splitting its host and repo text), `views/change.ts` and `views/metrics.ts`, and add the `repo-link` style (D4). Verify the "A card's repo" scenario in `card.test.ts`, with matching link assertions in the History, change page and metrics tests, and that the filter selects still have no link.
-- [ ] 2.3 Add the "Repo links" rule to `web/DESIGN.md` (D4). Verify it names where the link appears and its look.
+- [x] 2.1 Add `repoWebUrl(repo)` to `web/src/links.ts` (design D2) and `repoLink(repo, text)` to `web/src/dom.ts` (D3). Verify with unit tests for the "Repo web addresses" scenarios (Azure DevOps, a `*.visualstudio.com` host, a nested GitLab group, GitHub, a name needing encoding), and that the link has `target="_blank"`, `rel="noopener noreferrer"`, a title, and no `data-route`.
+- [x] 2.2 Use `repoLink` for the repo's `owner/name` in `card.ts`, `views/history.ts` (splitting its host and repo text), `views/change.ts` and `views/metrics.ts`, and add the `repo-link` style (D4). Verify the "A card's repo" scenario in `card.test.ts`, with matching link assertions in the History, change page and metrics tests, and that the filter selects still have no link.
+- [x] 2.3 Add the "Repo links" rule to `web/DESIGN.md` (D4). Verify it names where the link appears and its look.
 
 ## 3. Dashboard: the Repos page
 
