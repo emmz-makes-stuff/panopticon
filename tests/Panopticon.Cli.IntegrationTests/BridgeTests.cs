@@ -44,7 +44,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         var tools = await bridge.Client.ListToolsAsync(cancellationToken: Ct);
 
-        Assert.Equal(["list_projects", "report_progress", "tag_change"], tools.Select(t => t.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(["list_projects", "report_progress", "request_visit", "tag_change"], tools.Select(t => t.Name).Order(StringComparer.Ordinal));
         var tool = tools.Single(t => t.Name == "report_progress");
         var schema = tool.ProtocolTool.InputSchema;
         var properties = schema.GetProperty("properties");
@@ -71,7 +71,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.DoesNotContain("PANOPTICON_SERVER_URL", BridgeHarness.Text(result), StringComparison.Ordinal);
 
         // Still serving.
-        Assert.Equal(3, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
+        Assert.Equal(4, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
         Assert.True((await bridge.ReportAsync("walking-skeleton", null, Ct)).IsError);
     }
 
@@ -242,7 +242,7 @@ public class BridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains("http://127.0.0.1:9/mcp", text, StringComparison.Ordinal);
         Assert.DoesNotContain("pw", text, StringComparison.Ordinal);
 
-        Assert.Equal(3, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
+        Assert.Equal(4, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
         Assert.True((await bridge.ReportAsync("walking-skeleton", null, Ct)).IsError);
     }
 

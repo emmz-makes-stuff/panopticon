@@ -71,13 +71,7 @@ internal static class ActivitySummary
         return trimmed[..cut].TrimEnd();
     }
 
-    private static string? Text(JsonElement? input, string property) =>
-        input is { ValueKind: JsonValueKind.Object } value
-        && value.TryGetProperty(property, out var field)
-        && field.ValueKind == JsonValueKind.String
-        && !string.IsNullOrWhiteSpace(field.GetString())
-            ? field.GetString()
-            : null;
+    private static string? Text(JsonElement? input, string property) => JsonText.NonBlank(input, property);
 
     // The last segment of either kind of separator, so a Windows path reads right whichever OS reads it.
     private static string? FileName(JsonElement? input, string property) =>

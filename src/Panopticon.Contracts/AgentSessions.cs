@@ -8,7 +8,8 @@ namespace Panopticon.Contracts;
 
 /// <summary>
 /// A Claude Code session's state (spec agent-presence, Session states). On the wire in kebab case:
-/// <c>working</c>, <c>waiting-on-question</c>, <c>waiting-on-permission</c>, <c>waiting-on-user</c>, <c>ended</c>.
+/// <c>working</c>, <c>waiting-on-question</c>, <c>waiting-on-permission</c>, <c>waiting-on-visit</c>,
+/// <c>waiting-on-user</c>, <c>ended</c>.
 /// Numbers and unknown names are refused.
 /// </summary>
 [JsonConverter(typeof(SessionStateConverter))]
@@ -22,6 +23,9 @@ public enum SessionState
 
     /// <summary>Met a permission prompt (<c>PermissionRequest</c>).</summary>
     WaitingOnPermission,
+
+    /// <summary>Asked its member to visit a page, with the bridge's <c>request_visit</c> (visit-requests D1).</summary>
+    WaitingOnVisit,
 
     /// <summary>Its turn ended (<c>Stop</c>).</summary>
     WaitingOnUser,

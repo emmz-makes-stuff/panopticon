@@ -1,6 +1,6 @@
 import type { Api } from "./api";
 import { renderPromptForm } from "./promptForm";
-import type { ChangeCard, SessionView } from "./types";
+import type { ChangeCard, PromptKind, SessionView } from "./types";
 
 /**
  * A card's session rows (spec live-dashboard, "Sessions on a card"; agent-interaction D10): who and where, then what
@@ -35,8 +35,17 @@ export function sessionText(session: SessionView, viewerId: string | undefined):
       return session.prompt?.tool
         ? `waiting on permission for ${session.prompt.tool}`
         : "waiting on permission";
+    case "waiting-on-visit":
+      return "waiting on a visit request";
   }
 }
+
+/** The session states that need someone (spec live-dashboard, Needs you): not working, and not after its turn. */
+const NEEDING_STATES: readonly SessionView["state"][] = [
+  "waiting-on-question",
+  "waiting-on-permission",
+  "waiting-on-visit",
+];
 
 /** How long since `iso`, as the row says it: "just now", "4m", "2h", "3d". */
 export function elapsed(iso: string, now: Date): string {
@@ -60,7 +69,7 @@ export function elapsed(iso: string, now: Date): string {
  * Null when it needs nobody: working, or waiting after its turn ended.
  */
 export function needs(session: SessionView, viewerId: string | undefined): string | null {
-  if (session.state !== "waiting-on-question" && session.state !== "waiting-on-permission") {
+  if (!NEEDING_STATES.includes(session.state)) {
     return null;
   }
 
@@ -74,13 +83,19 @@ export function needs(session: SessionView, viewerId: string | undefined): strin
     return `Needs ${session.memberName}`;
   }
 
-  const what =
-    prompt.kind === "question"
-      ? "question"
-      : prompt.tool
-        ? `permission for ${prompt.tool}`
-        : "permission";
-  return `Needs ${session.memberName}: ${what}`;
+  return `Needs ${session.memberName}: ${promptWhat(prompt.kind, prompt.tool)}`;
+}
+
+/** What a prompt is, in a few words: "question", "permission for Bash", "visit a page". */
+export function promptWhat(kind: PromptKind, tool?: string | null): string {
+  switch (kind) {
+    case "question":
+      return "question";
+    case "permission":
+      return tool ? `permission for ${tool}` : "permission";
+    case "visit":
+      return "visit a page";
+  }
 }
 
 /** A prompt held for the dashboard that this viewer may answer (spec live-dashboard, Needs-you count, Browser notifications). */
@@ -88,7 +103,7 @@ export interface HeldPrompt {
   promptId: string;
   changeId: string;
   change: string;
-  kind: "question" | "permission";
+  kind: PromptKind;
   tool?: string | null | undefined;
 }
 
@@ -101,12 +116,13 @@ export function heldPrompts(cards: Iterable<ChangeCard>): HeldPrompt[] {
   for (const card of cards) {
     for (const session of card.sessions ?? []) {
       const detail = session.promptDetail;
-      if (detail?.held) {
+      const kind = session.prompt?.kind;
+      if (detail?.held && kind) {
         held.push({
           promptId: detail.id,
           changeId: card.changeId,
           change: card.change,
-          kind: detail.questions?.length ? "question" : "permission",
+          kind,
           tool: session.prompt?.tool,
         });
       }
@@ -252,12 +268,14 @@ function needsBlock(session: SessionView, marker: string, viewer: SessionViewer)
     return block;
   }
 
-  if (detail.held && viewer.api) {
-    block.append(renderPromptForm(session, detail, viewer.api));
+  const form = detail.held && viewer.api ? renderPromptForm(session, detail, viewer.api) : null;
+  if (form) {
+    block.append(form);
     return block;
   }
 
-  if (detail.questions?.length) {
+  const kind = session.prompt?.kind;
+  if (kind === "question" && detail.questions?.length) {
     const list = document.createElement("ul");
     list.className = "card-session-questions";
     for (const question of detail.questions) {
@@ -265,7 +283,9 @@ function needsBlock(session: SessionView, marker: string, viewer: SessionViewer)
     }
 
     block.append(list);
-  } else {
+  } else if (kind === "visit" && detail.visit) {
+    block.append(" ", span("card-session-question", detail.visit.reason));
+  } else if (kind === "permission") {
     const tool = session.prompt?.tool;
     block.append(
       " ",

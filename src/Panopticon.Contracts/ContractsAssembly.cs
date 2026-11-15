@@ -11,4 +11,7 @@ public static class ContractsAssembly
 
     /// <summary>The MCP tool putting a Project's tags on a change, on the server endpoint and the CLI bridge (tags D4).</summary>
     public const string TagChangeToolName = "tag_change";
+
+    /// <summary>The CLI bridge's tool asking the member to visit a page (visit-requests D1). Not on the server.</summary>
+    public const string RequestVisitToolName = "request_visit";
 }

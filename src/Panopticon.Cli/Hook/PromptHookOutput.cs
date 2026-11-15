@@ -52,6 +52,17 @@ internal static class PromptHookOutput
     }
 
     /// <summary>
+    /// <c>request_visit</c>'s URL, reason and action (visit-requests D3), or null when the input isn't that shape: the
+    /// tool then runs and reports the problem itself.
+    /// </summary>
+    public static VisitRequest? Visit(JsonElement? toolInput) =>
+        toolInput is { ValueKind: JsonValueKind.Object } input
+        && Text(input, "url") is { } url
+        && Text(input, "reason") is { } reason
+            ? new VisitRequest(url, reason, Text(input, "action"))
+            : null;
+
+    /// <summary>
     /// A held permission prompt's input as the dashboard previews it, cut to 2 KB: a Bash call's command, or any other
     /// tool's input as JSON. Never sent until the server holds the prompt (spec remote-answers, Permission input stays
     /// local unless held).
@@ -69,8 +80,9 @@ internal static class PromptHookOutput
     }
 
     /// <summary>
-    /// D7's output for an answer: a question's answers injected into its input, or a permission's allow or deny. Null
-    /// when the answer doesn't fit the prompt (the terminal asks instead).
+    /// D7's output for an answer: a question's answers injected into its input, a permission's allow or deny, or a
+    /// visit's answer injected into <c>request_visit</c>'s input (visit-requests D2). Null when the answer doesn't fit
+    /// the prompt (the terminal asks instead).
     /// </summary>
     public static string? For(PromptKind kind, JsonElement? toolInput, PromptAnswer answer)
     {
@@ -80,32 +92,35 @@ internal static class PromptHookOutput
         {
             json.WriteStartObject();
             json.WriteStartObject("hookSpecificOutput");
-            if (kind == PromptKind.Question)
+            if (kind == PromptKind.Visit)
+            {
+                if (answer.Visited is not { } visited)
+                {
+                    return null;
+                }
+
+                var visitAnswer = new VisitAnswer(visited ? RequestVisit.Done : RequestVisit.Cant, answer.Message, answer.AnsweredBy);
+                WriteAllowInjecting(json, toolInput, RequestVisit.AnswerField, value =>
+                    JsonSerializer.Serialize(value, visitAnswer, ContractsJsonContext.Default.VisitAnswer));
+                json.WriteString("additionalContext", $"Answered by {answer.AnsweredBy} via Panopticon.");
+            }
+            else if (kind == PromptKind.Question)
             {
                 if (answer.Answers is not { } answers)
                 {
                     return null;
                 }
 
-                json.WriteString("hookEventName", "PreToolUse");
-                json.WriteString("permissionDecision", "allow");
-                json.WriteStartObject("updatedInput");
-                if (toolInput is { ValueKind: JsonValueKind.Object } input)
+                WriteAllowInjecting(json, toolInput, "answers", value =>
                 {
-                    foreach (var property in input.EnumerateObject().Where(p => p.Name != "answers"))
+                    value.WriteStartObject();
+                    foreach (var (question, text) in answers)
                     {
-                        property.WriteTo(json);
+                        value.WriteString(question, text);
                     }
-                }
 
-                json.WriteStartObject("answers");
-                foreach (var (question, text) in answers)
-                {
-                    json.WriteString(question, text);
-                }
-
-                json.WriteEndObject();
-                json.WriteEndObject();
+                    value.WriteEndObject();
+                });
                 json.WriteString("additionalContext", $"Answered by {answer.AnsweredBy} via Panopticon.");
             }
             else
@@ -135,6 +150,59 @@ internal static class PromptHookOutput
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
+    /// <summary>
+    /// The output for a visit request that got no answer from the dashboard (not held, released, or the server
+    /// failed): <c>request_visit</c> is allowed with its input minus any <c>panopticon_answer</c> the agent made up, so
+    /// the tool reports that it didn't reach anyone and Claude Code shows no permission prompt for it. Null when the
+    /// input isn't an object: the tool then reports the problem itself.
+    /// </summary>
+    public static string? UnansweredVisit(JsonElement? toolInput)
+    {
+        if (toolInput is not { ValueKind: JsonValueKind.Object })
+        {
+            return null;
+        }
+
+        using var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            json.WriteStartObject("hookSpecificOutput");
+            WriteAllowInjecting(json, toolInput, RequestVisit.AnswerField, writeValue: null);
+            json.WriteEndObject();
+            json.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    /// <summary>
+    /// <c>PreToolUse</c>'s allow with an <c>updatedInput</c>: the tool's input copied minus <paramref name="field"/>,
+    /// then <paramref name="field"/> as <paramref name="writeValue"/> writes it, or left out when that's null. So
+    /// whatever the agent put in <paramref name="field"/> never survives: only the dashboard's answer does.
+    /// </summary>
+    private static void WriteAllowInjecting(Utf8JsonWriter json, JsonElement? toolInput, string field, Action<Utf8JsonWriter>? writeValue)
+    {
+        json.WriteString("hookEventName", "PreToolUse");
+        json.WriteString("permissionDecision", "allow");
+        json.WriteStartObject("updatedInput");
+        if (toolInput is { ValueKind: JsonValueKind.Object } input)
+        {
+            foreach (var property in input.EnumerateObject().Where(p => p.Name != field))
+            {
+                property.WriteTo(json);
+            }
+        }
+
+        if (writeValue is not null)
+        {
+            json.WritePropertyName(field);
+            writeValue(json);
+        }
+
+        json.WriteEndObject();
+    }
+
     private static string Indented(JsonElement input)
     {
         using var buffer = new MemoryStream();
@@ -146,6 +214,5 @@ internal static class PromptHookOutput
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
-    private static string? Text(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    private static string? Text(JsonElement element, string property) => JsonText.Get(element, property);
 }

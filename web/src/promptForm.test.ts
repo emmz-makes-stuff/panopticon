@@ -102,6 +102,18 @@ function button(root: ParentNode, selector: string): HTMLButtonElement {
 }
 
 describe("Needs you", () => {
+  // Code review §9.4: the form follows the prompt's kind, never the detail's shape.
+  it("a held question whose questions are missing gets no form, not a permission prompt's", () => {
+    const { article, marker, form } = show(asking({ promptDetail: detail({ questions: [] }) }));
+
+    expect(marker()).toBe("Needs you");
+    expect(form()).toBeNull();
+    expect(article.querySelector(".prompt-allow, .prompt-deny")).toBeNull();
+    expect(article.querySelector(".card-session-terminal")?.textContent).toBe(
+      "answer in the terminal",
+    );
+  });
+
   it("Owner's view: a held question shows Needs you with its form", () => {
     const { article, marker, form } = show(asking());
 
@@ -313,6 +325,100 @@ describe("Permission prompts: the form", () => {
     await until(() => posted().length === 1);
 
     expect(posted()[0]?.body).toEqual({ allow: false });
+  });
+});
+
+// Spec remote-answers: "Visit request form"; visit-requests D7.
+const PR = "https://github.com/emmz/pan/pull/12";
+
+function visiting(url = PR, overrides: Partial<SessionView> = {}): SessionView {
+  return asking({
+    state: "waiting-on-visit",
+    prompt: { kind: "visit" },
+    promptDetail: detail({
+      questions: null,
+      visit: { url, reason: "Review the PR", action: "Approve it if you're happy" },
+    }),
+    ...overrides,
+  });
+}
+
+describe("Visit request form", () => {
+  it("shows the reason, the action and the URL in full as a link to a new tab with no opener or referrer", () => {
+    const { held, marker } = show(visiting());
+    const shown = held();
+
+    expect(marker()).toBe("Needs you");
+    expect(shown.classList.contains("prompt-form--visit")).toBe(true);
+    expect(q(shown, ".prompt-text").textContent).toBe("Review the PR");
+    expect(q(shown, ".prompt-visit-action").textContent).toBe("Approve it if you're happy");
+    const link = q<HTMLAnchorElement>(shown, "a.prompt-visit-link");
+    expect(link.textContent).toBe(PR);
+    expect(link.href).toBe(PR);
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toBe("noopener noreferrer");
+    expect(q(shown, ".prompt-visit-hint").textContent).toBe(" (opens in a new tab)");
+  });
+
+  it.each([
+    ["a look-alike host", "https://аpple.com/login", "https://xn--pple-43d.com/login"],
+    ["a tab and a newline inside", "https://git\thub.com/\npull/1", "https://github.com/pull/1"],
+  ])("shows %s as the link goes, not as sent", (_, url, shownAs) => {
+    const { held } = show(visiting(url));
+    const link = q<HTMLAnchorElement>(held(), "a.prompt-visit-link");
+
+    expect(link.textContent).toBe(shownAs);
+    expect(link.href).toBe(shownAs);
+  });
+
+  it.each(["javascript:alert(1)", "file:///Users/emmz/report.html", "not a url"])(
+    "shows %s as text, never as a link",
+    (url) => {
+      const { held } = show(visiting(url));
+      const shown = held();
+
+      expect(shown.querySelector("a")).toBeNull();
+      expect(q(shown, ".prompt-visit-link").textContent).toBe(url);
+    },
+  );
+
+  it("Done with a note sends visited true and the trimmed note", async () => {
+    const { held, posted } = show(visiting());
+    const shown = held();
+
+    const note = q<HTMLTextAreaElement>(shown, ".prompt-message");
+    expect(note.maxLength).toBe(1000);
+    type(note, "  approved, merge when green ");
+    button(shown, ".prompt-done").click();
+    await until(() => posted().length === 1);
+
+    expect(posted()[0]?.body).toEqual({ visited: true, message: "approved, merge when green" });
+  });
+
+  it("Can't with no note sends visited false and no message", async () => {
+    const { held, posted } = show(visiting());
+
+    button(held(), ".prompt-cant").click();
+    await until(() => posted().length === 1);
+
+    expect(posted()[0]?.body).toEqual({ visited: false });
+  });
+
+  it("the reason, action and URL are text, never markup", () => {
+    const { held } = show(
+      asking({
+        state: "waiting-on-visit",
+        prompt: { kind: "visit" },
+        promptDetail: detail({
+          questions: null,
+          visit: { url: PR, reason: "<img src=x onerror=alert(1)>", action: "<b>bold</b>" },
+        }),
+      }),
+    );
+    const shown = held();
+
+    expect(shown.querySelector("img, b")).toBeNull();
+    expect(q(shown, ".prompt-text").textContent).toBe("<img src=x onerror=alert(1)>");
   });
 });
 

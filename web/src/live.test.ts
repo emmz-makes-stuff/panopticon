@@ -4,7 +4,9 @@ import {
   CHANGE_ARCHIVED,
   CHANGE_UPDATED,
   connectLive,
+  parseAnswerEntry,
   parseProjectTagsChange,
+  parseSessionUpdate,
   PROJECT_TAGS_CHANGED,
   PROJECTS_CHANGED,
   RESYNC,
@@ -531,5 +533,40 @@ describe("connectLive, a change tagged", () => {
     app.render([panCard([BUG])]);
 
     expect(tagsOf(cards()[0])).toEqual(["PAN/bug"]);
+  });
+});
+
+// visit-requests: a visit request's session update and answer are read, not dropped.
+describe("parsing visit requests", () => {
+  it("reads a session waiting on a visit request", () => {
+    const session = {
+      id: "s1",
+      memberId: "m1",
+      memberName: "Emmz",
+      machine: "mbp",
+      state: "waiting-on-visit",
+      since: NOW.toISOString(),
+      lastEventAt: NOW.toISOString(),
+      prompt: { kind: "visit" },
+    };
+
+    expect(parseSessionUpdate(JSON.stringify({ changeId: "c1", session }))?.session.state).toBe(
+      "waiting-on-visit",
+    );
+  });
+
+  it("reads a visit answer", () => {
+    const entry = {
+      id: "a1",
+      changeId: "c1",
+      sessionMember: "Emmz",
+      answeredBy: "Emmz",
+      answeredAt: NOW.toISOString(),
+      kind: "visit",
+      outcome: "done",
+    };
+
+    expect(parseAnswerEntry(JSON.stringify(entry))?.kind).toBe("visit");
+    expect(parseAnswerEntry(JSON.stringify({ ...entry, kind: "errand" }))).toBeNull();
   });
 });

@@ -37,6 +37,7 @@ public class AgentContractsTests
     [InlineData(SessionState.Working, "working")]
     [InlineData(SessionState.WaitingOnQuestion, "waiting-on-question")]
     [InlineData(SessionState.WaitingOnPermission, "waiting-on-permission")]
+    [InlineData(SessionState.WaitingOnVisit, "waiting-on-visit")]
     [InlineData(SessionState.WaitingOnUser, "waiting-on-user")]
     [InlineData(SessionState.Ended, "ended")]
     public void Every_session_state_has_its_wire_name(SessionState state, string name)
@@ -195,4 +196,116 @@ public class AgentContractsTests
         Assert.False(char.IsHighSurrogate(emoji[^1]));
         Assert.Equal(1 + (511 * 2), emoji.Length);
     }
+
+    private static readonly VisitRequest _prVisit = new("https://github.com/emmz/pan/pull/12", "Review the PR", "Approve it if happy");
+
+    private static PromptRequest VisitPrompt(VisitRequest visit) =>
+        new(_repo, "visit-requests", "vm-1", "s-1", PromptKind.Visit, Visit: visit);
+
+    [Fact]
+    public void A_visit_request_round_trips_with_kind_visit()
+    {
+        var request = VisitPrompt(_prVisit);
+
+        var json = JsonSerializer.Serialize(request, ContractsJsonContext.Default.PromptRequest);
+
+        Assert.Contains("\"kind\":\"visit\"", json, StringComparison.Ordinal);
+        Assert.Contains(
+            "\"visit\":{\"url\":\"https://github.com/emmz/pan/pull/12\",\"reason\":\"Review the PR\",\"action\":\"Approve it if happy\"}",
+            json,
+            StringComparison.Ordinal);
+        Assert.Equal(request, RoundTrip(request, ContractsJsonContext.Default.PromptRequest));
+    }
+
+    [Fact]
+    public void A_visit_answer_round_trips_with_visited_and_its_note()
+    {
+        var done = new PromptWaitResult(PromptWaitState.Answered, new PromptAnswer("Emmz", Message: "approved", Visited: true));
+        var cant = new PromptWaitResult(PromptWaitState.Answered, new PromptAnswer("Bob", Visited: false));
+
+        Assert.Equal(
+            """{"state":"answered","answer":{"answeredBy":"Emmz","message":"approved","visited":true}}""",
+            JsonSerializer.Serialize(done, ContractsJsonContext.Default.PromptWaitResult));
+        Assert.Equal(done, RoundTrip(done, ContractsJsonContext.Default.PromptWaitResult));
+        Assert.Equal(cant, RoundTrip(cant, ContractsJsonContext.Default.PromptWaitResult));
+    }
+
+    [Fact]
+    public void A_visit_within_the_limits_has_no_problem()
+    {
+        Assert.Null(PromptLimits.Problem(VisitPrompt(_prVisit)));
+        Assert.Null(PromptLimits.Problem(VisitPrompt(new VisitRequest("http://localhost:5173/", "Check the card"))));
+        Assert.Null(PromptLimits.Problem(VisitPrompt(new VisitRequest(
+            "https://example.com/" + new string('a', PromptLimits.MaxVisitUrlLength - 20),
+            new string('r', PromptLimits.MaxVisitReasonLength),
+            new string('a', PromptLimits.MaxVisitActionLength)))));
+    }
+
+    [Theory]
+    [InlineData("file:///Users/emmz/report.html", "only absolute http and https URLs can be visited")]
+    [InlineData("javascript:alert(1)", "only absolute http and https URLs can be visited")]
+    [InlineData("/relative/page", "only absolute http and https URLs can be visited")]
+    [InlineData(" https://example.com/", "only absolute http and https URLs can be visited")]
+    [InlineData("https://bob:secret@example.com/", "the url has a user name or password in it")]
+    [InlineData("https://bob@example.com/", "the url has a user name or password in it")]
+    [InlineData(" ", "the url is empty")]
+    public void A_visit_url_that_is_not_a_plain_web_url_is_refused(string url, string problem)
+    {
+        Assert.Equal(problem, PromptLimits.VisitProblem(_prVisit with { Url = url }));
+        Assert.Equal(problem, PromptLimits.Problem(VisitPrompt(_prVisit with { Url = url })));
+    }
+
+    [Fact]
+    public void A_visit_over_a_limit_is_refused()
+    {
+        Assert.Equal(
+            "the url is over 2048 characters",
+            PromptLimits.VisitProblem(_prVisit with { Url = "https://example.com/" + new string('a', PromptLimits.MaxVisitUrlLength) }));
+        Assert.Equal("the reason is empty", PromptLimits.VisitProblem(_prVisit with { Reason = "" }));
+        Assert.Equal("the reason is over 500 characters", PromptLimits.VisitProblem(_prVisit with { Reason = new string('r', 501) }));
+        Assert.Equal("the action is over 1000 characters", PromptLimits.VisitProblem(_prVisit with { Action = new string('a', 1001) }));
+    }
+
+    [Fact]
+    public void A_malformed_visit_prompt_is_refused()
+    {
+        Assert.Equal("a visit request has no visit", PromptLimits.Problem(new PromptRequest(_repo, "c", "m", "s", PromptKind.Visit)));
+        Assert.Equal("a visit request has questions or a tool", PromptLimits.Problem(VisitPrompt(_prVisit) with { Tool = "Bash" }));
+        Assert.Equal("a visit request has questions or a tool", PromptLimits.Problem(VisitPrompt(_prVisit) with { Questions = [_storeQuestion] }));
+        Assert.Equal("a question prompt has a visit", PromptLimits.Problem(QuestionPrompt(_storeQuestion) with { Visit = _prVisit }));
+        Assert.Equal(
+            "a permission prompt has a visit",
+            PromptLimits.Problem(new PromptRequest(_repo, "c", "m", "s", PromptKind.Permission, Tool: "Bash", Visit: _prVisit)));
+    }
+
+    // Code review §9.1: one map for the CLI and the server, which throws on a kind it doesn't know.
+    [Theory]
+    [InlineData(PromptKind.Question, SessionState.WaitingOnQuestion)]
+    [InlineData(PromptKind.Permission, SessionState.WaitingOnPermission)]
+    [InlineData(PromptKind.Visit, SessionState.WaitingOnVisit)]
+    public void Each_prompt_kind_has_its_waiting_state(PromptKind kind, SessionState waiting) =>
+        Assert.Equal(waiting, kind.WaitingState());
+
+    [Fact]
+    public void An_unknown_prompt_kind_has_no_waiting_state() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => ((PromptKind)99).WaitingState());
+
+    // Code review §9.3: the one JSON text helper.
+    [Theory]
+    [InlineData("""{ "p": "text" }""", "text", "text")]
+    [InlineData("""{ "p": "  " }""", "  ", null)]
+    [InlineData("""{ "p": "" }""", "", null)]
+    [InlineData("""{ "p": 3 }""", null, null)]
+    [InlineData("""{ "q": "text" }""", null, null)]
+    [InlineData("""["text"]""", null, null)]
+    [InlineData("\"text\"", null, null)]
+    public void Json_text_reads_a_string_property_and_non_blank_also_refuses_blanks(string json, string? text, string? nonBlank)
+    {
+        var element = JsonDocument.Parse(json).RootElement;
+        Assert.Equal((text, nonBlank), (JsonText.Get(element, "p"), JsonText.NonBlank(element, "p")));
+    }
+
+    [Fact]
+    public void Json_text_of_no_element_is_null() =>
+        Assert.Equal((null, null), (JsonText.Get(null, "p"), JsonText.NonBlank(null, "p")));
 }

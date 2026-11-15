@@ -99,7 +99,7 @@ public class TagChangeBridgeTests(PostgresFixture postgres, S3Fixture s3)
 
         Assert.True(result.IsError);
         Assert.Contains("isn't linked to a Project", BridgeHarness.Text(result), StringComparison.Ordinal);
-        Assert.Equal(3, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
+        Assert.Equal(4, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
     }
 
     [Fact]

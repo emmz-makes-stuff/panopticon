@@ -49,7 +49,7 @@ public class ListProjectsBridgeTests(PostgresFixture postgres, S3Fixture s3)
         Assert.True(result.IsError);
         Assert.Contains("PANOPTICON_TOKEN", BridgeHarness.Text(result), StringComparison.Ordinal);
         Assert.Contains("panopticon login", BridgeHarness.Text(result), StringComparison.Ordinal);
-        Assert.Equal(3, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
+        Assert.Equal(4, (await bridge.Client.ListToolsAsync(cancellationToken: Ct)).Count);
     }
 
     [Fact]

@@ -234,14 +234,19 @@ public sealed class ProgressSnapshot
 /// <summary>
 /// One answer given from the dashboard to a session's held prompt (agent-interaction D8, spec remote-answers: Answers
 /// are attributed). A question's row has <see cref="QuestionsJson"/>, its question texts and chosen labels; a
-/// permission prompt's has <see cref="ToolName"/> and <see cref="Outcome"/>. Previews and tool input are never stored.
+/// permission prompt's has <see cref="ToolName"/> and <see cref="Outcome"/> (allow or deny); a visit request's has
+/// <see cref="Url"/> and <see cref="Outcome"/> (done or cant, visit-requests D5). Previews, tool input and visit notes
+/// are never stored.
 /// </summary>
 public sealed class RemoteAnswer
 {
     public const string QuestionKind = "question";
     public const string PermissionKind = "permission";
+    public const string VisitKind = "visit";
     public const string Allow = "allow";
     public const string Deny = "deny";
+    public const string Done = "done";
+    public const string Cant = "cant";
 
     public Guid Id { get; set; }
     public Guid ChangeId { get; set; }
@@ -255,4 +260,7 @@ public sealed class RemoteAnswer
     public string? ToolName { get; set; }
     public string? Outcome { get; set; }
     public string? QuestionsJson { get; set; }
+
+    /// <summary>A visit request's URL.</summary>
+    public string? Url { get; set; }
 }

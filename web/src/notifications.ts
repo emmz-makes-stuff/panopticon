@@ -133,7 +133,9 @@ export function createNotifier(
             body:
               prompt.kind === "question"
                 ? "A question is waiting for you."
-                : `Permission for ${prompt.tool ?? "a tool"} is waiting for you.`,
+                : prompt.kind === "visit"
+                  ? "A visit request is waiting for you."
+                  : `Permission for ${prompt.tool ?? "a tool"} is waiting for you.`,
             // One per prompt, even with the dashboard open in several tabs.
             tag: prompt.promptId,
           },

@@ -65,7 +65,7 @@ public class PublishedCliTests(PostgresFixture postgres, S3Fixture s3)
             new McpClientOptions { ClientInfo = new Implementation { Name = "e2e-agent", Version = "1.0.0" } },
             cancellationToken: Ct);
 
-        Assert.Equal(["list_projects", "report_progress", "tag_change"], (await client.ListToolsAsync(cancellationToken: Ct)).Select(t => t.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(["list_projects", "report_progress", "request_visit", "tag_change"], (await client.ListToolsAsync(cancellationToken: Ct)).Select(t => t.Name).Order(StringComparer.Ordinal));
 
         var result = await client.CallToolAsync("report_progress", new Dictionary<string, object?> { ["change"] = "walking-skeleton" }, cancellationToken: Ct);
 

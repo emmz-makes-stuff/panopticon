@@ -303,4 +303,132 @@ public class PromptAnswerEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Contains(lines, l => l.Contains("\"tool\":\"Bash\"", StringComparison.Ordinal));
         Assert.Contains(lines, l => l.Contains("\"outcome\":\"deny\"", StringComparison.Ordinal));
     }
+
+    // visit-requests: Done or Can't, with a note the session gets and the record never keeps.
+    private const string PrUrl = "https://github.com/emmz/pan/pull/12";
+
+    private static PromptRequest Visit(Guid project, string session = "s-1") =>
+        new(_repo, "team-auth", "vm-1", session, PromptKind.Visit, Project: project.ToString(),
+            Visit: new VisitRequest(PrUrl, "Review the PR", "Approve it if happy"));
+
+    [Fact]
+    public async Task Done_with_a_note_reaches_the_session_and_is_recorded_with_the_url_but_not_the_note()
+    {
+        await using var world = await WorldAsync();
+        var promptId = await AskAsync(world, Visit(world.Tags.Pan));
+
+        using var response = await AnswerAsync(world.Tags.Emmz, promptId, new { visited = true, message = "  approved, merge when green  " });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var entry = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.Equal(("visit", "done", PrUrl), (entry.GetProperty("kind").GetString(), entry.GetProperty("outcome").GetString(), entry.GetProperty("url").GetString()));
+        var answer = (await WaitAsync(world, promptId)).Answer!;
+        Assert.Equal((true, "approved, merge when green", await NameAsync(world, PanopticonFactory.MemberEmail)), (answer.Visited, answer.Message, answer.AnsweredBy));
+        Assert.Null(answer.Allow);
+
+        await using var db = world.Tags.Factory.NewDb();
+        var row = await db.RemoteAnswers.SingleAsync(Ct);
+        Assert.Equal(
+            (RemoteAnswer.VisitKind, RemoteAnswer.Done, PrUrl, (string?)null, (string?)null),
+            (row.Kind, row.Outcome, row.Url, row.ToolName, row.QuestionsJson));
+        Assert.DoesNotContain("approved", entry.GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_Project_owner_answers_cant_with_no_note()
+    {
+        await using var world = await WorldAsync();
+        var promptId = await AskAsync(world, Visit(world.Tags.Pan));
+
+        using var response = await AnswerAsync(world.Bob, promptId, new { visited = false, message = "   " });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var answer = (await WaitAsync(world, promptId)).Answer!;
+        Assert.Equal((false, (string?)null, await NameAsync(world, BobEmail)), (answer.Visited, answer.Message, answer.AnsweredBy));
+        await using var db = world.Tags.Factory.NewDb();
+        Assert.Equal(RemoteAnswer.Cant, (await db.RemoteAnswers.SingleAsync(Ct)).Outcome);
+    }
+
+    [Fact]
+    public async Task An_editor_cant_answer_a_visit_request()
+    {
+        await using var world = await WorldAsync();
+        var promptId = await AskAsync(world, Visit(world.Tags.Pan));
+
+        using var response = await AnswerAsync(world.Tags.Sam, promptId, new { visited = true });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(PromptWaitState.Pending, (await WaitAsync(world, promptId)).State);
+    }
+
+    [Fact]
+    public async Task Visit_answers_that_dont_fit_are_refused_and_visited_fits_nothing_else()
+    {
+        await using var world = await WorldAsync();
+        var visit = await AskAsync(world, Visit(world.Tags.Pan));
+
+        foreach (var bad in new object[]
+        {
+            new { },
+            new { allow = true },
+            new { visited = true, allow = true },
+            new { visited = true, answers = new Dictionary<string, string> { ["Which store?"] = "Memory" } },
+            new { visited = true, message = new string('n', PromptAnswerEndpoints.MaxVisitNoteLength + 1) },
+        })
+        {
+            using var response = await AnswerAsync(world.Tags.Emmz, visit, bad);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        var permission = await AskAsync(world, Permission(world.Tags.Pan) with { SessionId = "s-2" });
+        var question = await AskAsync(world, Question(world.Tags.Pan, _store) with { SessionId = "s-3" });
+        using (var onPermission = await AnswerAsync(world.Tags.Emmz, permission, new { allow = true, visited = true }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, onPermission.StatusCode);
+        }
+
+        using (var onQuestion = await AnswerAsync(world.Tags.Emmz, question, new { answers = new Dictionary<string, string> { ["Which store?"] = "Memory" }, visited = true }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, onQuestion.StatusCode);
+        }
+
+        // A note at the limit is fine.
+        using var ok = await AnswerAsync(world.Tags.Emmz, visit, new { visited = true, message = new string('n', PromptAnswerEndpoints.MaxVisitNoteLength) });
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+    }
+
+    [Fact]
+    public async Task Sams_browser_never_gets_the_url_reason_or_action()
+    {
+        await using var world = await WorldAsync();
+        var changeId = await world.Tags.ReportChangeAsync(TagWorld.Report("team-auth", world.Tags.Pan), Ct);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        using var stream = await world.Tags.Sam.GetAsync(DashboardEndpoints.EventsPath, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        using var reader = new StreamReader(await stream.Content.ReadAsStreamAsync(timeout.Token));
+
+        var visit = await AskAsync(world, Visit(world.Tags.Pan));
+        var cards = await world.Tags.Sam.GetStringAsync(DashboardEndpoints.ChangesPath, Ct);
+        var emmzCards = await world.Tags.Emmz.GetStringAsync(DashboardEndpoints.ChangesPath, Ct);
+        (await AnswerAsync(world.Tags.Emmz, visit, new { visited = true, message = "approved" })).Dispose();
+        var lines = await SseReading.LinesUpToEventAsync(reader, DashboardEndpoints.AnswerRecordedEvent, timeout.Token);
+        var page = await world.Tags.Sam.GetStringAsync($"{DashboardEndpoints.ChangesPath}/{changeId}", Ct);
+
+        foreach (var text in lines.Append(cards).Append(page))
+        {
+            Assert.DoesNotContain("pull/12", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("Review the PR", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("Approve it", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("approved", text, StringComparison.Ordinal);
+        }
+
+        // Sam still sees that Emmz's session needs her to visit a page, and that it was answered.
+        Assert.Contains("\"kind\":\"visit\"", cards, StringComparison.Ordinal);
+        Assert.Contains(lines, l => l.Contains("\"outcome\":\"done\"", StringComparison.Ordinal));
+
+        // The session's member sees it all, and her change page lists the URL.
+        Assert.Contains(PrUrl, emmzCards, StringComparison.Ordinal);
+        var emmzPage = await world.Tags.Emmz.GetFromJsonAsync<JsonElement>($"{DashboardEndpoints.ChangesPath}/{changeId}", Ct);
+        Assert.Equal(PrUrl, emmzPage.GetProperty("answers")[0].GetProperty("url").GetString());
+    }
 }

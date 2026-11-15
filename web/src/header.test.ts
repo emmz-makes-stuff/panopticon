@@ -211,6 +211,37 @@ describe("Browser notifications", () => {
     return { ...started, hold, toggle };
   }
 
+  // Spec live-dashboard: "Needs you", A visit request (the tab title), and Browser notifications.
+  function heldVisit(id: string, promptId: string): SessionView {
+    return heldSession(id, promptId, {
+      state: "waiting-on-visit",
+      prompt: { kind: "visit" },
+      promptDetail: {
+        id: promptId,
+        held: true,
+        askedAt: NOW,
+        visit: { url: "https://github.com/emmz/pan/pull/12", reason: "Review the PR" },
+      },
+    });
+  }
+
+  it("A visit request: counted in the tab title, and its notification says a visit request is waiting", async () => {
+    const notifications = fakeNotifications();
+    const { toggle } = await dashboard(notifications);
+    toggle().click();
+    await until(() => toggle().getAttribute("aria-pressed") === "true");
+
+    FakeEventSource.latest().emit(
+      SESSION_UPDATED,
+      JSON.stringify({ changeId: "tags", session: heldVisit("s1", "v1") }),
+    );
+    await until(() => document.title === "(1) PANOPTICON");
+
+    expect(notifications.shown).toHaveLength(1);
+    expect(notifications.shown[0]?.title).toBe("Needs you: tags");
+    expect(notifications.shown[0]?.options.body).toBe("A visit request is waiting for you.");
+  });
+
   it("Never asked: no permission prompt, and no notification, until the member chooses", async () => {
     const notifications = fakeNotifications();
     const { hold, toggle } = await dashboard(notifications);

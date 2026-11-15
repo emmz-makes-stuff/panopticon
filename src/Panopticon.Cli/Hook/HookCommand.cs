@@ -33,11 +33,7 @@ internal sealed record HookEvent(string EventName, string SessionId, string Cwd,
         }
     }
 
-    private static string? Text(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
-        && !string.IsNullOrWhiteSpace(value.GetString())
-            ? value.GetString()
-            : null;
+    private static string? Text(JsonElement element, string property) => JsonText.NonBlank(element, property);
 }
 
 /// <summary>How long the sync hook waits on a held prompt (agent-interaction D6). Tests shorten these.</summary>
@@ -63,9 +59,11 @@ internal sealed record PromptWaitOptions(TimeSpan HoldLimit, TimeSpan ServerLoss
 /// <item>A question (<c>PreToolUse</c> on <c>AskUserQuestion</c>) or a permission prompt (<c>PermissionRequest</c>) is
 /// posted; when the server holds it, the hook waits for an answer and writes D7's output. Otherwise, and on any
 /// failure, it writes nothing and the terminal asks as usual.</item>
+/// <item>A visit request (<c>PreToolUse</c> on <c>request_visit</c>) is posted and waited on the same way, but it
+/// always writes an allow: with the dashboard's answer, or with none, never with one the agent made up.</item>
 /// </list>
 /// </summary>
-internal sealed class HookCommand(
+internal sealed partial class HookCommand(
     Func<HttpClient> createHttpClient,
     BridgeSettings settings,
     WorktreeLinksFile? links,
@@ -87,6 +85,9 @@ internal sealed class HookCommand(
     /// <summary>When this run began (one run per hook process): the event's <c>OccurredAt</c>, which orders it (F2).</summary>
     private DateTimeOffset _startedAt;
 
+    /// <summary>Whether this run wrote an answer's output (D7), so nothing else may be written.</summary>
+    private bool _answered;
+
     private sealed record Target(AgentApiClient Client, RepoRef Repo, string Change, string? Project);
 
     public async Task<int> RunAsync(TextReader stdin, CancellationToken cancellationToken)
@@ -96,6 +97,7 @@ internal sealed class HookCommand(
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budget.CancelAfter(Budget);
         string? eventName = null;
+        HookEvent? visit = null;
         HttpClient? http = null;
         try
         {
@@ -108,6 +110,7 @@ internal sealed class HookCommand(
 
             eventName = hookEvent.EventName;
             var kind = PromptKindFor(hookEvent);
+            visit = kind == PromptKind.Visit ? hookEvent : null;
             var update = kind is null ? StateFor(hookEvent) : null;
             if (kind is null && update is null)
             {
@@ -144,6 +147,16 @@ internal sealed class HookCommand(
         finally
         {
             http?.Dispose();
+
+            // A visit request the dashboard didn't answer, on any path (off a change, not held, released, a failure),
+            // still runs, but never with an answer the agent made up (code review, §8.2): the tool then reports that
+            // it reached no one.
+            if (visit is not null && !_answered && !cancellationToken.IsCancellationRequested
+                && PromptHookOutput.UnansweredVisit(visit.ToolInput) is { } unanswered)
+            {
+                await stdout.WriteAsync(unanswered);
+                await stdout.FlushAsync(CancellationToken.None);
+            }
         }
 
         return 0;
@@ -159,7 +172,7 @@ internal sealed class HookCommand(
         var tool = hookEvent.ToolName;
         return hookEvent.EventName switch
         {
-            "PreToolUse" when tool is not null and not AskUserQuestion => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
+            "PreToolUse" when tool is not null and not AskUserQuestion && !IsVisitTool(tool) => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
             "PostToolUse" when tool is not null and not AskUserQuestion => (SessionState.Working, ActivitySummary.For(tool, hookEvent.ToolInput)),
             "PostToolUse" => (SessionState.Working, null),
             "UserPromptSubmit" => (SessionState.Working, null),
@@ -172,7 +185,8 @@ internal sealed class HookCommand(
     /// <summary>
     /// The prompt an event raises, or null. A <c>PermissionRequest</c> for <c>AskUserQuestion</c> is ignored: Claude
     /// Code raises one for every question the <c>PreToolUse</c> hook doesn't answer (D1, found in §1), and the
-    /// question is already posted.
+    /// question is already posted. <c>PreToolUse</c> on the bridge's <c>request_visit</c> is a visit request
+    /// (visit-requests D3), and a <c>PermissionRequest</c> for it is ignored too, as the plugin's matchers do.
     /// </summary>
     internal static PromptKind? PromptKindFor(HookEvent hookEvent)
     {
@@ -180,10 +194,21 @@ internal sealed class HookCommand(
         return hookEvent switch
         {
             { EventName: "PreToolUse", ToolName: AskUserQuestion } => PromptKind.Question,
-            { EventName: "PermissionRequest", ToolName: { } tool } when tool != AskUserQuestion => PromptKind.Permission,
+            { EventName: "PreToolUse", ToolName: { } tool } when IsVisitTool(tool) => PromptKind.Visit,
+            { EventName: "PermissionRequest", ToolName: { } tool } when tool != AskUserQuestion && !IsVisitTool(tool) => PromptKind.Permission,
             _ => null,
         };
     }
+
+    /// <summary>
+    /// Whether <paramref name="toolName"/> is the bridge's <c>request_visit</c>, by Claude Code's MCP tool name: the
+    /// plugin's server (<c>mcp__plugin_panopticon_panopticon__request_visit</c>) or a hand-added one
+    /// (<c>mcp__panopticon__request_visit</c>). The plugin's <c>hooks.json</c> uses the same pattern.
+    /// </summary>
+    internal static bool IsVisitTool(string toolName) => VisitToolPattern().IsMatch(toolName);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^mcp__(plugin_panopticon_)?panopticon__request_visit$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex VisitToolPattern();
 
     /// <summary>The server, the repo and the change the event is for; null when the session isn't on a change.</summary>
     private async Task<Target?> ResolveTargetAsync(HookEvent hookEvent, HttpClient http, CancellationToken cancellationToken)
@@ -212,15 +237,27 @@ internal sealed class HookCommand(
     /// </summary>
     private async Task AskAsync(HookEvent hookEvent, PromptKind kind, Target target, CancellationTokenSource budget, CancellationToken cancellationToken)
     {
-        var waiting = kind == PromptKind.Question ? SessionState.WaitingOnQuestion : SessionState.WaitingOnPermission;
+        var waiting = kind.WaitingState();
         var questions = kind == PromptKind.Question ? PromptHookOutput.Questions(hookEvent.ToolInput) : null;
+        var visit = kind == PromptKind.Visit ? PromptHookOutput.Visit(hookEvent.ToolInput) : null;
         var request = new PromptRequest(
-            target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, kind, questions, kind == PromptKind.Permission ? hookEvent.ToolName : null, target.Project, _startedAt);
-        var problem = kind == PromptKind.Question && questions is null
-            ? "its questions can't be read"
-            : PromptLimits.Problem(request);
+            target.Repo, target.Change, settings.MachineName, hookEvent.SessionId, kind, questions, kind == PromptKind.Permission ? hookEvent.ToolName : null, target.Project, _startedAt, visit);
+        var problem = (kind, questions, visit) switch
+        {
+            (PromptKind.Question, null, _) => "its questions can't be read",
+            (PromptKind.Visit, _, null) => "its url and reason can't be read",
+            _ => PromptLimits.Problem(request),
+        };
         if (problem is not null)
         {
+            // A visit request the tool will refuse at once isn't waiting on anyone: the session is just running a tool.
+            if (kind == PromptKind.Visit)
+            {
+                await SendAsync(hookEvent, target, SessionState.Working, ActivitySummary.For(hookEvent.ToolName!, hookEvent.ToolInput), budget.Token);
+                log.Write($"hook {hookEvent.EventName}: this visit request wasn't sent to the dashboard: {problem}.");
+                return;
+            }
+
             await SendAsync(hookEvent, target, waiting, null, budget.Token);
             log.Write($"hook {hookEvent.EventName}: this prompt went to the terminal, not the dashboard: {problem}.");
             return;
@@ -253,6 +290,7 @@ internal sealed class HookCommand(
 
         if (answer is not null && PromptHookOutput.For(kind, hookEvent.ToolInput, answer) is { } output)
         {
+            _answered = true;
             await stdout.WriteAsync(output);
             await stdout.FlushAsync(cancellationToken);
         }

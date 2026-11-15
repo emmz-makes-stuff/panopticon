@@ -713,6 +713,21 @@ body {
   color: var(--ink-muted);
 }
 
+/* A visit request: the action under the reason, then the URL in full, which may be long. */
+.prompt-visit-action,
+.prompt-visit-url {
+  margin: 0;
+}
+
+.prompt-visit-link {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.prompt-visit-hint {
+  color: var(--ink-muted);
+}
+
 .prompt-status:empty {
   display: none;
 }
@@ -755,6 +770,7 @@ body {
 
 .prompt-form .prompt-send,
 .prompt-form .prompt-allow,
+.prompt-form .prompt-done,
 .prompt-form .prompt-toggle[aria-pressed="true"] {
   border-color: var(--ink);
   background: var(--ink);

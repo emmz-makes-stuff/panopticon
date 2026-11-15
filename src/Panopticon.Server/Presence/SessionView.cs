@@ -44,14 +44,17 @@ public sealed record SessionPrompt(PromptKind Kind, string? Tool = null);
 /// <summary>
 /// The part of a prompt only those who may answer see (D5; spec remote-answers, What others see of a prompt).
 /// <see cref="Held"/> false means "answer in the terminal". A permission prompt's <see cref="Preview"/> arrives only
-/// once it's held (spec remote-answers, Permission input stays local unless held).
+/// once it's held (spec remote-answers, Permission input stays local unless held). A visit request's
+/// <see cref="Visit"/> (its URL, reason and action) is here, never on <see cref="SessionPrompt"/> (spec remote-answers,
+/// What others see of a visit request).
 /// </summary>
 public sealed record PromptDetail(
     Guid Id,
     bool Held,
     DateTimeOffset AskedAt,
     IReadOnlyList<PromptQuestionView>? Questions = null,
-    string? Preview = null);
+    string? Preview = null,
+    VisitRequest? Visit = null);
 
 /// <summary>A question as the dashboard's form shows it (spec remote-answers, Question forms).</summary>
 public sealed record PromptQuestionView(string Question, string Header, IReadOnlyList<PromptOptionView> Options, bool MultiSelect)
@@ -88,4 +91,5 @@ public sealed record PromptSnapshot(
     PromptKind Kind,
     IReadOnlyList<PromptQuestion>? Questions,
     string? Tool,
-    bool Answerable);
+    bool Answerable,
+    VisitRequest? Visit = null);
