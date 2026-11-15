@@ -15,6 +15,9 @@ public static class ChangeEndpoints
     /// <summary>The history's filter choices, among archived changes (filters-and-idle-cards D5).</summary>
     public const string HistoryFiltersPath = "/api/history/filters";
 
+    /// <summary>The Repos page: repos with their active and archived changes (repos-page D1; spec: repos).</summary>
+    public const string ReposPath = "/api/repos";
+
     public static string ChangePath(Guid id) => $"/api/changes/{id}";
 
     public static string DocumentPath(Guid id, string path) => $"/api/changes/{id}/documents/{path}";
@@ -68,6 +71,12 @@ public static class ChangeEndpoints
             HistoryFiltersPath,
             async (Viewer viewer, ChangePages pages, CancellationToken cancellationToken) =>
                 TypedResults.Ok(await pages.HistoryChoicesAsync(viewer, cancellationToken)))
+            .RequireAuthorization(AuthPolicies.Member);
+
+        endpoints.MapGet(
+            ReposPath,
+            async (Viewer viewer, ChangePages pages, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await pages.ReposAsync(viewer, cancellationToken)))
             .RequireAuthorization(AuthPolicies.Member);
 
         return endpoints;

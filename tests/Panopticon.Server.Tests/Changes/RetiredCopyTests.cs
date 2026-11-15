@@ -42,6 +42,12 @@ public class RetiredCopyTests(PostgresFixture postgres, S3Fixture s3)
         Assert.Equal("2026-11-10-cleanup", archived.GetProperty("archiveFolder").GetString());
         Assert.False(archived.TryGetProperty("linkedTo", out var none) && none.ValueKind != JsonValueKind.Null);
 
+        // The Repos page shows PAN's cleanup only, not the copy (spec repos, "A retired copy").
+        var repo = Assert.Single((await emmz.GetFromJsonAsync<JsonElement>(ChangeEndpoints.ReposPath, Ct)).GetProperty("repos").EnumerateArray());
+        var shown = Assert.Single(repo.GetProperty("archived").EnumerateArray());
+        Assert.Equal((archived.GetProperty("changeId").GetGuid(), "PAN"), (shown.GetProperty("changeId").GetGuid(), shown.GetProperty("project").GetProperty("code").GetString()));
+        Assert.Equal(0, repo.GetProperty("moreArchived").GetInt32());
+
         // One finished change, PAN's, for Emmz and Kit alike; the copy is Emmz's alone, and isn't counted.
         Assert.Equal(1, (await emmz.GetFromJsonAsync<JsonElement>(MetricsEndpoints.MetricsPath, Ct)).GetProperty("changes").GetInt32());
         Assert.Equal(1, (await kit.GetFromJsonAsync<JsonElement>(MetricsEndpoints.MetricsPath, Ct)).GetProperty("changes").GetInt32());

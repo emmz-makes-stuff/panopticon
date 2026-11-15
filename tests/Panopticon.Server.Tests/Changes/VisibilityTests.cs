@@ -77,6 +77,10 @@ public class VisibilityTests(PostgresFixture postgres, S3Fixture s3)
         Assert.DoesNotContain(cards.EnumerateArray(), c => c.GetProperty("changeId").GetGuid() == active);
         var history = await world.Kit.GetFromJsonAsync<JsonElement>(ChangeEndpoints.HistoryPath, Ct);
         Assert.Equal(["pan-done"], history.GetProperty("changes").EnumerateArray().Select(c => c.GetProperty("change").GetString()));
+        var repos = await world.Kit.GetFromJsonAsync<JsonElement>(ChangeEndpoints.ReposPath, Ct);
+        var repo = Assert.Single(repos.GetProperty("repos").EnumerateArray());
+        Assert.Equal(["pan-work"], repo.GetProperty("active").EnumerateArray().Select(c => c.GetProperty("change").GetString()));
+        Assert.Equal(["pan-done"], repo.GetProperty("archived").EnumerateArray().Select(c => c.GetProperty("change").GetString()));
         var filtered = await world.Kit.GetFromJsonAsync<JsonElement>($"{ChangeEndpoints.HistoryPath}?machine=acme-vm", Ct);
         Assert.Empty(filtered.GetProperty("changes").EnumerateArray());
         var filteredMetrics = await world.Kit.GetFromJsonAsync<JsonElement>($"{MetricsEndpoints.MetricsPath}?machine=acme-vm", Ct);
@@ -93,6 +97,7 @@ public class VisibilityTests(PostgresFixture postgres, S3Fixture s3)
             DashboardEndpoints.ChangesPath,
             ChangeEndpoints.HistoryPath,
             ChangeEndpoints.HistoryFiltersPath,
+            ChangeEndpoints.ReposPath,
             MetricsEndpoints.MetricsPath,
             .. shared.SelectMany(id => new[] { ChangeEndpoints.ChangePath(id), MetricsEndpoints.ChangeMetricsPath(id) }),
         ];
