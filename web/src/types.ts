@@ -231,6 +231,41 @@ export interface HistoryEntry {
   personalTags: PersonalTagRef[];
 }
 
+/** An active change on the Repos page (repos-page D1). */
+export interface RepoActiveChange {
+  changeId: string;
+  change: string;
+  project: CardProject | null;
+  personal: boolean;
+  /** ISO 8601. */
+  lastReportedAt: string;
+}
+
+/** An archived change on the Repos page (repos-page D1). */
+export interface RepoArchivedChange {
+  changeId: string;
+  change: string;
+  project: CardProject | null;
+  personal: boolean;
+  /** ISO 8601. */
+  archivedAt: string;
+}
+
+/** One repo on the Repos page: its active changes, then its five newest archived ones, and how many more there are. */
+export interface RepoSummary {
+  repo: CardRepo;
+  /** ISO 8601. */
+  latestActivityAt: string;
+  active: RepoActiveChange[];
+  archived: RepoArchivedChange[];
+  moreArchived: number;
+}
+
+/** `GET /api/repos` (spec repos): every repo with a change the member can see, newest activity first. */
+export interface RepoList {
+  repos: RepoSummary[];
+}
+
 /** `GET /api/history`: newest archive first; `nextBefore` is the next page's cursor, or null on the last page. */
 export interface HistoryPage {
   changes: HistoryEntry[];

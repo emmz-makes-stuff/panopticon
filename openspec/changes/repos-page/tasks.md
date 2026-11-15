@@ -13,8 +13,8 @@
 
 ## 3. Dashboard: the Repos page
 
-- [ ] 3.1 Add the `/api/repos` types and `fetchRepos` to `web/src/types.ts` and `web/src/api.ts`, and the view `web/src/views/repos.ts` (design D5). Route it at `/repos` in `shell.ts`, and add the header link after History. Verify with `views/repos.test.ts` through `startTestShell`: the "Repos list" scenarios (ordering within a repo, route links to `/changes/<id>`, repo links, the empty state, signed out and returning to `/repos`), "3 more in History" linking to `/history?repo=…`, and the "Opening the Repos page" scenario from the header.
-- [ ] 3.2 Add the Repos page to `web/DESIGN.md` (its section, and Repos in the header list), and a Repos section to `docs/using.md` (what the page shows, and that repo names link to the repo's web page). Verify the header list in DESIGN.md matches `shell.ts`, and `docs/using.md` matches the `repos` spec.
+- [x] 3.1 Add the `/api/repos` types and `fetchRepos` to `web/src/types.ts` and `web/src/api.ts`, and the view `web/src/views/repos.ts` (design D5). Route it at `/repos` in `shell.ts`, and add the header link after History. Verify with `views/repos.test.ts` through `startTestShell`: the "Repos list" scenarios (ordering within a repo, route links to `/changes/<id>`, repo links, the empty state, signed out and returning to `/repos`), "3 more in History" linking to `/history?repo=…`, and the "Opening the Repos page" scenario from the header.
+- [x] 3.2 Add the Repos page to `web/DESIGN.md` (its section, and Repos in the header list), and a Repos section to `docs/using.md` (what the page shows, and that repo names link to the repo's web page). Verify the header list in DESIGN.md matches `shell.ts`, and `docs/using.md` matches the `repos` spec.
 
 ## 4. Look and feel (human verification)
 

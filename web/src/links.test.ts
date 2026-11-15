@@ -41,11 +41,38 @@ describe("repoWebUrl", () => {
   });
 });
 
+describe("repoWebUrl with a host that isn't a plain hostname", () => {
+  it.each([
+    "github.com@evil.example",
+    "evil.example/github.com",
+    "evil.example#github.com",
+    "evil.example?github.com",
+    "github.com:8443",
+    "evil.example\\github.com",
+    "",
+    "-bad.example",
+  ])("gives no link for %j", (host) => {
+    expect(repoWebUrl({ host, owner: "emmz", name: "panopticon" })).toBeNull();
+  });
+
+  it("makes plain text, not a link", () => {
+    const text = repoLink(
+      { host: "github.com@evil.example", owner: "emmz", name: "panopticon" },
+      "card-repo-name",
+    );
+    expect([text.tagName, text.className, text.textContent]).toEqual([
+      "SPAN",
+      "card-repo-name",
+      "emmz/panopticon",
+    ]);
+  });
+});
+
 describe("repoLink", () => {
   const link = repoLink(
     { host: "github.com", owner: "emmz-makes-stuff", name: "panopticon" },
     "card-repo-name",
-  );
+  ) as HTMLAnchorElement;
 
   it("shows owner/name and links to the repo's page in a new tab", () => {
     expect(link.textContent).toBe("emmz-makes-stuff/panopticon");

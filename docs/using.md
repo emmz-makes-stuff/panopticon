@@ -1,7 +1,7 @@
 # Using Panopticon
 
 How members sign in, organise work into Projects and tags, connect their agents, and read the dashboard, change
-pages, history and metrics. Connecting an agent in more depth is in [`cli.md`](cli.md).
+pages, history, repos and metrics. Connecting an agent in more depth is in [`cli.md`](cli.md).
 
 ## The first sign-in
 
@@ -131,6 +131,18 @@ When `/opsx:archive` moves the folder to `openspec/changes/archive/`, a running 
 change notices, and reports it as archived. The card leaves the dashboard, and the change appears on the History
 page, newest first, with its documents as they were when it was archived. If no bridge was running, the next report
 of that change name archives it instead. How the bridge finds archives is in [`docs/cli.md`](cli.md#archives).
+
+## Repos
+
+The **Repos** page lists every repo with a change you can see, the one with the newest report or archive first.
+Under each repo are its active changes, newest report first, then its five most recently archived ones. If it has
+more, "N more in History" opens the history filtered to that repo. The page loads when you open it, so reload it to
+see newer work.
+
+Wherever a repo's `owner/name` appears (on cards, history rows, change pages, the metrics and the Repos page), it
+links to the repo's own page, such as GitHub or Azure DevOps, in a new tab. The link is built from the host, owner
+and name the CLI reported, so a self-hosted server on a custom port, or one served only over `http`, gets a link that
+may not open. A host that isn't a plain hostname shows as text, with no link.
 
 ## Metrics
 

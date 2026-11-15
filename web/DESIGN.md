@@ -115,7 +115,7 @@ is cool rather than cream.
   (no underline, no link colour), and the logo is decorative. On the dashboard, the live state follows, pushed right: a `--spark` dot and "Live", or a
   hollow dot and "Offline, reconnecting…" while disconnected, with the number of changes beside it. Other
   pages leave that slot empty. When signed in, the account sits last: your display name (600), then
-  Projects, Members, History, Metrics, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,
+  Projects, Members, History, Repos, Metrics, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,
   with the account on its own line.
 - **Empty dashboard:** "No agents have reported yet." Below it, one line: connect one with the panopticon
   CLI, then ask it to report progress on a change. Then the two commands in a copyable block:
@@ -356,6 +356,13 @@ Devlog            ┃
   underline: enough to read as a link, not enough to compete with the change name. The host stays plain
   text before it. There's no hover effect (principle 4), and the title says "Open `owner/name` on `host`".
   The filter choices stay plain filters.
+- **Repos:** one section per repo, newest activity first, with 2rem between them. The heading (Gabarito 700,
+  20px) is the host in small muted body text, then the `owner/name` repo link. Under it, rows between
+  hairlines, like History: the change name (700, no underline) as its route link, then in small muted text
+  the plate (or "Personal") and "Reported 2h ago" or "Archived 7 Nov 2026". Active changes come first and show
+  no bars, since the dashboard has those. A repo with more than five archived changes ends with a muted
+  "3 more in History" row, a `--rule`-underlined link to History filtered to that repo. Empty: "No repos
+  yet.", and a muted line on where they come from. It loads once per visit, like History.
 
 ## Filters and quiet cards
 

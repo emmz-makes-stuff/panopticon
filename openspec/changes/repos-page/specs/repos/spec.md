@@ -66,7 +66,8 @@ filter choices SHALL stay plain filters, with no link.
 ### Requirement: Repo web addresses
 A repo's web address SHALL be built from its stored host, owner and name over `https`. For `dev.azure.com` and any host
 ending in `.visualstudio.com` it SHALL be `https://<host>/<owner>/_git/<name>`. For every other host it SHALL be
-`https://<host>/<owner>/<name>`. Each segment of the owner and the name SHALL be URL-encoded.
+`https://<host>/<owner>/<name>`. Each segment of the owner and the name SHALL be URL-encoded. A host that isn't a
+plain hostname SHALL get no link, and its owner and name SHALL show as plain text.
 
 #### Scenario: Azure DevOps
 - **WHEN** the repo is `dev.azure.com`, owner `cpointrepos/SMART-NOVA`, name `NOVA-INFRA`
@@ -79,6 +80,10 @@ ending in `.visualstudio.com` it SHALL be `https://<host>/<owner>/_git/<name>`. 
 #### Scenario: A segment that needs encoding
 - **WHEN** the repo's name is `my repo`
 - **THEN** the link's last segment is `my%20repo`
+
+#### Scenario: A host that could open another site
+- **WHEN** a report gave the host as `github.com@evil.example`
+- **THEN** the repo's owner and name show as plain text, with no link
 
 ### Requirement: Repos in the header
 The header SHALL link to the Repos page, after History.
