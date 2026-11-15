@@ -48,13 +48,13 @@ host, owner and name.
 - **THEN** repo B is listed before repo A
 
 ### Requirement: Archived changes on the Repos page
-Each repo SHALL show at most its five most recently archived changes. A repo with more SHALL say how many more there
-are, and link to History filtered to that repo. A personal copy retired by linking (spec change-history, Retired copies
+Each repo SHALL show at most its five most recently archived changes. A repo with more SHALL link to History filtered
+to that repo, saying how many archived changes History will list for it, retired copies included. A personal copy retired by linking (spec change-history, Retired copies
 in the history) SHALL NOT appear on the Repos page.
 
 #### Scenario: More than five archived
-- **WHEN** a repo has eight archived changes
-- **THEN** it shows the five most recently archived, then "3 more in History", linking to
+- **WHEN** a repo has eight archived changes and one retired copy
+- **THEN** it shows the five most recently archived, then "All 9 in History", linking to
   `/history?repo=<host>/<owner>/<name>`
 
 #### Scenario: A retired copy
@@ -72,10 +72,10 @@ filter choices SHALL stay plain filters, with no link.
   change name still links to the change page
 
 ### Requirement: Repo web addresses
-A repo's web address SHALL be built from its stored host, owner and name over `https`. For `dev.azure.com` and any host
-ending in `.visualstudio.com` it SHALL be `https://<host>/<owner>/_git/<name>`. For every other host it SHALL be
-`https://<host>/<owner>/<name>`. Each segment of the owner and the name SHALL be URL-encoded. A host that isn't a
-plain hostname SHALL get no link, and its owner and name SHALL show as plain text.
+A repo's web address SHALL be built from its stored host, owner and name over `https`, with the host lowercased. For
+`dev.azure.com` and any host ending in `.visualstudio.com` it SHALL be `https://<host>/<owner>/_git/<name>`; the old
+SSH host `vs-ssh.visualstudio.com` with owner `v3/<org>/<project>` SHALL use `<org>.visualstudio.com` and owner
+`<project>`. For every other host it SHALL be `https://<host>/<owner>/<name>`. Each segment SHALL be URL-encoded.
 
 #### Scenario: Azure DevOps
 - **WHEN** the repo is `dev.azure.com`, owner `cpointrepos/SMART-NOVA`, name `NOVA-INFRA`
@@ -89,8 +89,24 @@ plain hostname SHALL get no link, and its owner and name SHALL show as plain tex
 - **WHEN** the repo's name is `my repo`
 - **THEN** the link's last segment is `my%20repo`
 
+#### Scenario: A mixed-case Azure DevOps host
+- **WHEN** a report gave the host as `Dev.Azure.com`
+- **THEN** it links to `https://dev.azure.com/<owner>/_git/<name>`
+
+#### Scenario: The old Azure DevOps SSH host
+- **WHEN** the repo is `vs-ssh.visualstudio.com`, owner `v3/cpoint/SMART-NOVA`, name `NOVA-INFRA`
+- **THEN** it links to `https://cpoint.visualstudio.com/SMART-NOVA/_git/NOVA-INFRA`
+
+### Requirement: Repos that get no link
+A repo whose host isn't a plain hostname, or whose owner or name has a `.` or `..` segment, SHALL get no link: its
+owner and name SHALL show as plain text.
+
 #### Scenario: A host that could open another site
 - **WHEN** a report gave the host as `github.com@evil.example`
+- **THEN** the repo's owner and name show as plain text, with no link
+
+#### Scenario: A dot segment
+- **WHEN** a report gave the name as `..`
 - **THEN** the repo's owner and name show as plain text, with no link
 
 ### Requirement: Repos in the header

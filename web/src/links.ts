@@ -15,22 +15,41 @@ function isAzureDevOps(host: string): boolean {
 const HOSTNAME =
   /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
 
+/** The old Azure DevOps SSH host, whose remotes read `vs-ssh.visualstudio.com:v3/<org>/<project>/<repo>`. */
+const OLD_AZURE_SSH = "vs-ssh.visualstudio.com";
+
+/**
+ * The host and owner segments a repo's web page lives at: the stored ones, lowercasing the host (the online MCP
+ * endpoint stores whatever a reporter sends), except that the old Azure DevOps SSH host's `v3/<org>/…` owner moves
+ * `<org>` into the host. The CLI renames only `ssh.dev.azure.com`, so those remotes arrive as they were (repos-page D2).
+ */
+function webLocation(repo: CardRepo): { host: string; owner: string[] } {
+  const host = repo.host.toLowerCase();
+  const owner = repo.owner.split("/");
+  if (host === OLD_AZURE_SSH && owner[0] === "v3" && owner.length >= 3 && owner[1]) {
+    return { host: `${owner[1].toLowerCase()}.visualstudio.com`, owner: owner.slice(2) };
+  }
+
+  return { host, owner };
+}
+
 /**
  * The repo's web page (spec repos, Repo web addresses; repos-page D2), built from its stored host, owner and name:
  * `https://<host>/<owner>/_git/<name>` on Azure DevOps, `https://<host>/<owner>/<name>` everywhere else. Each owner
  * segment and the name are encoded.
  *
- * The host is whatever a reporter sent, so anything but a plain hostname (`github.com@evil.example`,
- * `evil.example/github.com`) gets no link, rather than one that reads as one repo and opens another site: null.
+ * The host and path are whatever a reporter sent, so a host that isn't a plain hostname (`github.com@evil.example`,
+ * `evil.example/github.com`), or a `.` or `..` segment that the browser would resolve to another path, gets no link
+ * rather than one that reads as one repo and opens something else: null (spec repos, Repos that get no link).
  */
 export function repoWebUrl(repo: CardRepo): string | null {
-  if (!HOSTNAME.test(repo.host)) {
+  const { host, owner } = webLocation(repo);
+  if (!HOSTNAME.test(host) || [...owner, repo.name].some((s) => s === "." || s === "..")) {
     return null;
   }
 
-  const owner = repo.owner.split("/").map(encodeURIComponent).join("/");
+  const path = owner.map(encodeURIComponent).join("/");
   const name = encodeURIComponent(repo.name);
-  const path = isAzureDevOps(repo.host) ? `${owner}/_git/${name}` : `${owner}/${name}`;
-  const url = `https://${repo.host}/${path}`;
-  return new URL(url).hostname === repo.host.toLowerCase() ? url : null;
+  const url = `https://${host}/${isAzureDevOps(host) ? `${path}/_git/${name}` : `${path}/${name}`}`;
+  return new URL(url).hostname === host ? url : null;
 }

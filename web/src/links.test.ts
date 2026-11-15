@@ -41,6 +41,48 @@ describe("repoWebUrl", () => {
   });
 });
 
+// spec repos, Repo web addresses (review fixes, §6).
+describe("repoWebUrl, Azure DevOps hosts as reported", () => {
+  it("matches a mixed-case Azure host and lowercases it in the link", () => {
+    expect(
+      repoWebUrl({ host: "Dev.Azure.com", owner: "cpointrepos/SMART-NOVA", name: "NOVA-INFRA" }),
+    ).toBe("https://dev.azure.com/cpointrepos/SMART-NOVA/_git/NOVA-INFRA");
+  });
+
+  it("moves the old SSH host's v3/<org> into <org>.visualstudio.com", () => {
+    expect(
+      repoWebUrl({
+        host: "vs-ssh.visualstudio.com",
+        owner: "v3/cpoint/SMART-NOVA",
+        name: "NOVA-INFRA",
+      }),
+    ).toBe("https://cpoint.visualstudio.com/SMART-NOVA/_git/NOVA-INFRA");
+  });
+
+  it("leaves a vs-ssh owner without v3/ as it is", () => {
+    expect(
+      repoWebUrl({ host: "vs-ssh.visualstudio.com", owner: "SMART-NOVA", name: "NOVA-INFRA" }),
+    ).toBe("https://vs-ssh.visualstudio.com/SMART-NOVA/_git/NOVA-INFRA");
+  });
+});
+
+// spec repos, Repos that get no link: "A dot segment".
+describe("repoWebUrl with a dot segment", () => {
+  it.each([
+    { owner: "emmz", name: ".." },
+    { owner: "emmz", name: "." },
+    { owner: "a/../../x", name: "repo" },
+  ])("gives no link for $owner/$name", ({ owner, name }) => {
+    expect(repoWebUrl({ host: "github.com", owner, name })).toBeNull();
+  });
+
+  it("still links a name that merely contains dots", () => {
+    expect(repoWebUrl({ host: "github.com", owner: "emmz", name: "my.repo" })).toBe(
+      "https://github.com/emmz/my.repo",
+    );
+  });
+});
+
 describe("repoWebUrl with a host that isn't a plain hostname", () => {
   it.each([
     "github.com@evil.example",

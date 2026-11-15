@@ -34,15 +34,16 @@ The response is `{ repos: RepoSummary[] }`, where each summary is:
 
 ```
 { repo: { host, owner, name },
-  latestActivityAt,
-  active:   [{ changeId, change, project, personal, lastReportedAt }],
+  active:   [{ changeId, change, project, personal, lastReportedAt, overall }],
   archived: [{ changeId, change, project, personal, archivedAt }],
-  moreArchived }
+  historyCount }
 ```
 
-The server runs two queries under `VisibleTo(viewer)`: active changes, and archived changes without retired copies (the
-same exclusion the metrics use). It groups both by repo, keeps the five newest archived per repo, counts the rest into
-`moreArchived`, and sorts as the spec says. It lives next to `HistoryAsync` in `ChangePages` and is mapped in
+The server runs three bounded queries under the viewer's visibility (review fixes, §7): the active changes; the five
+newest archived per repo, without retired copies (the same exclusion the metrics use), by `ROW_NUMBER() OVER (PARTITION
+BY repo_id ORDER BY archived_at DESC, id DESC)`; and a count per repo of every archived change History would list for
+the viewer, retired copies included. That count is `historyCount`, so "All N in History" matches what the History link
+shows. Repos are sorted by their latest report or archive, computed on the server (no field in the response). It lives next to `HistoryAsync` in `ChangePages` and is mapped in
 `ChangeEndpoints`.
 
 *Alternative:* the browser merges `/api/changes` with the history. History is paged 50 at a time, so the browser would
@@ -51,19 +52,22 @@ and it counts exactly.
 
 *Alternative:* a `repo` dimension on `/api/history`. That gives archived changes only, and a flat page, not groups.
 
-The archived query fetches only the columns the summary needs. A per-repo "top five" in SQL (a window function) isn't
-worth it at this scale: one member's visible archive is hundreds of rows, not millions. If that changes, the endpoint
-can move to `ROW_NUMBER()` without changing its contract.
+The first version read every visible change and kept five per repo in memory. The review flagged that its cost grows
+with every archive ever made, and Emmz chose to bound it now.
 
 ### D2. `repoWebUrl(repo)` in `web/src/links.ts` (null for a host that isn't a plain hostname)
 
 ```
-dev.azure.com, *.visualstudio.com  -->  https://<host>/<owner…>/_git/<name>
-any other host                     -->  https://<host>/<owner…>/<name>
+dev.azure.com, *.visualstudio.com          -->  https://<host>/<owner…>/_git/<name>
+vs-ssh.visualstudio.com, owner v3/<org>/…  -->  https://<org>.visualstudio.com/<…>/_git/<name>
+any other host                             -->  https://<host>/<owner…>/<name>
 ```
 
-Each `/`-separated owner segment and the name go through `encodeURIComponent`. The host is used as stored, since the CLI
-already lowercased it and dropped user info and the port. The rule lives in the browser, not the API, because it's pure
+Each `/`-separated owner segment and the name go through `encodeURIComponent`, and a `.` or `..` segment means no
+link. The host is lowercased: the CLI already does, but the online MCP endpoint stores whatever a reporter sends. The CLI
+renames only `ssh.dev.azure.com`, so the old `vs-ssh.visualstudio.com:v3/<org>/<project>/<repo>` remotes keep that host
+and a `v3/<org>` owner prefix; the browser maps those (review fixes, §6) rather than the CLI, since changing the CLI's
+normalisation would split existing repos into new identities. The rule lives in the browser, not the API, because it's pure
 presentation over data the browser already has: the cards, History and metrics need no contract change.
 
 *Alternative:* the CLI sends the remote's web URL. It knows the original URL, but that means a contract and CLI release
