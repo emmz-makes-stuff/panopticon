@@ -55,7 +55,7 @@ The archived query fetches only the columns the summary needs. A per-repo "top f
 worth it at this scale: one member's visible archive is hundreds of rows, not millions. If that changes, the endpoint
 can move to `ROW_NUMBER()` without changing its contract.
 
-### D2. `repoWebUrl(repo)` in `web/src/links.ts`
+### D2. `repoWebUrl(repo)` in `web/src/links.ts` (null for a host that isn't a plain hostname)
 
 ```
 dev.azure.com, *.visualstudio.com  -->  https://<host>/<owner…>/_git/<name>
@@ -69,11 +69,16 @@ presentation over data the browser already has: the cards, History and metrics n
 *Alternative:* the CLI sends the remote's web URL. It knows the original URL, but that means a contract and CLI release
 for data we can derive, and old reports would have no link.
 
-### D3. `repoLink(repo, text)` in `web/src/dom.ts`
+### D3. `repoLink(repo, className)` in `web/src/dom.ts`
 
-This makes an `<a class="repo-link" href=… target="_blank" rel="noopener noreferrer">` with `title="Open <owner>/<name>
-on <host>"`. It's an ordinary link, not a `data-route` one, so the router leaves it alone. Every view calls it in place of
-its plain `owner/name` span, keeping the span's existing class for layout.
+This makes an `<a class="<className> repo-link" href=… target="_blank" rel="noopener noreferrer">` showing `owner/name`,
+with `title="Open <owner>/<name> on <host>"`, `aria-label="<owner>/<name>, opens in a new tab"` and a decorative
+external-link arrow (`aria-hidden`, Emmz in §4). It's an ordinary link, not a `data-route` one, so the router leaves it
+alone. Every view calls it in place of its plain `owner/name` span, keeping the span's existing class for layout.
+
+When `repoWebUrl` answers null (a host that isn't a plain hostname: a security review in §3), it makes a plain
+`<span class="<className>">` with the same text instead, so a hand-made report can't make a link that reads as one repo
+and opens another site.
 
 - **Card:** `owner/name` on the repo line becomes the link. The host line stays text with its plate. The change name
   stays the card's only route link (change-documents-and-history D11).
@@ -96,6 +101,21 @@ the change name as a route link (Gabarito 700, like History), the Project plate 
 no other state. The cards page has the bars. With `moreArchived > 0`, the list ends with a route link "N more in History"
 to `/history?repo=<host>/<owner>/<name>` (the `repoValue` form the History filter already reads). Empty, loading and
 error states follow History's.
+
+### D6. Repo cards and progress on active rows (Emmz, §4, 2026-11-15)
+
+In the browser, the first version read as one undifferentiated list: repos, active changes and archived changes
+looked alike. Emmz chose colour through the existing vocabulary, not a new accent:
+
+- Each repo is a card, like a dashboard card: the `--card` surface, a hairline `--rule` border and a 6px radius. Repos
+  separate by shape (principle 2: type and light boxes, no shadows).
+- Each active row carries the change's whole-change lit-cell bar and count, from the same `renderProgressBar` as the
+  cards, so the only colour on the page is teal progress. That keeps `--lit` meaning progress (principle 1). Archived
+  rows stay muted text with no bar, so active work stands out without a new colour.
+- `RepoActiveChange` gains `overall` (`CardProgress`), read from the change's snapshot in the same query.
+
+*Alternatives offered:* status dots (teal for active, hollow for archived), which would stretch teal from "progress" to
+"active"; and a new repo-accent token, which would add a fifth accent to a deliberately sparse palette.
 
 ## Risks / Trade-offs
 

@@ -231,7 +231,7 @@ export interface HistoryEntry {
   personalTags: PersonalTagRef[];
 }
 
-/** An active change on the Repos page (repos-page D1). */
+/** An active change on the Repos page (repos-page D1, D6). */
 export interface RepoActiveChange {
   changeId: string;
   change: string;
@@ -239,6 +239,8 @@ export interface RepoActiveChange {
   personal: boolean;
   /** ISO 8601. */
   lastReportedAt: string;
+  /** Whole-change progress, as its card has it. */
+  overall: Progress;
 }
 
 /** An archived change on the Repos page (repos-page D1). */

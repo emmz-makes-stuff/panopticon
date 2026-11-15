@@ -4,8 +4,12 @@ using Panopticon.Server.Projects;
 
 namespace Panopticon.Server.Changes;
 
-/// <summary>An active change on the Repos page (repos-page D1): its name, its Project or that it's personal, and its last report.</summary>
-public sealed record RepoActiveChange(Guid ChangeId, string Change, CardProject? Project, bool Personal, DateTimeOffset LastReportedAt);
+/// <summary>
+/// An active change on the Repos page (repos-page D1, D6): its name, its Project or that it's personal, its last report,
+/// and its whole-change progress, as its card has it.
+/// </summary>
+public sealed record RepoActiveChange(
+    Guid ChangeId, string Change, CardProject? Project, bool Personal, DateTimeOffset LastReportedAt, CardProgress Overall);
 
 /// <summary>An archived change on the Repos page (repos-page D1).</summary>
 public sealed record RepoArchivedChange(Guid ChangeId, string Change, CardProject? Project, bool Personal, DateTimeOffset ArchivedAt);
@@ -51,6 +55,8 @@ public sealed partial class ChangePages
                 c.ArchivedAt,
                 Project = c.Project == null ? null : new CardProject(c.Project.Id, c.Project.Code, c.Project.Name),
                 Personal = c.OwnerMemberId != null,
+                c.Snapshot.OverallDone,
+                c.Snapshot.OverallTotal,
             })
             .ToListAsync(cancellationToken);
 
@@ -63,7 +69,7 @@ public sealed partial class ChangePages
                     .Where(r => r.ArchivedAt == null)
                     .OrderByDescending(r => r.LastReportedAt)
                     .ThenByDescending(r => r.Id)
-                    .Select(r => new RepoActiveChange(r.Id, r.Name, r.Project, r.Personal, r.LastReportedAt))
+                    .Select(r => new RepoActiveChange(r.Id, r.Name, r.Project, r.Personal, r.LastReportedAt, new CardProgress(r.OverallDone, r.OverallTotal)))
                     .ToList();
                 var archived = group
                     .Where(r => r.ArchivedAt != null)

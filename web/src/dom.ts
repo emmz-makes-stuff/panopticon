@@ -145,5 +145,26 @@ export function repoLink(repo: CardRepo, className?: string): HTMLAnchorElement 
   link.target = "_blank";
   link.rel = "noopener noreferrer";
   link.title = `Open ${repo.owner}/${repo.name} on ${repo.host}`;
+  // Read aloud as "owner/name, opens in a new tab"; the arrow is only for the eye (repos-page D4).
+  link.setAttribute("aria-label", `${text}, opens in a new tab`);
+  link.append(externalMark());
   return link;
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** A small arrow out of a box: the link leaves the dashboard. Decorative, drawn in the text colour. */
+function externalMark(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "external-mark");
+  svg.setAttribute("viewBox", "0 0 12 12");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute(
+    "d",
+    "M7 1.5h3.5V5M10.5 1.5 5.5 6.5M9 7.5v2.5a.5.5 0 0 1-.5.5h-6.5a.5.5 0 0 1-.5-.5v-6.5a.5.5 0 0 1 .5-.5H5",
+  );
+  svg.append(path);
+  return svg;
 }

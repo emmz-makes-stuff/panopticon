@@ -18,4 +18,10 @@
 
 ## 4. Look and feel (human verification)
 
-- [ ] 4.1 Build the web bundle and run the server locally with a few changes reported across two repos, one of them on `dev.azure.com`, and one with more than five archived changes. Give Emmz a copy-pasteable recipe. Verify with Emmz in a real browser: the Repos page's layout in light and dark, the repo links' look on the cards, History, the change page and metrics, and that the links open the right GitHub and Azure DevOps pages in a new tab. Record her answers in a devlog note.
+- [x] 4.1 Build the web bundle and run the server locally with a few changes reported across two repos, one of them on `dev.azure.com`, and one with more than five archived changes. Give Emmz a copy-pasteable recipe. Verify with Emmz in a real browser: the Repos page's layout in light and dark, the repo links' look on the cards, History, the change page and metrics, and that the links open the right GitHub and Azure DevOps pages in a new tab. Record her answers in a devlog note.
+
+## 5. Look and feel: progress and repo cards (Emmz's §4 feedback)
+
+- [x] 5.1 Add `overall` (done and total, as the cards have it) to each active change in `GET /api/repos` (design D6). Verify with `RepoEndpointTests`: an active change's `overall` matches its tasks, and archived changes have none.
+- [x] 5.2 On the Repos page, make each repo a card (the `--card` surface, hairline border, small radius) and give each active row its whole-change lit-cell bar and count (D6). Archived rows stay muted text. Update DESIGN.md's Repos bullet. Verify with `views/repos.test.ts`: an active row has a `progressbar` with its done and total, and an archived row has none. Then check again with Emmz in the browser.
+- [x] 5.3 End each repo link with a small decorative external-link arrow (`aria-hidden`), and name the link "owner/name, opens in a new tab" for screen readers (Emmz, §4). Update DESIGN.md's "Repo links" rule. Verify in `links.test.ts`: the mark is there and hidden, and the accessible name says it opens a new tab.

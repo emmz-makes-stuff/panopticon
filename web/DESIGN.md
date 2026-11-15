@@ -354,13 +354,17 @@ Devlog            ┃
   metrics page's slowest sections and the Repos page), it links to the repo's own web page, such as GitHub or
   Azure DevOps, in a new tab. It keeps its spot's colour and weight, and gets the header links' `--rule`
   underline: enough to read as a link, not enough to compete with the change name. The host stays plain
-  text before it. There's no hover effect (principle 4), and the title says "Open `owner/name` on `host`".
+  text before it. A small arrow out of a box follows it (0.7em, in the link's colour at 75%, hidden from screen readers), and the
+  link is named "`owner/name`, opens in a new tab" for them. There's no hover effect (principle 4), and the title says
+  "Open `owner/name` on `host`".
   The filter choices stay plain filters.
-- **Repos:** one section per repo, newest activity first, with 2rem between them. The heading (Gabarito 700,
-  20px) is the host in small muted body text, then the `owner/name` repo link. Under it, rows between
-  hairlines, like History: the change name (700, no underline) as its route link, then in small muted text
-  the plate (or "Personal") and "Reported 2h ago" or "Archived 7 Nov 2026". Active changes come first and show
-  no bars, since the dashboard has those. A repo with more than five archived changes ends with a muted
+- **Repos:** one card per repo (the `--card` surface, hairline border, 6px radius, like a dashboard card),
+  newest activity first, 1.25rem apart. The heading is the host on its own line in small muted body text,
+  then the `owner/name` repo link (Gabarito 700, 20px). Under it, rows between hairlines: the change name
+  (700, no underline) as its route link, then in small muted text the plate (or "Personal") and "Reported 2h
+  ago" or "Archived 7 Nov 2026". Active rows carry the whole-change lit-cell bar and count on the right
+  (stacked under the name on phones), so teal progress is the page's only colour. Archived rows are muted
+  (name 600 in `--ink-muted`) with no bar, so active work stands out (repos-page D6). A repo with more than five archived changes ends with a muted
   "3 more in History" row, a `--rule`-underlined link to History filtered to that repo. Empty: "No repos
   yet.", and a muted line on where they come from. It loads once per visit, like History.
 

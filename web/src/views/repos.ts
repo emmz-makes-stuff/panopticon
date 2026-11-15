@@ -4,6 +4,7 @@ import { repoValue } from "../filters";
 import { calendarDate, relativeTime } from "../format";
 import { changeHref } from "../links";
 import { leadingProjectLabel } from "../projectLabel";
+import { renderProgressBar } from "../progressBar";
 import type { View } from "../router";
 import type { Env } from "../shell";
 import type { RepoActiveChange, RepoArchivedChange, RepoSummary } from "../types";
@@ -67,6 +68,8 @@ function repoSection(summary: RepoSummary, now: Date): HTMLElement {
         change,
         `Reported ${relativeTime(change.lastReportedAt, now)}`,
         change.lastReportedAt,
+        // Only active work carries colour: its lit cells (repos-page D6).
+        renderProgressBar("Whole change", change.overall, `${change.change} progress`),
       ),
     ),
     ...summary.archived.map((change) =>
@@ -103,14 +106,20 @@ function changeItem(
   change: RepoActiveChange | RepoArchivedChange,
   when: string,
   at: string,
+  bar?: HTMLElement,
 ): HTMLLIElement {
   const time = el("time", "repo-change-when", when);
   time.dateTime = at;
   return el(
     "li",
-    "repo-change",
-    routeLink(changeHref(change.changeId), change.change, "repo-change-link"),
-    el("span", "repo-change-meta", ...leadingProjectLabel(change), time),
+    bar ? "repo-change" : "repo-change repo-change--archived",
+    el(
+      "div",
+      "repo-change-main",
+      routeLink(changeHref(change.changeId), change.change, "repo-change-link"),
+      el("span", "repo-change-meta", ...leadingProjectLabel(change), time),
+    ),
+    bar,
   );
 }
 

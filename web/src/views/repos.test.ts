@@ -16,6 +16,7 @@ const panopticon: RepoSummary = {
       project: PAN,
       personal: false,
       lastReportedAt: "2026-11-08T10:00:00Z",
+      overall: { done: 7, total: 8 },
     },
   ],
   archived: [
@@ -66,7 +67,10 @@ describe("repos page", () => {
     expect(heading()).toBe("Repos");
     expect(sections(root)[0]).toEqual({
       heading: "github.com emmz-makes-stuff/panopticon",
-      changes: ["repos-pagePAN Reported 2h ago", "visit-requestsPersonal Archived 7 Nov 2026"],
+      changes: [
+        "repos-pagePAN Reported 2h agoWhole change7/8 (88%)",
+        "visit-requestsPersonal Archived 7 Nov 2026",
+      ],
     });
     const links = [
       ...root.querySelectorAll<HTMLAnchorElement>("section.repo"),
@@ -75,6 +79,22 @@ describe("repos page", () => {
       ["/changes/rp", ""],
       ["/changes/vr", ""],
     ]);
+  });
+
+  // spec repos, "An active change shows its progress"; design D6.
+  it("An active change shows its lit-cell progress, and an archived one no bar", async () => {
+    const { root } = await startTestShell("/repos", reposServer([panopticon]));
+    await until(() => sections(root).length === 1);
+
+    const [active, archived] = [...root.querySelectorAll<HTMLElement>(".repo-change")];
+    const bar = active?.querySelector<HTMLElement>("[role=progressbar]");
+    expect([bar?.getAttribute("aria-valuenow"), bar?.getAttribute("aria-valuemax")]).toEqual([
+      "7",
+      "8",
+    ]);
+    expect(active?.querySelectorAll(".cell.lit")).toHaveLength(7);
+    expect(archived?.classList.contains("repo-change--archived")).toBe(true);
+    expect(archived?.querySelector("[role=progressbar]")).toBeNull();
   });
 
   it("each repo's name links to its web page in a new tab", async () => {

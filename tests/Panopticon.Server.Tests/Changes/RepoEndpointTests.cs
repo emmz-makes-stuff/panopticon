@@ -100,6 +100,34 @@ public class RepoEndpointTests(PostgresFixture postgres, S3Fixture s3)
         Assert.DoesNotContain("NOVA-INFRA", await sam.GetStringAsync(ChangeEndpoints.ReposPath, Ct), StringComparison.Ordinal);
     }
 
+    // spec repos, "Active change progress on the Repos page"; design D6.
+    [Fact]
+    public async Task An_active_change_carries_its_whole_change_progress_and_an_archived_one_none()
+    {
+        await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
+        using var emmz = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
+        const string sevenOfEight = "## 1. One\n- [x] 1.1\n- [x] 1.2\n- [x] 1.3\n- [x] 1.4\n## 2. Two\n- [x] 2.1\n- [x] 2.2\n- [x] 2.3\n- [ ] 2.4\n";
+        await using (var mcp = await factory.CreateMcpClientAsync(Ct))
+        {
+            foreach (var (change, archive) in new[] { ("repos-page", (string?)null), ("logo", null), ("logo", "2026-11-12-logo") })
+            {
+                var report = new ReportProgressArguments(
+                    new RepoRef("github.com", "emmz-makes-stuff", "panopticon"), change, new AgentRef("claude-code", "vm-1"), sevenOfEight)
+                {
+                    Archive = archive,
+                };
+                var result = await mcp.CallToolAsync(ContractsAssembly.ReportProgressToolName, report.ToToolArguments(), cancellationToken: Ct);
+                Assert.NotEqual(true, result.IsError);
+            }
+        }
+
+        var repo = Assert.Single(await ReposAsync(emmz));
+
+        var overall = Assert.Single(repo.GetProperty("active").EnumerateArray()).GetProperty("overall");
+        Assert.Equal((7, 8), (overall.GetProperty("done").GetInt32(), overall.GetProperty("total").GetInt32()));
+        Assert.False(Assert.Single(repo.GetProperty("archived").EnumerateArray()).TryGetProperty("overall", out _));
+    }
+
     [Fact]
     public async Task With_no_change_the_list_is_empty()
     {

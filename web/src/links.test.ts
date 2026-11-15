@@ -82,6 +82,12 @@ describe("repoLink", () => {
     expect(link.title).toBe("Open emmz-makes-stuff/panopticon on github.com");
   });
 
+  it("ends with a decorative external mark, and says it opens a new tab", () => {
+    const mark = link.querySelector("svg.external-mark");
+    expect(mark?.getAttribute("aria-hidden")).toBe("true");
+    expect(link.getAttribute("aria-label")).toBe("emmz-makes-stuff/panopticon, opens in a new tab");
+  });
+
   it("keeps the caller's class and isn't a route link", () => {
     expect([...link.classList]).toEqual(["card-repo-name", "repo-link"]);
     expect(link.dataset["route"]).toBeUndefined();

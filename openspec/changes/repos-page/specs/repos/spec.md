@@ -30,6 +30,14 @@ its change page, its Project's code (or that it's personal), and when it last re
 - **WHEN** someone without a session opens the Repos page
 - **THEN** the API answers 401, and the app shows the sign-in page and then returns to the Repos page
 
+### Requirement: Active change progress on the Repos page
+Each active change on the Repos page SHALL show its whole-change progress as a lit-cell bar with its count, as its card
+does. Archived changes SHALL show no bar.
+
+#### Scenario: An active change shows its progress
+- **WHEN** `repos-page` has 7 of its 8 tasks done
+- **THEN** its row shows a bar with 7 of 8 cells lit and "7/8 (88%)", and archived rows show no bar
+
 ### Requirement: Repos order
 Repos SHALL be listed by their latest activity, newest first. A repo's latest activity is the latest of its active
 changes' last reports and its archived changes' archive times. Repos with the same latest activity SHALL be ordered by
