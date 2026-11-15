@@ -1,7 +1,7 @@
 import { answerList, withAnswer } from "../answerList";
 import { leadingProjectLabel } from "../projectLabel";
 import { tagPicker } from "../tagPicker";
-import { ApiError, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
+import { ApiError, failureText, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
 import { el, page, repoLink, routeLink } from "../dom";
 import { agentName, calendarDate, relativeTime } from "../format";
 import { changeHref } from "../links";
@@ -43,9 +43,6 @@ const GROUPS: readonly { title: string; kinds: readonly DocumentKind[] }[] = [
   { title: "Devlog", kinds: ["devlog"] },
   { title: "Other files", kinds: ["meta", "other"] },
 ];
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
  * `/changes/<id>` (spec change-documents, design D11): the change's header, its documents as route links

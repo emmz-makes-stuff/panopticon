@@ -1,4 +1,4 @@
-import { ApiError, fetchHistoryChoices, fetchMetrics } from "../api";
+import { ApiError, failureText, fetchHistoryChoices, fetchMetrics } from "../api";
 import { renderBarChart } from "../charts";
 import { alertLine, button, el, page, repoLink, routeLink } from "../dom";
 import { createFilterBar, noMatch } from "../filterBar";
@@ -28,9 +28,6 @@ const NO_CHOICES: FilterChoices = {
   personal: false,
   tags: [],
 };
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /** A week's label on the chart and in its table, e.g. "2 Nov" (UTC, as the weeks are). */
 export function weekLabel(iso: string): string {

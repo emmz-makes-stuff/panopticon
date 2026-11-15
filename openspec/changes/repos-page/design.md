@@ -102,8 +102,8 @@ It's routed at `/repos` in `shell.ts` and linked in the header after History. It
 a `section` with an `h2` that holds the host (muted text) and the `owner/name` repo link. Under it is a list of changes:
 the change name as a route link (Gabarito 700, like History), the Project plate or "Personal", then "Reported 2h ago"
 (the same relative time as the cards) or "Archived 14 Nov 2026" (the same date format as History). Active changes show
-no other state. The cards page has the bars. With `moreArchived > 0`, the list ends with a route link "N more in History"
-to `/history?repo=<host>/<owner>/<name>` (the `repoValue` form the History filter already reads). Empty, loading and
+no other state. The cards page has the bars. When `historyCount` is more than the archived changes shown, the list ends with a route link "All N in
+History" (N = `historyCount`) to `/history?repo=<host>/<owner>/<name>` (the `repoValue` form the History filter already reads). Empty, loading and
 error states follow History's.
 
 ### D6. Repo cards and progress on active rows (Emmz, §4, 2026-11-15)

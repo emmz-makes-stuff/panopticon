@@ -46,7 +46,8 @@ public class RetiredCopyTests(PostgresFixture postgres, S3Fixture s3)
         var repo = Assert.Single((await emmz.GetFromJsonAsync<JsonElement>(ChangeEndpoints.ReposPath, Ct)).GetProperty("repos").EnumerateArray());
         var shown = Assert.Single(repo.GetProperty("archived").EnumerateArray());
         Assert.Equal((archived.GetProperty("changeId").GetGuid(), "PAN"), (shown.GetProperty("changeId").GetGuid(), shown.GetProperty("project").GetProperty("code").GetString()));
-        Assert.Equal(0, repo.GetProperty("moreArchived").GetInt32());
+        // History lists both, the copy included, so the count is 2 (repos-page D1).
+        Assert.Equal(2, repo.GetProperty("historyCount").GetInt32());
 
         // One finished change, PAN's, for Emmz and Kit alike; the copy is Emmz's alone, and isn't counted.
         Assert.Equal(1, (await emmz.GetFromJsonAsync<JsonElement>(MetricsEndpoints.MetricsPath, Ct)).GetProperty("changes").GetInt32());

@@ -1,4 +1,4 @@
-import { ApiError } from "../api";
+import { failureText } from "../api";
 import { alertLine, button, el, field, page, routeLink } from "../dom";
 import { calendarDate } from "../format";
 import type { View } from "../router";
@@ -15,9 +15,6 @@ export interface Member {
 
 /** Display names are 1 to 50 characters after trimming (server: MemberNames.MaxLength). */
 export const DISPLAY_NAME_MAX = 50;
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
  * `/members` (spec team-members): everyone who shares a Project with you, and renaming yourself. Initial members see

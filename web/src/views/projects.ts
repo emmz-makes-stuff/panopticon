@@ -1,4 +1,4 @@
-import { ApiError, type Api } from "../api";
+import { ApiError, failureText, type Api } from "../api";
 import { alertLine, button, copyRow, el, field, page, routeLink, selectField } from "../dom";
 import { PROJECT_TAGS_CHANGED, parseProjectTagsChange, type EventSourceLike } from "../live";
 import { codePlate } from "../projectLabel";
@@ -69,9 +69,6 @@ const roleText = (role: ProjectRole) => ROLES.find(([value]) => value === role)?
 
 /** "an owner", "an editor", "a viewer". */
 const aRole = (role: ProjectRole) => `${role === "viewer" ? "a" : "an"} ${role}`;
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /** The `.panopticon.json` that links a repo to the Project (cli-bridge, "Linking a repo to a Project"). */
 export const linkFile = (projectId: string) =>

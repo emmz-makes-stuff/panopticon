@@ -1,6 +1,6 @@
 import { leadingProjectLabel } from "../projectLabel";
 import { tagChips } from "../tagChips";
-import { ApiError, fetchHistory, fetchHistoryChoices } from "../api";
+import { ApiError, failureText, fetchHistory, fetchHistoryChoices } from "../api";
 import { alertLine, button, el, page, repoLink, routeLink } from "../dom";
 import { createFilterBar, noMatch } from "../filterBar";
 import {
@@ -39,9 +39,6 @@ const NO_CHOICES: FilterChoices = {
   personal: false,
   tags: [],
 };
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
  * `/history` (spec change-history, design D11): archived changes, the most recently archived first, each opening its

@@ -8,6 +8,8 @@ namespace Panopticon.Server.Tests.Infrastructure;
 /// The cookie container judges expiry by the real clock, so a cookie set under a <see cref="ManualClock"/> date would
 /// otherwise expire when real time passes that date (on 2026-11-15 every session cookie set at the 2026-11-08 start
 /// did). The server still checks its own expiry, so a test that advances the clock past a session's end is unchanged.
+/// It moves only <c>Expires</c>. A <c>Max-Age</c> is already a distance from now, so it needs no move, but a cookie
+/// with both is judged by <c>Max-Age</c>, whatever <c>Expires</c> says.
 /// </summary>
 public sealed partial class ServerClockCookieHandler(TimeProvider serverClock) : DelegatingHandler
 {

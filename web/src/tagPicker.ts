@@ -1,4 +1,4 @@
-import { ApiError } from "./api";
+import { failureText } from "./api";
 import { alertLine, button, el } from "./dom";
 import type { Env } from "./shell";
 import { ordinal } from "./filters";
@@ -7,9 +7,6 @@ import { tagChips, tagText } from "./tagChips";
 import { parseTag, sameTag } from "./tagSyntax";
 import type { ChangeCard } from "./types";
 import type { ProjectDetails, ProjectTag } from "./views/projects";
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
  * The change page's tags (tags D4, D9; web/DESIGN.md "Tags"): the chips, and for the Project's owners and editors an

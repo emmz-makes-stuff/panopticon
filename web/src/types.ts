@@ -253,14 +253,15 @@ export interface RepoArchivedChange {
   archivedAt: string;
 }
 
-/** One repo on the Repos page: its active changes, then its five newest archived ones, and how many more there are. */
+/**
+ * One repo on the Repos page: its active changes, then its five newest archived ones. `historyCount` is how many archived
+ * changes History lists for the repo, retired copies included (repos-page D1).
+ */
 export interface RepoSummary {
   repo: CardRepo;
-  /** ISO 8601. */
-  latestActivityAt: string;
   active: RepoActiveChange[];
   archived: RepoArchivedChange[];
-  moreArchived: number;
+  historyCount: number;
 }
 
 /** `GET /api/repos` (spec repos): every repo with a change the member can see, newest activity first. */

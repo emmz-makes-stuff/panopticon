@@ -8,7 +8,6 @@ const PAN = { id: "p1", code: "PAN", name: "Panopticon" };
 
 const panopticon: RepoSummary = {
   repo: { host: "github.com", owner: "emmz-makes-stuff", name: "panopticon" },
-  latestActivityAt: "2026-11-08T10:00:00Z",
   active: [
     {
       changeId: "rp",
@@ -28,12 +27,11 @@ const panopticon: RepoSummary = {
       archivedAt: "2026-11-07T09:00:00Z",
     },
   ],
-  moreArchived: 0,
+  historyCount: 1,
 };
 
 const novaInfra: RepoSummary = {
   repo: { host: "dev.azure.com", owner: "cpointrepos/SMART-NOVA", name: "NOVA-INFRA" },
-  latestActivityAt: "2026-11-06T09:00:00Z",
   active: [],
   archived: [1, 2, 3, 4, 5].map((day) => ({
     changeId: `n${day}`,
@@ -42,7 +40,7 @@ const novaInfra: RepoSummary = {
     personal: false,
     archivedAt: `2026-11-0${day}T09:00:00Z`,
   })),
-  moreArchived: 3,
+  historyCount: 9,
 };
 
 const reposServer = (repos: RepoSummary[]) =>
@@ -112,18 +110,35 @@ describe("repos page", () => {
     ]);
   });
 
-  it("More than five archived: the rest are a link to History filtered to the repo", async () => {
+  it('More than five archived: "All 9 in History" links to History filtered to the repo', async () => {
     const { root, nav } = await startTestShell("/repos", reposServer([novaInfra]));
     await until(() => sections(root).length === 1);
 
     const more = q<HTMLAnchorElement>(root, ".repo-more a");
-    expect(more.textContent).toBe("3 more in History");
+    expect(more.textContent).toBe("All 9 in History");
     expect(more.getAttribute("href")).toBe(
       "/history?repo=dev.azure.com%2Fcpointrepos%2FSMART-NOVA%2FNOVA-INFRA",
     );
     expect(root.querySelectorAll(".repo-change")).toHaveLength(5);
     click(more);
     await until(() => nav.path() === "/history");
+  });
+
+  it('A retired copy: History lists it, so one shown change ends with "All 2 in History"', async () => {
+    const { root } = await startTestShell(
+      "/repos",
+      reposServer([{ ...panopticon, historyCount: 2 }]),
+    );
+    await until(() => sections(root).length === 1);
+
+    expect(q<HTMLAnchorElement>(root, ".repo-more a").textContent).toBe("All 2 in History");
+  });
+
+  it("Every archived change shown: no History link", async () => {
+    const { root } = await startTestShell("/repos", reposServer([panopticon]));
+    await until(() => sections(root).length === 1);
+
+    expect(root.querySelector(".repo-more")).toBeNull();
   });
 
   it("Nothing reported yet: an empty state says where repos come from", async () => {

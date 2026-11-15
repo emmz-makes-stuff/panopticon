@@ -364,8 +364,8 @@ Devlog            ┃
   (700, no underline) as its route link, then in small muted text the plate (or "Personal") and "Reported 2h
   ago" or "Archived 7 Nov 2026". Active rows carry the whole-change lit-cell bar and count on the right
   (stacked under the name on phones), so teal progress is the page's only colour. Archived rows are muted
-  (name 600 in `--ink-muted`) with no bar, so active work stands out (repos-page D6). A repo with more than five archived changes ends with a muted
-  "3 more in History" row, a `--rule`-underlined link to History filtered to that repo. Empty: "No repos
+  (name 600 in `--ink-muted`) with no bar, so active work stands out (repos-page D6). A repo with more archived changes than it shows ends with a muted
+  "All 9 in History" row (the count is History's own, retired copies included), a `--rule`-underlined link to History filtered to that repo. Empty: "No repos
   yet.", and a muted line on where they come from. It loads once per visit, like History.
 
 ## Filters and quiet cards

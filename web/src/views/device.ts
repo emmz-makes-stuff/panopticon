@@ -1,4 +1,4 @@
-import { ApiError } from "../api";
+import { ApiError, failureText } from "../api";
 import { alertLine, button, el, field, page } from "../dom";
 import type { View } from "../router";
 import type { Env } from "../shell";
@@ -96,9 +96,7 @@ export function deviceView(env: Env): View {
 
           approve.disabled = false;
           deny.disabled = false;
-          error.show(
-            failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.",
-          );
+          error.show(failureText(failure));
         },
       );
     }

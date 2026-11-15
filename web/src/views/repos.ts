@@ -1,4 +1,4 @@
-import { ApiError, fetchRepos } from "../api";
+import { ApiError, failureText, fetchRepos } from "../api";
 import { alertLine, button, el, page, repoLink, routeLink } from "../dom";
 import { repoValue } from "../filters";
 import { calendarDate, relativeTime } from "../format";
@@ -8,9 +8,6 @@ import { renderProgressBar } from "../progressBar";
 import type { View } from "../router";
 import type { Env } from "../shell";
 import type { RepoActiveChange, RepoArchivedChange, RepoSummary } from "../types";
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
  * `/repos` (spec repos, repos-page D5): every repo with a change the member can see, newest activity first. Under
@@ -76,14 +73,15 @@ function repoSection(summary: RepoSummary, now: Date): HTMLElement {
       changeItem(change, `Archived ${calendarDate(change.archivedAt)}`, change.archivedAt),
     ),
   );
-  if (summary.moreArchived > 0) {
-    // The rest are in History, filtered to this repo (spec repos, "More than five archived").
+  if (summary.historyCount > summary.archived.length) {
+    // History, filtered to this repo, has them all (spec repos, "More than five archived"). The count is History's own,
+    // so it matches what that page lists (repos-page D1).
     const query = new URLSearchParams({ repo: repoValue(summary.repo) }).toString();
     changes.append(
       el(
         "li",
         "repo-more",
-        routeLink(`/history?${query}`, `${summary.moreArchived} more in History`),
+        routeLink(`/history?${query}`, `All ${summary.historyCount} in History`),
       ),
     );
   }

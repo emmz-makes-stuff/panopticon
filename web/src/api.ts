@@ -28,6 +28,10 @@ export class ApiError extends Error {
   }
 }
 
+/** What to tell the member when a call fails: the server's message, or that it couldn't be reached. */
+export const failureText = (failure: unknown): string =>
+  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
+
 export interface Api {
   get<T>(path: string): Promise<T>;
   /** Resolves to the JSON body, or `undefined` for an empty answer (204). */

@@ -48,8 +48,9 @@ host, owner and name.
 - **THEN** repo B is listed before repo A
 
 ### Requirement: Archived changes on the Repos page
-Each repo SHALL show at most its five most recently archived changes. A repo with more SHALL link to History filtered
-to that repo, saying how many archived changes History will list for it, retired copies included. A personal copy retired by linking (spec change-history, Retired copies
+Each repo SHALL show at most its five most recently archived changes. A repo whose History lists more archived changes
+than it shows SHALL link to History filtered to that repo, saying how many archived changes History will list for it,
+retired copies included. A personal copy retired by linking (spec change-history, Retired copies
 in the history) SHALL NOT appear on the Repos page.
 
 #### Scenario: More than five archived
@@ -59,7 +60,8 @@ in the history) SHALL NOT appear on the Repos page.
 
 #### Scenario: A retired copy
 - **WHEN** Emmz's personal `cleanup` was retired because `PAN` already had `cleanup`
-- **THEN** the Repos page shows `PAN`'s `cleanup` under the repo, and not the retired copy
+- **THEN** the Repos page shows `PAN`'s `cleanup` under the repo, and not the retired copy, then "All 2 in History",
+  since History lists both (Emmz, 2026-11-15)
 
 ### Requirement: Repo links
 Wherever the dashboard shows a repo's owner and name (the cards, History rows, the change page, the metrics page's

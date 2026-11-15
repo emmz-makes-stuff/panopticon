@@ -34,8 +34,8 @@ public class RepoEndpointTests(PostgresFixture postgres, S3Fixture s3)
             (identity.GetProperty("host").GetString(), identity.GetProperty("owner").GetString(), identity.GetProperty("name").GetString()));
         Assert.Equal(["repos-page", "older-work"], Names(repo, "active"));
         Assert.Equal(["visit-requests", "logo"], Names(repo, "archived"));
-        Assert.Equal(_day.AddHours(2), repo.GetProperty("latestActivityAt").GetDateTimeOffset());
-        Assert.Equal(0, repo.GetProperty("moreArchived").GetInt32());
+        Assert.Equal(2, repo.GetProperty("historyCount").GetInt32());
+        Assert.False(repo.TryGetProperty("latestActivityAt", out _));
 
         var active = repo.GetProperty("active")[0];
         Assert.Equal(_day.AddHours(2), active.GetProperty("lastReportedAt").GetDateTimeOffset());
@@ -60,17 +60,20 @@ public class RepoEndpointTests(PostgresFixture postgres, S3Fixture s3)
     }
 
     [Fact]
-    public async Task A_repo_shows_its_five_newest_archived_changes_and_counts_the_rest()
+    public async Task A_repo_shows_its_five_newest_archived_changes_and_counts_all_that_History_lists()
     {
         await using var factory = await PanopticonFactory.CreateAsync(postgres, s3, Ct);
         using var browser = await factory.CreateSignedInClientAsync(cancellationToken: Ct);
         await SeedAsync(factory, ("github.com", "emmz", "panopticon"),
             [.. Enumerable.Range(0, 8).Select(i => ($"done-{i}", _day.AddDays(i), (DateTimeOffset?)_day.AddDays(i)))]);
+        // A retired copy of the viewer's, newer than all of them: History lists it, so it counts, but it isn't shown.
+        var pan = await browser.CreateProjectAsync("PAN", Ct);
+        await SeedRetiredCopyAsync(factory, ("github.com", "emmz", "panopticon"), await factory.MemberIdAsync(cancellationToken: Ct), pan, _day.AddDays(10));
 
         var repo = Assert.Single(await ReposAsync(browser));
 
         Assert.Equal(["done-7", "done-6", "done-5", "done-4", "done-3"], Names(repo, "archived"));
-        Assert.Equal(3, repo.GetProperty("moreArchived").GetInt32());
+        Assert.Equal(9, repo.GetProperty("historyCount").GetInt32());
         Assert.Empty(repo.GetProperty("active").EnumerateArray());
     }
 
@@ -189,6 +192,27 @@ public class RepoEndpointTests(PostgresFixture postgres, S3Fixture s3)
             });
         }
 
+        await db.SaveChangesAsync(Ct);
+    }
+
+    // A personal change of the member's in a repo SeedAsync made, archived and retired to the Project (projects D4).
+    private static async Task SeedRetiredCopyAsync(
+        PanopticonFactory factory, (string Host, string Owner, string Name) identity, Guid owner, Guid project, DateTimeOffset archivedAt)
+    {
+        await using var db = factory.NewDb();
+        var repo = db.Repos.Single(r => r.Host == identity.Host && r.Owner == identity.Owner && r.Name == identity.Name);
+        db.Changes.Add(new Change
+        {
+            Id = Guid.NewGuid(),
+            RepoId = repo.Id,
+            Name = "retired-copy",
+            NameKey = "retired-copy",
+            Snapshot = new ProgressSnapshot(),
+            OwnerMemberId = owner,
+            RetiredToProjectId = project,
+            LastReportedAt = archivedAt,
+            ArchivedAt = archivedAt,
+        });
         await db.SaveChangesAsync(Ct);
     }
 }
