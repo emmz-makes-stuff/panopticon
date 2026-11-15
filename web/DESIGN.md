@@ -115,7 +115,7 @@ is cool rather than cream.
   (no underline, no link colour), and the logo is decorative. On the dashboard, the live state follows, pushed right: a `--spark` dot and "Live", or a
   hollow dot and "Offline, reconnecting…" while disconnected, with the number of changes beside it. Other
   pages leave that slot empty. When signed in, the account sits last: your display name (600), then
-  Projects, Members, History, Metrics, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,
+  Projects, Members, History, Repos, Metrics, Tokens and Sign out as small muted links with a `--rule` underline. On phones the header wraps,
   with the account on its own line.
 - **Empty dashboard:** "No agents have reported yet." Below it, one line: connect one with the panopticon
   CLI, then ask it to report progress on a change. Then the two commands in a copyable block:
@@ -350,6 +350,23 @@ Devlog            ┃
   outlined button. Empty: "No changes have been archived yet", and a muted line on where they come from.
 - **Cards:** the change name is the card's link. It keeps its look (no link colour or underline), and the
   focus ring shows it.
+- **Repo links:** wherever a repo's `owner/name` appears (the cards, History rows, the change page, the
+  metrics page's slowest sections and the Repos page), it links to the repo's own web page, such as GitHub or
+  Azure DevOps, in a new tab. It keeps its spot's colour and weight, and gets the header links' `--rule`
+  underline: enough to read as a link, not enough to compete with the change name. The host stays plain
+  text before it. A small arrow out of a box follows it (0.7em, in the link's colour at 75%, hidden from screen readers), and the
+  link is named "`owner/name`, opens in a new tab" for them. There's no hover effect (principle 4), and the title says
+  "Open `owner/name` on `host`".
+  The filter choices stay plain filters.
+- **Repos:** one card per repo (the `--card` surface, hairline border, 6px radius, like a dashboard card),
+  newest activity first, 1.25rem apart. The heading is the host on its own line in small muted body text,
+  then the `owner/name` repo link (Gabarito 700, 20px). Under it, rows between hairlines: the change name
+  (700, no underline) as its route link, then in small muted text the plate (or "Personal") and "Reported 2h
+  ago" or "Archived 7 Nov 2026". Active rows carry the whole-change lit-cell bar and count on the right
+  (stacked under the name on phones), so teal progress is the page's only colour. Archived rows are muted
+  (name 600 in `--ink-muted`) with no bar, so active work stands out (repos-page D6). A repo with more archived changes than it shows ends with a muted
+  "All 9 in History" row (the count is History's own, retired copies included), a `--rule`-underlined link to History filtered to that repo. Empty: "No repos
+  yet.", and a muted line on where they come from. It loads once per visit, like History.
 
 ## Filters and quiet cards
 

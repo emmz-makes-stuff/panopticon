@@ -1,8 +1,8 @@
 import { answerList, withAnswer } from "../answerList";
 import { leadingProjectLabel } from "../projectLabel";
 import { tagPicker } from "../tagPicker";
-import { ApiError, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
-import { el, page, routeLink } from "../dom";
+import { ApiError, failureText, fetchChange, fetchChangeMetrics, fetchDocument } from "../api";
+import { el, page, repoLink, routeLink } from "../dom";
 import { agentName, calendarDate, relativeTime } from "../format";
 import { changeHref } from "../links";
 import {
@@ -43,9 +43,6 @@ const GROUPS: readonly { title: string; kinds: readonly DocumentKind[] }[] = [
   { title: "Devlog", kinds: ["devlog"] },
   { title: "Other files", kinds: ["meta", "other"] },
 ];
-
-const failureText = (failure: unknown) =>
-  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 /**
  * `/changes/<id>` (spec change-documents, design D11): the change's header, its documents as route links
@@ -170,7 +167,7 @@ export function changeView(env: Env): View {
         ...leadingProjectLabel(card),
         el("span", "change-host", card.repo.host),
         " ",
-        el("span", "change-repo-name", `${card.repo.owner}/${card.repo.name}`),
+        repoLink(card.repo, "change-repo-name"),
       );
       const when = changePage.archivedAt
         ? el("p", "change-when archived", `Archived ${calendarDate(changePage.archivedAt)}`)

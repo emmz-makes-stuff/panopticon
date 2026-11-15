@@ -5,6 +5,7 @@ import type {
   ChangePage,
   HistoryPage,
   RenderedDocument,
+  RepoList,
   TeamMetrics,
 } from "./types";
 
@@ -26,6 +27,10 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+/** What to tell the member when a call fails: the server's message, or that it couldn't be reached. */
+export const failureText = (failure: unknown): string =>
+  failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.";
 
 export interface Api {
   get<T>(path: string): Promise<T>;
@@ -138,6 +143,11 @@ export function fetchChangeMetrics(api: Api, changeId: string): Promise<ChangeMe
 /** The team's metrics over archived changes. `filters` is a query string of history filters (from `toQuery`). */
 export function fetchMetrics(api: Api, filters = ""): Promise<TeamMetrics> {
   return api.get<TeamMetrics>(filters ? `/api/metrics?${filters}` : "/api/metrics");
+}
+
+/** The Repos page: each repo the member can see with its active and archived changes (spec repos). */
+export function fetchRepos(api: Api): Promise<RepoList> {
+  return api.get<RepoList>("/api/repos");
 }
 
 /** The history's filter choices: the values among archived changes. */

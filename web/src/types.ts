@@ -231,6 +231,44 @@ export interface HistoryEntry {
   personalTags: PersonalTagRef[];
 }
 
+/** An active change on the Repos page (repos-page D1, D6). */
+export interface RepoActiveChange {
+  changeId: string;
+  change: string;
+  project: CardProject | null;
+  personal: boolean;
+  /** ISO 8601. */
+  lastReportedAt: string;
+  /** Whole-change progress, as its card has it. */
+  overall: Progress;
+}
+
+/** An archived change on the Repos page (repos-page D1). */
+export interface RepoArchivedChange {
+  changeId: string;
+  change: string;
+  project: CardProject | null;
+  personal: boolean;
+  /** ISO 8601. */
+  archivedAt: string;
+}
+
+/**
+ * One repo on the Repos page: its active changes, then its five newest archived ones. `historyCount` is how many archived
+ * changes History lists for the repo, retired copies included (repos-page D1).
+ */
+export interface RepoSummary {
+  repo: CardRepo;
+  active: RepoActiveChange[];
+  archived: RepoArchivedChange[];
+  historyCount: number;
+}
+
+/** `GET /api/repos` (spec repos): every repo with a change the member can see, newest activity first. */
+export interface RepoList {
+  repos: RepoSummary[];
+}
+
 /** `GET /api/history`: newest archive first; `nextBefore` is the next page's cursor, or null on the last page. */
 export interface HistoryPage {
   changes: HistoryEntry[];

@@ -86,6 +86,9 @@ describe("change page", () => {
     expect(q(root, '.doc-nav a[aria-current="page"]').textContent).toBe("Proposal");
     expect(q(root, ".change-repo").textContent).toBe("github.com emmz/panopticon");
     expect(root.querySelector(".change-repo .project-code")).toBeNull();
+    expect(q<HTMLAnchorElement>(root, ".change-repo a.change-repo-name").href).toBe(
+      "https://github.com/emmz/panopticon",
+    );
   });
 
   it("selecting a document opens it by ?doc=, which a reload keeps", async () => {

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Mvc.Testing.Handlers;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,9 +74,16 @@ public sealed class PanopticonFactory(
 
     public PanopticonDb NewDb() => PostgresFixture.CreateDb(ConnectionString);
 
-    /// <summary>A browser-like client (https, keeping cookies), as the dashboard is.</summary>
+    /// <summary>
+    /// A browser-like client (https, following redirects and keeping cookies), as the dashboard is. Cookie expiries
+    /// are judged by <see cref="Clock"/>, not the real clock (<see cref="ServerClockCookieHandler"/>).
+    /// </summary>
     public HttpClient CreateBrowserClient() =>
-        CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost/"), HandleCookies = true });
+        CreateDefaultClient(
+            new Uri("https://localhost/"),
+            new RedirectHandler(),
+            new CookieContainerHandler(),
+            new ServerClockCookieHandler(Clock ?? TimeProvider.System));
 
     /// <summary>A browser-like client signed in as a member, through a real sign-in link.</summary>
     public async Task<HttpClient> CreateSignedInClientAsync(string email = MemberEmail, CancellationToken cancellationToken = default)

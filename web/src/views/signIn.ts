@@ -1,4 +1,4 @@
-import { ApiError, type SessionMember } from "../api";
+import { ApiError, failureText, type SessionMember } from "../api";
 import { alertLine, button, el, field, page, routeLink } from "../dom";
 import type { Env } from "../shell";
 import type { View } from "../router";
@@ -45,11 +45,7 @@ export function signInView(env: Env): View {
           },
           (failure: unknown) => {
             submit.disabled = false;
-            error.show(
-              failure instanceof ApiError
-                ? failure.message
-                : "Couldn't reach the server. Try again.",
-            );
+            error.show(failureText(failure));
           },
         );
       });
@@ -126,11 +122,7 @@ export function confirmView(env: Env): View {
 
             confirm.disabled = false;
             // The server answered (too many requests, a server error): say what it said. Otherwise it's the network.
-            error.show(
-              failure instanceof ApiError
-                ? failure.message
-                : "Couldn't reach the server. Try again.",
-            );
+            error.show(failureText(failure));
           },
         );
       },

@@ -1,4 +1,4 @@
-import { ApiError } from "../api";
+import { failureText } from "../api";
 import { alertLine, button, el, page } from "../dom";
 import { calendarDate, relativeTime } from "../format";
 import type { View } from "../router";
@@ -41,9 +41,7 @@ export function tokensView(env: Env): View {
         );
         error.clear();
       } catch (failure) {
-        error.show(
-          failure instanceof ApiError ? failure.message : "Couldn't reach the server. Try again.",
-        );
+        error.show(failureText(failure));
       }
     }
 
@@ -75,12 +73,7 @@ export function tokensView(env: Env): View {
                 status.textContent = `Revoked the token for ${token.machineName}.`;
                 await load();
               },
-              (failure: unknown) =>
-                error.show(
-                  failure instanceof ApiError
-                    ? failure.message
-                    : "Couldn't reach the server. Try again.",
-                ),
+              (failure: unknown) => error.show(failureText(failure)),
             );
           },
           "danger-button",
